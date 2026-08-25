@@ -1,5 +1,8 @@
 # VBUILDING — KẾ HOẠCH THỰC THI 30 NGÀY
 
+**N1 = Thứ Hai 31/08/2026 · Go-live N29 = 28/09 · Kết thúc N30 = 29/09**
+Việc chạy trước ngay 25/08 (không chờ N1, không phụ thuộc quyết định nào): nộp hồ sơ Zalo OA + template ZNS, tạo Supabase/Vercel, apply `schema.sql`.
+
 **Mục tiêu tháng 1:** 1 tòa nhà pilot chạy thật với 3 module: Ticketing+SLA, Auto-Billing, Thông báo+Cẩm nang số.
 **Không phải mục tiêu tháng 1:** Marketplace, Digital Twin, AI predictive, Gamification, Building Rating.
 
@@ -54,7 +57,12 @@ psql "$DATABASE_URL" -f schema.sql && psql "$DATABASE_URL" -1 -f test_rls.sql
 
 ## 3. LỊCH 4 TUẦN
 
-### TUẦN 1 (N1–N7) — Nền móng & Master Data
+> ⚠️ **02/09 Quốc khánh rơi vào N3 (Tuần 1)**, thường nghỉ 2 ngày. Hai cách xử lý — chọn 1, đừng để trôi:
+> (a) chạy trước phần setup từ 25/08 để bù, giữ nguyên go-live 28/09; hoặc
+> (b) chấp nhận trượt, go-live 30/09.
+> Lịch dưới đây tính theo phương án (a).
+
+### TUẦN 1 (N1–N7 · 31/08 – 06/09) — Nền móng & Master Data
 > Không có module nghiệp vụ nào chạy đúng nếu cây tài sản + ma trận nhân khẩu sai.
 
 | Ngày | Việc |
@@ -71,7 +79,7 @@ psql "$DATABASE_URL" -f schema.sql && psql "$DATABASE_URL" -1 -f test_rls.sql
 
 ---
 
-### TUẦN 2 (N8–N14) — Ticketing & SLA (trái tim)
+### TUẦN 2 (N8–N14 · 07/09 – 13/09) — Ticketing & SLA (trái tim)
 
 | Ngày | Việc |
 |---|---|
@@ -86,7 +94,7 @@ psql "$DATABASE_URL" -f schema.sql && psql "$DATABASE_URL" -1 -f test_rls.sql
 
 ---
 
-### TUẦN 3 (N15–N21) — Auto-Billing & Đối soát
+### TUẦN 3 (N15–N21 · 14/09 – 20/09) — Auto-Billing & Đối soát
 
 | Ngày | Việc |
 |---|---|
@@ -102,7 +110,7 @@ psql "$DATABASE_URL" -f schema.sql && psql "$DATABASE_URL" -1 -f test_rls.sql
 
 ---
 
-### TUẦN 4 (N22–N30) — Truyền thông, Dashboard BQT, Go-live
+### TUẦN 4 (N22–N30 · 21/09 – 29/09) — Truyền thông, Dashboard BQT, Go-live
 
 | Ngày | Việc |
 |---|---|
@@ -137,7 +145,8 @@ Không đạt 3/5 chỉ số → tháng 2 là tháng sửa, không phải tháng
 
 | Rủi ro | Xác suất | Cách chặn |
 |---|---|---|
-| ZNS template duyệt chậm | Cao | Nộp N1. Dự phòng: SMS brandname + Zalo OA broadcast tay |
+| ZNS template duyệt chậm | Cao | Nộp 25/08, không chờ N1 — duyệt 5–15 ngày làm việc, phải xong trước N24 (23/09). Dự phòng: SMS brandname + Zalo OA broadcast tay |
+| Nghỉ lễ 02/09 nuốt 2 ngày Tuần 1 | Chắc chắn | Xem ghi chú đầu mục 3 |
 | Dữ liệu căn hộ từ BQL bẩn/thiếu | Rất cao | Import có preview + báo lỗi từng dòng; N7 chốt dữ liệu, không nhận thay đổi giữa chừng |
 | Đối soát ngân hàng lệch | Cao | `bank_ref` unique + màn khớp tay bắt buộc + chốt sổ hàng ngày kỳ đầu |
 | Cư dân không cài app | Rất cao | PWA (không cần store) + QR ở sảnh + BQL đẩy qua Zalo OA + gắn với thứ họ *cần*: xem hóa đơn & QR trả tiền |
@@ -160,6 +169,8 @@ Không đạt 3/5 chỉ số → tháng 2 là tháng sửa, không phải tháng
 ---
 
 ## 7. VIỆC CẦN BẠN QUYẾT TRƯỚC KHI CODE
+
+**Hạn chót: hết 30/08.** Chưa chốt thì tắc từ N3 (02/09) trở đi.
 
 1. **Tòa pilot đã chốt chưa?** Có hay không đổi cả cách làm Tuần 1.
 2. **Ai chốt nghiệp vụ phía BQL?** Cần 1 người trả lời trong 24h, không thì SLA policy và biểu phí sẽ tắc.
