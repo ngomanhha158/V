@@ -1,0 +1,11 @@
+{
+  "name": "vbuilding",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify": "node scripts/verify-schema.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.16"
+  }
+}

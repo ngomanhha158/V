@@ -2,8 +2,6 @@
 -- Chạy: psql -f schema.sql  |  hoặc dán vào Supabase SQL Editor
 -- Nguyên tắc: 3NF cho Master Data, RLS ở DB thay vì check quyền rải rác trong app.
 
-create extension if not exists "uuid-ossp";
-create extension if not exists pg_trgm;
 
 -- ─────────────────────────────── ENUMS ───────────────────────────────
 create type unit_role       as enum ('owner','authorized','tenant','family');
@@ -17,7 +15,7 @@ create type invoice_status  as enum ('draft','issued','partial','paid','void');
 
 -- ──────────────────────── 1. SPATIAL HIERARCHY ───────────────────────
 create table projects (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   name        text not null,
   address     text,
   timezone    text not null default 'Asia/Ho_Chi_Minh',
@@ -25,7 +23,7 @@ create table projects (
 );
 
 create table buildings (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   project_id  uuid not null references projects(id) on delete cascade,
   code        text not null,              -- 'P3', 'L81'
   name        text not null,
@@ -37,7 +35,7 @@ create table buildings (
 -- Đủ để lọc "gửi thông báo cắt nước toàn tầng 12 tòa P3". Tách bảng khi tầng
 -- có thuộc tính riêng thật (đồng hồ tổng, chủ mặt bằng, hợp đồng thuê nguyên tầng).
 create table units (
-  id           uuid primary key default uuid_generate_v4(),
+  id           uuid primary key default gen_random_uuid(),
   building_id  uuid not null references buildings(id) on delete cascade,
   code         text not null,             -- 'P3-12.05'
   floor_no     int  not null,
@@ -64,7 +62,7 @@ create table profiles (
 -- JUNCTION TABLE — 1 user nhiều vai trò ở nhiều căn hộ.
 -- valid_to = ngày hết hợp đồng thuê / hết ủy quyền -> tự thu hồi quyền.
 create table unit_memberships (
-  id           uuid primary key default uuid_generate_v4(),
+  id           uuid primary key default gen_random_uuid(),
   unit_id      uuid not null references units(id) on delete cascade,
   user_id      uuid not null references profiles(id) on delete cascade,
   role         unit_role  not null,
@@ -85,7 +83,7 @@ create index on unit_memberships (valid_to) where status = 'active';
 
 -- Nhân sự BQL/BQT — phạm vi project hoặc riêng 1 tòa
 create table staff_assignments (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references profiles(id) on delete cascade,
   project_id  uuid not null references projects(id) on delete cascade,
   building_id uuid references buildings(id) on delete cascade,
@@ -96,20 +94,20 @@ create table staff_assignments (
 
 -- Tài sản gắn căn hộ (đối chiếu đỗ xe sai / chó thả rông)
 create table unit_vehicles (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   unit_id uuid not null references units(id) on delete cascade,
   plate text not null, vehicle_type text, card_no text,
   unique (unit_id, plate)
 );
 create table unit_pets (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   unit_id uuid not null references units(id) on delete cascade,
   name text, species text, photo_url text, vaccinated_until date
 );
 
 -- ─────────────────────── 3. TICKETING & SLA ──────────────────────────
 create table sla_policies (
-  id            uuid primary key default uuid_generate_v4(),
+  id            uuid primary key default gen_random_uuid(),
   project_id    uuid not null references projects(id) on delete cascade,
   category      text not null,            -- 'water_outage','elevator','plumbing'
   priority      ticket_priority not null default 'normal',
@@ -120,7 +118,7 @@ create table sla_policies (
 );
 
 create table tickets (
-  id            uuid primary key default uuid_generate_v4(),
+  id            uuid primary key default gen_random_uuid(),
   unit_id       uuid not null references units(id),
   building_id   uuid not null references buildings(id),
   project_id    uuid not null references projects(id),
@@ -158,7 +156,7 @@ create index on ticket_events (ticket_id, created_at);
 
 -- ────────────────────── 4. BILLING & PAYMENTS ────────────────────────
 create table fee_types (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   project_id uuid not null references projects(id) on delete cascade,
   code text not null, name text not null,
   unit_price bigint,                         -- VND, không lẻ xu
@@ -167,7 +165,7 @@ create table fee_types (
 );
 
 create table invoices (
-  id           uuid primary key default uuid_generate_v4(),
+  id           uuid primary key default gen_random_uuid(),
   unit_id      uuid not null references units(id),
   project_id   uuid not null references projects(id),
   period       date not null,              -- ngày đầu tháng
@@ -183,7 +181,7 @@ create table invoices (
 create index on invoices (project_id, status, due_date);
 
 create table invoice_lines (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   invoice_id  uuid not null references invoices(id) on delete cascade,
   fee_type_id uuid references fee_types(id),
   description text not null,
@@ -194,7 +192,7 @@ create table invoice_lines (
 
 -- Idempotent: bank_ref unique -> webhook bắn lại KHÔNG gạch nợ 2 lần
 create table payments (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   invoice_id  uuid references invoices(id),
   unit_id     uuid not null references units(id),
   amount      bigint not null check (amount > 0),
@@ -209,7 +207,7 @@ create table payments (
 -- ponytail: target bằng cột nullable thay vì bảng announcement_targets.
 -- null = áp dụng toàn bộ cấp cha. Đủ cho "toàn tầng 12 tòa P3".
 create table documents (                    -- cẩm nang / nội quy số
-  id         uuid primary key default uuid_generate_v4(),
+  id         uuid primary key default gen_random_uuid(),
   project_id uuid not null references projects(id) on delete cascade,
   section    text not null,                -- 'Thú cưng', 'Rác thải', 'Sửa chữa'
   title      text not null,
@@ -220,7 +218,7 @@ create table documents (                    -- cẩm nang / nội quy số
 create index on documents using gin (search_tsv);
 
 create table announcements (
-  id            uuid primary key default uuid_generate_v4(),
+  id            uuid primary key default gen_random_uuid(),
   project_id    uuid not null references projects(id) on delete cascade,
   building_id   uuid references buildings(id),
   floor_no      int,
