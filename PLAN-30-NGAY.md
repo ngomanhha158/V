@@ -1,7 +1,8 @@
 # VBUILDING — KẾ HOẠCH THỰC THI 30 NGÀY
 
 **N1 = Thứ Hai 31/08/2026 · Go-live N29 = 28/09 · Kết thúc N30 = 29/09**
-Việc chạy trước ngay 25/08 (không chờ N1, không phụ thuộc quyết định nào): nộp hồ sơ Zalo OA + template ZNS, tạo Supabase/Vercel, apply `schema.sql`.
+Việc chạy trước ngay 25/08 (không chờ N1, không phụ thuộc quyết định nào): tạo Supabase/Vercel, apply `schema.sql`.
+Zalo OA/ZNS: **hoãn theo quyết định 25/08** — xem mục 3bis để biết hệ quả và hạn chót thật.
 
 **Mục tiêu tháng 1:** 1 tòa nhà pilot chạy thật với 3 module: Ticketing+SLA, Auto-Billing, Thông báo+Cẩm nang số.
 **Không phải mục tiêu tháng 1:** Marketplace, Digital Twin, AI predictive, Gamification, Building Rating.
@@ -33,7 +34,7 @@ Lý do cắt: 3 module trên là thứ BQL trả tiền ngay. Phần còn lại 
 | QR thanh toán | **VietQR động** (chuẩn NAPAS) | Miễn phí, mọi app ngân hàng quét được |
 | Cron | pg_cron + Supabase Edge Functions | SLA escalation, sinh hóa đơn, hết hạn thuê |
 
-> ⚠️ **Việc phải làm NGÀY 1, không được để sau:** đăng ký Zalo OA + nộp template ZNS duyệt. Thời gian duyệt 5–15 ngày làm việc — đây là đường găng (critical path) của cả tháng, không phải việc code.
+> ⚠️ Zalo ZNS duyệt 5–15 ngày làm việc. Đã hoãn nộp (quyết định 25/08) → kênh đẩy chính không sẵn sàng đúng hạn. Cách bù: xem mục 3bis.
 
 ---
 
@@ -67,7 +68,7 @@ psql "$DATABASE_URL" -f schema.sql && psql "$DATABASE_URL" -1 -f test_rls.sql
 
 | Ngày | Việc |
 |---|---|
-| N1 | Đăng ký Zalo OA, nộp hồ sơ ZNS **(chặn đường găng)**. Tạo project Supabase + Vercel + repo. |
+| N1 | Tạo project Supabase + Vercel + repo. (Zalo OA/ZNS đã hoãn — mục 3bis) |
 | N1–N2 | Apply `schema.sql`, chạy `test_rls.sql` xanh. Sinh TypeScript types từ DB. |
 | N2–N3 | Auth OTP số điện thoại (Supabase phone auth / Zalo login). Onboarding: nhập SĐT → chọn tòa/căn → gửi yêu cầu gia nhập. |
 | N3–N4 | Trang BQL: CRUD tòa/căn hộ + **import Excel danh sách căn hộ & cư dân** (đây là việc BQL đánh giá đầu tiên — làm cho tử tế, có preview + báo lỗi dòng). |
@@ -116,7 +117,7 @@ psql "$DATABASE_URL" -f schema.sql && psql "$DATABASE_URL" -1 -f test_rls.sql
 |---|---|
 | N22 | Cẩm nang số: nhập nội quy, tìm kiếm full-text (`documents.search_tsv` đã sẵn). |
 | N23 | Thông báo có target: toàn khu / tòa / tầng / căn + nút **trích dẫn nội quy** gắn `document_id`. |
-| N24 | Gửi ZNS thật qua Edge Function; log `notifications.sent_zns_at`; retry khi lỗi. |
+| N24 | Gửi thông báo qua adapter kênh: in-app + web push chạy được ngay; ZNS bật khi có OA. Log `notifications.sent_*_at`, retry khi lỗi. |
 | N25–N26 | Dashboard BQT (chỉ đọc): % ticket đúng SLA, thời gian xử lý trung bình, điểm hài lòng, công nợ tổng, thu/chi. Toàn bộ query từ `ticket_events` + `invoices`. |
 | N27 | Rà soát bảo mật: RLS trên mọi bảng, không rò dữ liệu chéo căn hộ, rate limit, không log CCCD/SĐT. |
 | N28 | Sửa lỗi + tối ưu tốc độ (index, N+1). |
@@ -124,6 +125,19 @@ psql "$DATABASE_URL" -f schema.sql && psql "$DATABASE_URL" -1 -f test_rls.sql
 | N30 | Trực vận hành, thu thập phản hồi, chốt backlog tháng 2. |
 
 **DoD Tuần 4:** ≥30% hộ tòa pilot kích hoạt tài khoản; BQT xem được KPI của BQL; 0 lỗi rò dữ liệu chéo căn hộ.
+
+---
+
+## 3bis. HỆ QUẢ VIỆC HOÃN ZALO OA/ZNS (quyết định 25/08)
+
+Hạn chót thật: **hồ sơ phải nộp chậm nhất 02/09** thì mới kịp duyệt (5–15 ngày làm việc) trước N24 = 23/09. Nộp sau 02/09 thì coi như tháng 1 không có ZNS.
+
+Cách bù, không làm trượt lịch:
+- Tầng thông báo viết theo **adapter kênh**, không gọi thẳng API Zalo. `notifications` là nguồn sự thật; mỗi kênh là 1 hàm gửi. Bật/tắt bằng biến môi trường.
+- Kênh chạy được ngay, không phụ thuộc ai duyệt: **in-app** (badge + danh sách) và **web push** (Android/desktop tốt, iOS cần cư dân Add to Home Screen).
+- Thông báo gấp trong lúc chưa có ZNS: BQL broadcast tay trên Zalo OA hoặc nhóm Zalo hiện có, kèm link sâu vào app.
+
+Đánh đổi phải chấp nhận: tỷ lệ cư dân đọc thông báo tháng 1 sẽ thấp hơn dự kiến → chỉ số "≥30% hộ kích hoạt" ở mục 4 khó đạt hơn, vì kênh kéo người dùng vào app mạnh nhất chính là ZNS.
 
 ---
 
@@ -145,7 +159,7 @@ Không đạt 3/5 chỉ số → tháng 2 là tháng sửa, không phải tháng
 
 | Rủi ro | Xác suất | Cách chặn |
 |---|---|---|
-| ZNS template duyệt chậm | Cao | Nộp 25/08, không chờ N1 — duyệt 5–15 ngày làm việc, phải xong trước N24 (23/09). Dự phòng: SMS brandname + Zalo OA broadcast tay |
+| Tháng 1 không có ZNS (đã hoãn nộp hồ sơ) | Cao | Adapter kênh + in-app/web push chạy trước; nộp chậm nhất 02/09 nếu vẫn muốn kịp. Mục 3bis |
 | Nghỉ lễ 02/09 nuốt 2 ngày Tuần 1 | Chắc chắn | Xem ghi chú đầu mục 3 |
 | Dữ liệu căn hộ từ BQL bẩn/thiếu | Rất cao | Import có preview + báo lỗi từng dòng; N7 chốt dữ liệu, không nhận thay đổi giữa chừng |
 | Đối soát ngân hàng lệch | Cao | `bank_ref` unique + màn khớp tay bắt buộc + chốt sổ hàng ngày kỳ đầu |
