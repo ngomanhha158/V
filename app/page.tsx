@@ -54,7 +54,7 @@ export default async function Home() {
       <nav className="flex gap-4 text-sm underline">
         <Link href="/onboarding">Thêm căn hộ</Link>
         <Link href="/approvals">Duyệt thành viên</Link>
-        {isStaff && <Link href="/bql/import">Import căn hộ (BQL)</Link>}
+        {isStaff && <Link href="/bql">Quản lý tòa nhà (BQL)</Link>}
       </nav>
     </main>
   )
