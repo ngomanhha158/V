@@ -1,7 +1,7 @@
 -- Smoke test cho phần rủi ro nhất: RLS + hết hạn hợp đồng thuê.
 -- Chạy: psql -f schema.sql && psql -1 -f test_rls.sql
 --   (-1 = bọc trong 1 transaction; assert fail -> raise exception -> rollback toàn bộ)
--- ponytail: 1 file assert, không framework. Chỉ test 5 invariant dễ vỡ nhất.
+-- ponytail: 1 file assert, không framework. Chỉ test 8 invariant dễ vỡ nhất.
 --
 -- HAI CÁI BẪY LÀM TEST PASS GIẢ:
 --   1. Table owner mặc định BYPASS RLS -> phải FORCE ROW LEVEL SECURITY.
@@ -47,7 +47,8 @@ begin
 
   begin execute 'create role vb_rls_test nologin'; exception when duplicate_object then null; end;
   execute 'grant usage on schema public to vb_rls_test';
-  execute 'grant select on invoices, unit_memberships to vb_rls_test';
+  execute 'grant select on invoices to vb_rls_test';
+  execute 'grant select, insert, update on unit_memberships to vb_rls_test';
   execute 'set local role vb_rls_test';   -- từ đây RLS mới thực sự có hiệu lực
 
   -- 1. Chủ hộ thấy hóa đơn
@@ -70,12 +71,35 @@ begin
   select count(*) into n from invoices where unit_id = v_unit;
   if n <> 0 then raise exception 'FAIL 4: nguoi la truy cap duoc du lieu can ho'; end if;
 
-  -- 5. Không cho 2 chủ hộ active trên cùng 1 căn (test constraint, không phải RLS)
+  -- 5. Người lạ tự xin gia nhập chỉ tạo được 'pending', không tự cấp 'active'
+  perform set_config('test.uid', u_stranger::text, true);
+  begin
+    insert into unit_memberships (unit_id, user_id, role, status)
+      values (v_unit, u_stranger, 'tenant', 'active');
+    raise exception 'FAIL 5: tu cap duoc quyen active, khong can chu ho duyet';
+  exception when insufficient_privilege then null;
+  end;
+  insert into unit_memberships (unit_id, user_id, role, status, valid_from, valid_to)
+    values (v_unit, u_stranger, 'tenant', 'pending', current_date, current_date + 180);
+
+  -- 6. Thành viên gia đình KHÔNG duyệt được yêu cầu (không phải owner/authorized)
+  perform set_config('test.uid', u_family::text, true);
+  update unit_memberships set status = 'active'
+   where unit_id = v_unit and user_id = u_stranger and status = 'pending';
+  if found then raise exception 'FAIL 6: family member duyet duoc thanh vien moi'; end if;
+
+  -- 7. Chủ hộ duyệt được
+  perform set_config('test.uid', u_owner::text, true);
+  update unit_memberships set status = 'active'
+   where unit_id = v_unit and user_id = u_stranger and status = 'pending';
+  if not found then raise exception 'FAIL 7: chu ho khong duyet duoc thanh vien'; end if;
+
+  -- 8. Không cho 2 chủ hộ active trên cùng 1 căn (test constraint, không phải RLS)
   execute 'reset role';
   begin
     insert into unit_memberships (unit_id, user_id, role, status)
       values (v_unit, u_stranger, 'owner', 'active');
-    raise exception 'FAIL 5: cho phep 2 chu ho active tren cung 1 can';
+    raise exception 'FAIL 8: cho phep 2 chu ho active tren cung 1 can';
   exception when unique_violation then null;
   end;
 

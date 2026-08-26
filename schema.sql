@@ -298,6 +298,25 @@ create policy invoice_read on invoices for select
 create policy membership_read on unit_memberships for select
   using (user_id = auth.uid() or unit_id in (select current_unit_ids()));
 
+-- SECURITY DEFINER bắt buộc: policy trên unit_memberships mà truy vấn thẳng
+-- unit_memberships sẽ đệ quy vô hạn. Hàm definer bỏ qua RLS nên cắt được vòng lặp.
+create or replace function is_unit_manager(p_unit uuid)
+returns boolean language sql stable security definer set search_path = public as $fn$
+  select exists (select 1 from unit_memberships
+                  where unit_id = p_unit and user_id = auth.uid()
+                    and status = 'active' and role in ('owner','authorized')
+                    and (valid_to is null or valid_to >= current_date));
+$fn$;
+
+-- Tự xin gia nhập: chỉ được tạo bản ghi 'pending' cho chính mình.
+-- Không tự đặt 'active' được -> phải qua chủ hộ duyệt.
+create policy membership_self_request on unit_memberships for insert
+  with check (user_id = auth.uid() and status = 'pending');
+
+-- Chủ hộ / người được ủy quyền duyệt hoặc thu hồi thành viên căn hộ mình quản lý.
+create policy membership_manager_write on unit_memberships for update
+  using (is_unit_manager(unit_id));
+
 -- ──────────────── 7. JOBS: hết hạn thuê + leo thang SLA ──────────────
 -- pg_cron 5 phút/lần. escalate ghi ticket_events -> Edge Function đọc & push ZNS.
 create or replace function expire_memberships() returns void
