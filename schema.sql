@@ -273,6 +273,18 @@ returns boolean language sql stable security definer set search_path = public as
                   where user_id = auth.uid() and project_id = p_project and is_active);
 $fn$;
 
+-- Suy ra dự án từ tòa/căn để policy khỏi lặp subquery. DEFINER để không phụ
+-- thuộc quyền đọc buildings của người gọi.
+create or replace function building_project(p_building uuid)
+returns uuid language sql stable security definer set search_path = public as $fn$
+  select project_id from buildings where id = p_building;
+$fn$;
+
+create or replace function unit_project(p_unit uuid)
+returns uuid language sql stable security definer set search_path = public as $fn$
+  select b.project_id from units u join buildings b on b.id = u.building_id where u.id = p_unit;
+$fn$;
+
 alter table tickets          enable row level security;
 alter table invoices         enable row level security;
 alter table unit_memberships enable row level security;
@@ -305,6 +317,13 @@ create policy invoice_read on invoices for select
 
 create policy membership_read on unit_memberships for select
   using (user_id = auth.uid() or unit_id in (select current_unit_ids()));
+
+-- BQL cần thấy danh sách nhân sự để phân công. KHÔNG cấp quyền ghi cho ai: tự
+-- ghi được bảng này là tự phong BQL, vượt luôn RLS của tickets/invoices. Bản
+-- ghi đầu tiên tạo bằng quyền postgres (bootstrap_bql.sql).
+alter table staff_assignments enable row level security;
+create policy staff_read on staff_assignments for select
+  using (user_id = auth.uid() or is_staff(project_id));
 
 -- Thông báo là dữ liệu riêng từng người. Có grant select mà không có RLS thì
 -- cư dân nào đăng nhập cũng đọc được thông báo của toàn khu.
@@ -348,6 +367,7 @@ create policy membership_manager_write on unit_memberships for update
 create or replace function can_see_profile(p_user uuid)
 returns boolean language sql stable security definer set search_path = public as $fn$
   select p_user = auth.uid()
+      -- chủ hộ xem được thành viên căn mình quản lý
       or exists (
            select 1
              from unit_memberships them
@@ -357,23 +377,22 @@ returns boolean language sql stable security definer set search_path = public as
               and mine.status = 'active'
               and mine.role in ('owner','authorized')
               and (mine.valid_to is null or mine.valid_to >= current_date)
+         )
+      -- BQL xem được cư dân trong dự án mình phụ trách: nhận ticket mà không
+      -- biết ai báo, gọi lại số nào thì không xử lý được việc gì.
+      or exists (
+           select 1 from unit_memberships m
+            where m.user_id = p_user and is_staff(unit_project(m.unit_id))
+         )
+      -- và xem được đồng nghiệp, để còn phân công cho nhau
+      or exists (
+           select 1 from staff_assignments s
+            where s.user_id = p_user and is_staff(s.project_id)
          );
 $fn$;
 
 alter table profiles enable row level security;
 create policy profile_read on profiles for select using (can_see_profile(id));
-
--- Suy ra dự án từ tòa/căn để policy khỏi lặp subquery. DEFINER để không phụ
--- thuộc quyền đọc buildings của người gọi.
-create or replace function building_project(p_building uuid)
-returns uuid language sql stable security definer set search_path = public as $fn$
-  select project_id from buildings where id = p_building;
-$fn$;
-
-create or replace function unit_project(p_unit uuid)
-returns uuid language sql stable security definer set search_path = public as $fn$
-  select b.project_id from units u join buildings b on b.id = u.building_id where u.id = p_unit;
-$fn$;
 
 -- ── Cây tài sản: ai đăng nhập cũng ĐỌC được (cư dân phải chọn căn để xin gia
 --    nhập), nhưng chỉ BQL mới GHI. Bật RLS ở đây còn để tránh cảnh: sau này cấp

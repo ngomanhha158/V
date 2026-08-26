@@ -17,13 +17,14 @@ select cron.schedule(
   $job$ select public.expire_memberships() $job$
 );
 
--- N12 — leo thang ticket quá hạn SLA, 5 phút/lần. Bật ở Tuần 2 cùng bảng điều
--- phối của BQL; hàm đã sẵn sàng và đã có test (test_tickets.sql assert 6).
--- select cron.schedule(
---   'escalate-overdue-tickets',
---   '*/5 * * * *',
---   $job$ select public.escalate_overdue_tickets() $job$
--- );
+-- N12 — leo thang ticket quá hạn SLA, 5 phút/lần. Ghi ticket_events để Edge
+-- Function đọc và đẩy thông báo. Bỏ qua ticket có hạn NULL (danh mục chưa cấu
+-- hình SLA) nên chỉ mất cảnh báo, không mất báo cáo — test_tickets.sql assert 6.
+select cron.schedule(
+  'escalate-overdue-tickets',
+  '*/5 * * * *',
+  $job$ select public.escalate_overdue_tickets() $job$
+);
 
 -- Gỡ lịch:            select cron.unschedule('expire-memberships');
 -- Xem lịch hiện có:   select jobname, schedule, active from cron.job;

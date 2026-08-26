@@ -6,13 +6,15 @@ do $test$
 declare
   v_project uuid := 'aaaaaaaa-0000-0000-0000-000000000001';
   u_rep uuid := '55555555-5555-5555-5555-555555555555';
+  u_bql uuid := '55555555-5555-5555-5555-555555555556';
   v_unit uuid; v_building uuid;
   t_elev uuid; t_weird uuid;
   v_resp timestamptz; v_first timestamptz;
   n int;
 begin
   select u.id, u.building_id into v_unit, v_building from units u where u.code = 'P1-10.01';
-  insert into profiles (id, full_name) values (u_rep, 'Nguoi bao');
+  insert into profiles (id, full_name) values (u_rep, 'Nguoi bao'), (u_bql, 'BQL');
+  insert into staff_assignments (user_id, project_id, role) values (u_bql, v_project, 'bql_manager');
 
   -- App chỉ gửi unit_id + category + priority, KHÔNG gửi building_id/project_id
   insert into tickets (unit_id, reporter_id, category, priority, title)
@@ -77,6 +79,9 @@ begin
   -- local thì không, phải cấp để create_ticket() gọi được auth.uid().
   execute 'grant usage on schema auth to vb_ticket_test';
   execute 'grant select on tickets, ticket_events to vb_ticket_test';
+  execute 'grant update on tickets to vb_ticket_test';
+  execute 'grant select on staff_assignments to vb_ticket_test';
+  execute 'alter table staff_assignments force row level security';
   -- Gắn người báo vào căn TRƯỚC khi hạ quyền: role thường không ghi được bảng này.
   insert into unit_memberships (unit_id, user_id, role, status)
     values (v_unit, u_rep, 'owner', 'active');
@@ -89,6 +94,18 @@ begin
   perform set_config('test.uid', '00000000-0000-0000-0000-0000000000ff', true);
   select count(*) into n from ticket_events where ticket_id = t_elev;
   if n <> 0 then raise exception 'FAIL 7b: nguoi la doc duoc dien bien ticket can khac'; end if;
+  execute 'reset role';
+
+  -- 7c. BQL đọc được nhân sự dự án mình để còn phân công; cư dân thì không.
+  --     Bảng này quyết định is_staff() nên rò ra là lộ luôn ai có quyền gì.
+  execute 'set local role vb_ticket_test';
+  perform set_config('test.uid', u_bql::text, true);
+  select count(*) into n from staff_assignments;
+  if n <> 1 then raise exception 'FAIL 7c: BQL khong doc duoc nhan su du an minh'; end if;
+
+  perform set_config('test.uid', u_rep::text, true);
+  select count(*) into n from staff_assignments;
+  if n <> 0 then raise exception 'FAIL 7d: cu dan thuong doc duoc bang nhan su'; end if;
   execute 'reset role';
 
   -- 8. create_ticket() phải ĐI QUA RLS, không được thành cửa sau. Hàm là
@@ -108,6 +125,21 @@ begin
     raise exception 'FAIL 8b: nguoi la tao duoc ticket cho can ho khong phai cua minh';
   exception when insufficient_privilege then null;
   end;
+  execute 'reset role';
+
+  -- 9. Đổi trạng thái: chỉ BQL. Cư dân đổi được status ticket của mình thì
+  --    toàn bộ KPI đúng-hạn-SLA của BQT thành số tự khai.
+  execute 'set local role vb_ticket_test';
+
+  perform set_config('test.uid', u_rep::text, true);
+  update tickets set status = 'resolved' where id = t_elev;
+  select count(*) into n from tickets where id = t_elev and status = 'resolved';
+  if n <> 0 then raise exception 'FAIL 9a: cu dan tu doi duoc trang thai ticket'; end if;
+
+  perform set_config('test.uid', u_bql::text, true);
+  update tickets set status = 'resolved' where id = t_elev;
+  select count(*) into n from tickets where id = t_elev and status = 'resolved';
+  if n <> 1 then raise exception 'FAIL 9b: BQL khong doi duoc trang thai ticket'; end if;
   execute 'reset role';
 
   raise notice 'ALL TICKET TESTS PASSED';

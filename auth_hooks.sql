@@ -47,7 +47,10 @@ grant select, insert, update on unit_memberships to authenticated;
 grant insert, update, delete on units, buildings to authenticated;
 -- Xe/thú cưng: chủ hộ tự quản, policy dùng is_unit_manager().
 grant select, insert, update, delete on unit_vehicles, unit_pets to authenticated;
-grant select, insert on tickets to authenticated;
+-- update cho BQL đổi trạng thái/phân công. Policy ticket_staff_write mới quyết
+-- định ai được đụng dòng nào — cư dân không có policy update nên vẫn bị chặn.
+grant select, insert, update on tickets to authenticated;
+grant select on staff_assignments to authenticated;
 -- Chỉ ĐỌC ticket_events: audit trail mà người bị audit ghi được thì vô nghĩa.
 grant select on ticket_events to authenticated;
 grant select on invoices, invoice_lines, announcements, notifications to authenticated;
@@ -89,3 +92,4 @@ alter table profiles         force row level security;
 alter table unit_vehicles    force row level security;
 alter table unit_pets        force row level security;
 alter table ticket_events    force row level security;
+alter table staff_assignments force row level security;
