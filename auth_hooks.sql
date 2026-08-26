@@ -42,6 +42,11 @@ grant select on units, buildings, projects, documents, sla_policies, fee_types t
 -- các căn mình quản lý, không phải cả danh bạ khu.
 grant select on profiles to authenticated;
 grant select, insert, update on unit_memberships to authenticated;
+-- Ghi cây tài sản: chỉ BQL qua policy is_staff(). Cấp quyền bảng ở đây là chưa
+-- đủ để ai cũng sửa được — RLS mới là lớp quyết định.
+grant insert, update, delete on units, buildings to authenticated;
+-- Xe/thú cưng: chủ hộ tự quản, policy dùng is_unit_manager().
+grant select, insert, update, delete on unit_vehicles, unit_pets to authenticated;
 grant select, insert on tickets to authenticated;
 grant select on invoices, invoice_lines, announcements, notifications to authenticated;
 
@@ -62,6 +67,8 @@ grant execute on function current_unit_ids()    to authenticated;
 grant execute on function is_staff(uuid)        to authenticated;
 grant execute on function is_unit_manager(uuid) to authenticated;
 grant execute on function can_see_profile(uuid)  to authenticated;
+grant execute on function building_project(uuid) to authenticated;
+grant execute on function unit_project(uuid)     to authenticated;
 
 -- Còn lại là trigger function và job nền: không phải RPC endpoint, để nguyên là
 -- chúng nằm chình ình ở /rest/v1/rpc/...
@@ -74,3 +81,5 @@ alter table unit_memberships force row level security;
 alter table notifications    force row level security;
 alter table invoice_lines    force row level security;
 alter table profiles         force row level security;
+alter table unit_vehicles    force row level security;
+alter table unit_pets        force row level security;

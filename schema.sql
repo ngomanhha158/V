@@ -355,6 +355,46 @@ $fn$;
 alter table profiles enable row level security;
 create policy profile_read on profiles for select using (can_see_profile(id));
 
+-- Suy ra dự án từ tòa/căn để policy khỏi lặp subquery. DEFINER để không phụ
+-- thuộc quyền đọc buildings của người gọi.
+create or replace function building_project(p_building uuid)
+returns uuid language sql stable security definer set search_path = public as $fn$
+  select project_id from buildings where id = p_building;
+$fn$;
+
+create or replace function unit_project(p_unit uuid)
+returns uuid language sql stable security definer set search_path = public as $fn$
+  select b.project_id from units u join buildings b on b.id = u.building_id where u.id = p_unit;
+$fn$;
+
+-- ── Cây tài sản: ai đăng nhập cũng ĐỌC được (cư dân phải chọn căn để xin gia
+--    nhập), nhưng chỉ BQL mới GHI. Bật RLS ở đây còn để tránh cảnh: sau này cấp
+--    thêm quyền ghi cho authenticated là cả khu sửa được danh sách căn hộ.
+alter table buildings enable row level security;
+create policy building_read on buildings for select using (true);
+create policy building_staff_write on buildings for all
+  using (is_staff(project_id)) with check (is_staff(project_id));
+
+alter table units enable row level security;
+create policy unit_read on units for select using (true);
+create policy unit_staff_write on units for all
+  using (is_staff(building_project(building_id)))
+  with check (is_staff(building_project(building_id)));
+
+-- ── Xe và thú cưng: chủ hộ / người được ủy quyền tự quản lý căn mình.
+--    BQL đọc được để đối chiếu đỗ xe sai, chó thả rông — nhưng không sửa hộ.
+alter table unit_vehicles enable row level security;
+create policy vehicle_resident_read on unit_vehicles for select
+  using (unit_id in (select current_unit_ids()) or is_staff(unit_project(unit_id)));
+create policy vehicle_manager_write on unit_vehicles for all
+  using (is_unit_manager(unit_id)) with check (is_unit_manager(unit_id));
+
+alter table unit_pets enable row level security;
+create policy pet_resident_read on unit_pets for select
+  using (unit_id in (select current_unit_ids()) or is_staff(unit_project(unit_id)));
+create policy pet_manager_write on unit_pets for all
+  using (is_unit_manager(unit_id)) with check (is_unit_manager(unit_id));
+
 -- ──────────────── 7. JOBS: hết hạn thuê + leo thang SLA ──────────────
 -- pg_cron 5 phút/lần. escalate ghi ticket_events -> Edge Function đọc & push ZNS.
 create or replace function expire_memberships() returns void

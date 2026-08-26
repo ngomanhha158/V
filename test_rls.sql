@@ -1,7 +1,7 @@
 -- Smoke test cho phần rủi ro nhất: RLS + hết hạn hợp đồng thuê.
 -- Chạy: psql -f schema.sql && psql -1 -f test_rls.sql
 --   (-1 = bọc trong 1 transaction; assert fail -> raise exception -> rollback toàn bộ)
--- ponytail: 1 file assert, không framework. Chỉ test 11 invariant dễ vỡ nhất.
+-- ponytail: 1 file assert, không framework. Chỉ test 13 invariant dễ vỡ nhất.
 --
 -- HAI CÁI BẪY LÀM TEST PASS GIẢ:
 --   1. Table owner mặc định BYPASS RLS -> phải FORCE ROW LEVEL SECURITY.
@@ -21,6 +21,7 @@ declare
   u_family   uuid := '22222222-2222-2222-2222-222222222222';
   u_tenant   uuid := '33333333-3333-3333-3333-333333333333';
   u_stranger uuid := '44444444-4444-4444-4444-444444444444';
+  u_bql      uuid := '55555555-5555-5555-5555-555555555550';
   n int;
 begin
   -- ── seed, chạy quyền cao ──
@@ -29,7 +30,10 @@ begin
   insert into units (building_id, code, floor_no) values (v_building,'P3-12.05',12) returning id into v_unit;
 
   insert into profiles (id, full_name) values
-    (u_owner,'Chu ho'), (u_family,'Con'), (u_tenant,'Nguoi thue'), (u_stranger,'Nguoi la');
+    (u_owner,'Chu ho'), (u_family,'Con'), (u_tenant,'Nguoi thue'), (u_stranger,'Nguoi la'),
+    (u_bql,'Nhan vien BQL');
+
+  insert into staff_assignments (user_id, project_id, role) values (u_bql, v_project, 'bql_manager');
 
   insert into unit_memberships (unit_id, user_id, role, status, valid_from, valid_to, can_view_finance) values
     (v_unit, u_owner,  'owner',  'active', current_date, null, true),
@@ -56,12 +60,16 @@ begin
   execute 'alter table notifications force row level security';
   execute 'alter table invoice_lines force row level security';
   execute 'alter table profiles force row level security';
+  execute 'alter table units force row level security';
+  execute 'alter table unit_vehicles force row level security';
 
   begin execute 'create role vb_rls_test nologin'; exception when duplicate_object then null; end;
   execute 'grant usage on schema public to vb_rls_test';
   execute 'grant select on invoices to vb_rls_test';
   execute 'grant select on notifications, invoice_lines to vb_rls_test';
   execute 'grant select on profiles to vb_rls_test';
+  execute 'grant select, insert on units to vb_rls_test';
+  execute 'grant select, insert on unit_vehicles to vb_rls_test';
   execute 'grant select, insert, update on unit_memberships to vb_rls_test';
   execute 'set local role vb_rls_test';   -- từ đây RLS mới thực sự có hiệu lực
 
@@ -141,12 +149,47 @@ begin
   select count(*) into n from profiles where id = u_family;
   if n <> 1 then raise exception 'FAIL 10c: khong doc duoc profile cua chinh minh'; end if;
 
-  -- 11. Không cho 2 chủ hộ active trên cùng 1 căn (test constraint, không phải RLS)
+  -- 11. Cây tài sản: chỉ BQL được ghi. Cư dân sửa được danh sách căn hộ thì
+  --     toàn bộ phân quyền phía dưới (RLS lọc theo unit) mất ý nghĩa.
+  perform set_config('test.uid', u_owner::text, true);
+  begin
+    insert into units (building_id, code, floor_no) values (v_building, 'P3-99.99', 99);
+    raise exception 'FAIL 11a: cu dan thuong tao duoc can ho moi';
+  exception when insufficient_privilege then null;
+  end;
+
+  perform set_config('test.uid', u_bql::text, true);
+  insert into units (building_id, code, floor_no) values (v_building, 'P3-99.99', 99);
+  select count(*) into n from units where code = 'P3-99.99';
+  if n <> 1 then raise exception 'FAIL 11b: BQL khong tao duoc can ho'; end if;
+
+  -- 12. Xe: chủ hộ tự quản căn mình; thành viên gia đình không được thêm.
+  perform set_config('test.uid', u_family::text, true);
+  begin
+    insert into unit_vehicles (unit_id, plate) values (v_unit, '51A-11111');
+    raise exception 'FAIL 12a: family member them duoc xe';
+  exception when insufficient_privilege then null;
+  end;
+
+  perform set_config('test.uid', u_owner::text, true);
+  insert into unit_vehicles (unit_id, plate) values (v_unit, '51A-22222');
+  select count(*) into n from unit_vehicles where unit_id = v_unit;
+  if n <> 1 then raise exception 'FAIL 12b: chu ho khong them duoc xe cho can minh'; end if;
+
+  -- Người lạ ở căn khác không được thêm xe vào căn này
+  perform set_config('test.uid', u_bql::text, true);
+  begin
+    insert into unit_vehicles (unit_id, plate) values (v_unit, '51A-33333');
+    raise exception 'FAIL 12c: BQL ghi de duoc tai san cua can ho';
+  exception when insufficient_privilege then null;
+  end;
+
+  -- 13. Không cho 2 chủ hộ active trên cùng 1 căn (test constraint, không phải RLS)
   execute 'reset role';
   begin
     insert into unit_memberships (unit_id, user_id, role, status)
       values (v_unit, u_stranger, 'owner', 'active');
-    raise exception 'FAIL 11: cho phep 2 chu ho active tren cung 1 can';
+    raise exception 'FAIL 13: cho phep 2 chu ho active tren cung 1 can';
   exception when unique_violation then null;
   end;
 
