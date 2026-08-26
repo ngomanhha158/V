@@ -1,7 +1,7 @@
 -- Smoke test cho phần rủi ro nhất: RLS + hết hạn hợp đồng thuê.
 -- Chạy: psql -f schema.sql && psql -1 -f test_rls.sql
 --   (-1 = bọc trong 1 transaction; assert fail -> raise exception -> rollback toàn bộ)
--- ponytail: 1 file assert, không framework. Chỉ test 8 invariant dễ vỡ nhất.
+-- ponytail: 1 file assert, không framework. Chỉ test 10 invariant dễ vỡ nhất.
 --
 -- HAI CÁI BẪY LÀM TEST PASS GIẢ:
 --   1. Table owner mặc định BYPASS RLS -> phải FORCE ROW LEVEL SECURITY.
@@ -16,7 +16,7 @@ $fn$;
 
 do $test$
 declare
-  v_project uuid; v_building uuid; v_unit uuid;
+  v_project uuid; v_building uuid; v_unit uuid; v_invoice uuid;
   u_owner    uuid := '11111111-1111-1111-1111-111111111111';
   u_family   uuid := '22222222-2222-2222-2222-222222222222';
   u_tenant   uuid := '33333333-3333-3333-3333-333333333333';
@@ -39,15 +39,27 @@ begin
     (v_unit, u_tenant, 'tenant', 'active', current_date - 365, current_date - 1, false);
 
   insert into invoices (unit_id, project_id, period, total_amount, due_date, status)
-    values (v_unit, v_project, date_trunc('month', current_date), 1500000, current_date + 10, 'issued');
+    values (v_unit, v_project, date_trunc('month', current_date), 1500000, current_date + 10, 'issued')
+    returning id into v_invoice;
+
+  insert into invoice_lines (invoice_id, description, quantity, unit_price, amount)
+    values (v_invoice, 'Phi quan ly', 1, 1500000, 1500000);
+
+  -- Thông báo của người lạ: dùng làm mồi, chủ hộ KHÔNG được thấy dòng này.
+  insert into notifications (user_id, kind, title) values
+    (u_owner,    'invoice', 'Hoa don thang nay'),
+    (u_stranger, 'invoice', 'Hoa don cua nguoi khac');
 
   -- ── bật RLS thật ──
   execute 'alter table invoices force row level security';
   execute 'alter table unit_memberships force row level security';
+  execute 'alter table notifications force row level security';
+  execute 'alter table invoice_lines force row level security';
 
   begin execute 'create role vb_rls_test nologin'; exception when duplicate_object then null; end;
   execute 'grant usage on schema public to vb_rls_test';
   execute 'grant select on invoices to vb_rls_test';
+  execute 'grant select on notifications, invoice_lines to vb_rls_test';
   execute 'grant select, insert, update on unit_memberships to vb_rls_test';
   execute 'set local role vb_rls_test';   -- từ đây RLS mới thực sự có hiệu lực
 
@@ -94,12 +106,29 @@ begin
    where unit_id = v_unit and user_id = u_stranger and status = 'pending';
   if not found then raise exception 'FAIL 7: chu ho khong duyet duoc thanh vien'; end if;
 
-  -- 8. Không cho 2 chủ hộ active trên cùng 1 căn (test constraint, không phải RLS)
+  -- 8. Thông báo là dữ liệu riêng: chủ hộ chỉ thấy thông báo của chính mình.
+  --    Bảng này có grant select cho `authenticated`, nên thiếu RLS là cư dân nào
+  --    cũng đọc được thông báo của toàn khu.
+  perform set_config('test.uid', u_owner::text, true);
+  select count(*) into n from notifications;
+  if n <> 1 then raise exception 'FAIL 8: chu ho thay % thong bao, phai thay dung 1 cua minh', n; end if;
+
+  -- 9. invoice_lines thừa hưởng quyền của invoices. Không có RLS ở đây thì đọc
+  --    thẳng invoice_lines là vòng qua được RLS của invoices (xem FAIL 2).
+  perform set_config('test.uid', u_owner::text, true);
+  select count(*) into n from invoice_lines;
+  if n <> 1 then raise exception 'FAIL 9a: chu ho phai thay dong hoa don, thay % dong', n; end if;
+
+  perform set_config('test.uid', u_family::text, true);
+  select count(*) into n from invoice_lines;
+  if n <> 0 then raise exception 'FAIL 9b: family member doc duoc chi tiet hoa don qua invoice_lines'; end if;
+
+  -- 10. Không cho 2 chủ hộ active trên cùng 1 căn (test constraint, không phải RLS)
   execute 'reset role';
   begin
     insert into unit_memberships (unit_id, user_id, role, status)
       values (v_unit, u_stranger, 'owner', 'active');
-    raise exception 'FAIL 8: cho phep 2 chu ho active tren cung 1 can';
+    raise exception 'FAIL 10: cho phep 2 chu ho active tren cung 1 can';
   exception when unique_violation then null;
   end;
 

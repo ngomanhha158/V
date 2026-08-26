@@ -298,6 +298,19 @@ create policy invoice_read on invoices for select
 create policy membership_read on unit_memberships for select
   using (user_id = auth.uid() or unit_id in (select current_unit_ids()));
 
+-- Thông báo là dữ liệu riêng từng người. Có grant select mà không có RLS thì
+-- cư dân nào đăng nhập cũng đọc được thông báo của toàn khu.
+alter table notifications enable row level security;
+create policy notification_own_read on notifications for select
+  using (user_id = auth.uid());
+
+-- Dòng hóa đơn thừa hưởng quyền của chính hóa đơn: subquery dưới đây bị policy
+-- invoice_read lọc lại, nên ai thấy hóa đơn nào mới thấy chi tiết hóa đơn đó.
+-- Thiếu RLS ở đây = đọc thẳng invoice_lines là vòng qua được RLS của invoices.
+alter table invoice_lines enable row level security;
+create policy invoice_line_read on invoice_lines for select
+  using (exists (select 1 from invoices i where i.id = invoice_lines.invoice_id));
+
 -- SECURITY DEFINER bắt buộc: policy trên unit_memberships mà truy vấn thẳng
 -- unit_memberships sẽ đệ quy vô hạn. Hàm definer bỏ qua RLS nên cắt được vòng lặp.
 create or replace function is_unit_manager(p_unit uuid)
@@ -320,7 +333,7 @@ create policy membership_manager_write on unit_memberships for update
 -- ──────────────── 7. JOBS: hết hạn thuê + leo thang SLA ──────────────
 -- pg_cron 5 phút/lần. escalate ghi ticket_events -> Edge Function đọc & push ZNS.
 create or replace function expire_memberships() returns void
-language sql as $fn$
+language sql set search_path = public as $fn$
   update unit_memberships set status = 'expired'
    where status = 'active' and valid_to is not null and valid_to < current_date;
 $fn$;
@@ -329,7 +342,7 @@ $fn$;
 -- App chỉ gửi unit_id/category/priority. Suy ra building_id, project_id ở đây thì
 -- không bao giờ có ticket gắn sai dự án (gắn sai = RLS lọc sai = rò dữ liệu).
 create or replace function ticket_fill_defaults() returns trigger
-language plpgsql as $fn$
+language plpgsql set search_path = public as $fn$
 declare v_policy sla_policies%rowtype;
 begin
   select b.id, b.project_id into new.building_id, new.project_id
@@ -355,8 +368,11 @@ create trigger trg_ticket_fill before insert on tickets
 -- Audit trail viết bằng trigger, không viết ở app: nhiều nơi ghi ticket (app BQL,
 -- app cư dân, cron) — để app tự log thì sớm muộn có nhánh quên log, và KPI của
 -- BQT tính từ ticket_events sẽ sai mà không ai biết.
+-- SECURITY DEFINER: cư dân KHÔNG được cấp quyền ghi ticket_events (audit trail
+-- mà người bị audit ghi được thì vô nghĩa). Trigger chạy dưới quyền owner nên
+-- vẫn ghi được, còn cư dân không insert thẳng vào bảng này được.
 create or replace function ticket_log_change() returns trigger
-language plpgsql as $fn$
+language plpgsql security definer set search_path = public as $fn$
 begin
   if tg_op = 'INSERT' then
     insert into ticket_events (ticket_id, actor_id, event_type, to_value)
@@ -373,7 +389,7 @@ create trigger trg_ticket_log after insert or update on tickets
 
 -- Mốc thời gian đo SLA: đóng dấu lần đầu, không ghi đè khi đổi trạng thái tiếp.
 create or replace function ticket_stamp_times() returns trigger
-language plpgsql as $fn$
+language plpgsql set search_path = public as $fn$
 begin
   if new.status in ('assigned','in_progress') and new.responded_at is null then
     new.responded_at := now();
@@ -392,7 +408,7 @@ create trigger trg_ticket_stamp before update on tickets
 -- ponytail: điện tính 1 giá phẳng. Điện VN thực tế là bậc thang — khi cần, đổi
 -- nhánh 'metered' sang bảng fee_tiers, phần còn lại của hàm giữ nguyên.
 create or replace function generate_invoices(p_project uuid, p_period date)
-returns int language plpgsql as $fn$
+returns int language plpgsql set search_path = public as $fn$
 declare v_count int;
 begin
   insert into invoices (unit_id, project_id, period, due_date, status)
@@ -436,7 +452,7 @@ begin
 end $fn$;
 
 create or replace function escalate_overdue_tickets() returns void
-language plpgsql as $fn$
+language plpgsql set search_path = public as $fn$
 begin
   with overdue as (
     update tickets set escalated_at = now()
