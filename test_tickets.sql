@@ -67,6 +67,49 @@ begin
   select count(*) into n from tickets where id = t_weird and escalated_at is not null;
   if n <> 0 then raise exception 'FAIL 6b: leo thang nham ticket khong co han SLA'; end if;
 
+  -- 7. Cư dân đọc được diễn biến ticket của mình, KHÔNG đọc của căn khác.
+  --    (RLS thật chỉ có hiệu lực khi SET ROLE sang role thường — xem test_rls.sql.)
+  execute 'alter table tickets force row level security';
+  execute 'alter table ticket_events force row level security';
+  begin execute 'create role vb_ticket_test nologin'; exception when duplicate_object then null; end;
+  execute 'grant usage on schema public to vb_ticket_test';
+  -- Trên Supabase, role authenticated có sẵn usage trên schema auth. Stub
+  -- local thì không, phải cấp để create_ticket() gọi được auth.uid().
+  execute 'grant usage on schema auth to vb_ticket_test';
+  execute 'grant select on tickets, ticket_events to vb_ticket_test';
+  -- Gắn người báo vào căn TRƯỚC khi hạ quyền: role thường không ghi được bảng này.
+  insert into unit_memberships (unit_id, user_id, role, status)
+    values (v_unit, u_rep, 'owner', 'active');
+
+  execute 'set local role vb_ticket_test';
+  perform set_config('test.uid', u_rep::text, true);
+  select count(*) into n from ticket_events where ticket_id = t_elev;
+  if n = 0 then raise exception 'FAIL 7a: cu dan khong doc duoc dien bien ticket cua minh'; end if;
+
+  perform set_config('test.uid', '00000000-0000-0000-0000-0000000000ff', true);
+  select count(*) into n from ticket_events where ticket_id = t_elev;
+  if n <> 0 then raise exception 'FAIL 7b: nguoi la doc duoc dien bien ticket can khac'; end if;
+  execute 'reset role';
+
+  -- 8. create_ticket() phải ĐI QUA RLS, không được thành cửa sau. Hàm là
+  --    security invoker nên insert bên trong vẫn bị ticket_resident_insert lọc.
+  execute 'grant insert on tickets to vb_ticket_test';
+  execute 'grant execute on function create_ticket(uuid, text, ticket_priority, text, text) to vb_ticket_test';
+  execute 'set local role vb_ticket_test';
+
+  perform set_config('test.uid', u_rep::text, true);
+  perform create_ticket(v_unit, 'plumbing', 'high'::ticket_priority, 'Ro nuoc');
+  select count(*) into n from tickets where unit_id = v_unit and category = 'plumbing';
+  if n <> 1 then raise exception 'FAIL 8a: cu dan cua can khong tao duoc ticket qua create_ticket'; end if;
+
+  perform set_config('test.uid', '00000000-0000-0000-0000-0000000000ff', true);
+  begin
+    perform create_ticket(v_unit, 'plumbing', 'high'::ticket_priority, 'Nguoi la');
+    raise exception 'FAIL 8b: nguoi la tao duoc ticket cho can ho khong phai cua minh';
+  exception when insufficient_privilege then null;
+  end;
+  execute 'reset role';
+
   raise notice 'ALL TICKET TESTS PASSED';
 end $test$;
 

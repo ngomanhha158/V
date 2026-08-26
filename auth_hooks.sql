@@ -48,6 +48,8 @@ grant insert, update, delete on units, buildings to authenticated;
 -- Xe/thú cưng: chủ hộ tự quản, policy dùng is_unit_manager().
 grant select, insert, update, delete on unit_vehicles, unit_pets to authenticated;
 grant select, insert on tickets to authenticated;
+-- Chỉ ĐỌC ticket_events: audit trail mà người bị audit ghi được thì vô nghĩa.
+grant select on ticket_events to authenticated;
 grant select on invoices, invoice_lines, announcements, notifications to authenticated;
 
 -- Không cấp gì trên profiles, staff_assignments, ticket_events, meter_readings,
@@ -61,14 +63,17 @@ grant select on invoices, invoice_lines, announcements, notifications to authent
 -- từ PUBLIC rồi cấp lại đúng chỗ cần.
 revoke execute on all functions in schema public from public, anon, authenticated;
 
--- Chỉ 3 helper này cần: policy RLS gọi chúng dưới quyền chính người đang truy
--- vấn, mất execute là policy tự lỗi permission denied và cư dân không đọc được gì.
-grant execute on function current_unit_ids()    to authenticated;
-grant execute on function is_staff(uuid)        to authenticated;
-grant execute on function is_unit_manager(uuid) to authenticated;
+-- Helper của RLS: policy gọi chúng dưới quyền chính người đang truy vấn, mất
+-- execute là policy tự lỗi permission denied và cư dân không đọc được gì.
+grant execute on function current_unit_ids()     to authenticated;
+grant execute on function is_staff(uuid)         to authenticated;
+grant execute on function is_unit_manager(uuid)  to authenticated;
 grant execute on function can_see_profile(uuid)  to authenticated;
 grant execute on function building_project(uuid) to authenticated;
 grant execute on function unit_project(uuid)     to authenticated;
+
+-- RPC app gọi thẳng. Security invoker nên RLS vẫn là chốt chặn.
+grant execute on function create_ticket(uuid, text, ticket_priority, text, text) to authenticated;
 
 -- Còn lại là trigger function và job nền: không phải RPC endpoint, để nguyên là
 -- chúng nằm chình ình ở /rest/v1/rpc/...
@@ -83,3 +88,4 @@ alter table invoice_lines    force row level security;
 alter table profiles         force row level security;
 alter table unit_vehicles    force row level security;
 alter table unit_pets        force row level security;
+alter table ticket_events    force row level security;

@@ -284,6 +284,14 @@ create policy ticket_resident_insert on tickets for insert
 create policy ticket_staff_write on tickets for update
   using (is_staff(project_id));
 
+-- Timeline của cư dân đọc từ đây. Thừa hưởng quyền của chính ticket: subquery
+-- dưới đây bị policy ticket_resident_read lọc lại, nên ai thấy ticket nào mới
+-- thấy diễn biến ticket đó. KHÔNG cấp quyền ghi cho ai — audit trail chỉ được
+-- viết bởi trigger ticket_log_change (SECURITY DEFINER).
+alter table ticket_events enable row level security;
+create policy ticket_event_read on ticket_events for select
+  using (exists (select 1 from tickets t where t.id = ticket_events.ticket_id));
+
 -- Family member KHÔNG thấy công nợ trừ khi chủ hộ bật can_view_finance
 create policy invoice_read on invoices for select
   using (
@@ -406,8 +414,11 @@ $fn$;
 -- ── Ticket: suy ra vị trí + hạn SLA ở DB, không để app tự tính ──
 -- App chỉ gửi unit_id/category/priority. Suy ra building_id, project_id ở đây thì
 -- không bao giờ có ticket gắn sai dự án (gắn sai = RLS lọc sai = rò dữ liệu).
+-- SECURITY DEFINER: hàm đọc units/buildings/sla_policies để suy ra vị trí và
+-- hạn SLA. Để invoker thì việc tạo ticket phụ thuộc ngầm vào quyền đọc 3 bảng
+-- đó của cư dân — hôm nay tình cờ có, mai siết quyền là gãy mà không rõ vì sao.
 create or replace function ticket_fill_defaults() returns trigger
-language plpgsql set search_path = public as $fn$
+language plpgsql security definer set search_path = public as $fn$
 declare v_policy sla_policies%rowtype;
 begin
   select b.id, b.project_id into new.building_id, new.project_id
@@ -429,6 +440,25 @@ end $fn$;
 
 create trigger trg_ticket_fill before insert on tickets
   for each row execute function ticket_fill_defaults();
+
+-- API tạo ticket cho app. Vì sao cần hàm này thay vì insert thẳng:
+-- building_id/project_id là NOT NULL không default, nên type sinh từ DB bắt
+-- app phải gửi — đúng cái mà trigger sinh ra để app KHỎI phải gửi. Trình sinh
+-- type không biết có trigger. Bọc lại thành hàm thì hợp đồng "app chỉ gửi
+-- unit/category/priority" thành hợp đồng có kiểu, không phải ép kiểu cho qua.
+-- KHÔNG phải security definer: insert chạy dưới quyền người gọi nên policy
+-- ticket_resident_insert vẫn là chốt chặn.
+create or replace function create_ticket(
+  p_unit        uuid,
+  p_category    text,
+  p_priority    ticket_priority,
+  p_title       text,
+  p_description text default null
+) returns uuid language sql set search_path = public as $fn$
+  insert into tickets (unit_id, reporter_id, category, priority, title, description)
+  values (p_unit, auth.uid(), p_category, p_priority, p_title, nullif(p_description, ''))
+  returning id;
+$fn$;
 
 -- Audit trail viết bằng trigger, không viết ở app: nhiều nơi ghi ticket (app BQL,
 -- app cư dân, cron) — để app tự log thì sớm muộn có nhánh quên log, và KPI của

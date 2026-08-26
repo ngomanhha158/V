@@ -928,6 +928,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      building_project: { Args: { p_building: string }; Returns: string }
+      can_see_profile: { Args: { p_user: string }; Returns: boolean }
+      create_ticket: {
+        Args: {
+          p_category: string
+          p_description?: string
+          p_priority: Database["public"]["Enums"]["ticket_priority"]
+          p_title: string
+          p_unit: string
+        }
+        Returns: string
+      }
       current_unit_ids: { Args: never; Returns: string[] }
       escalate_overdue_tickets: { Args: never; Returns: undefined }
       expire_memberships: { Args: never; Returns: undefined }
@@ -937,6 +949,7 @@ export type Database = {
       }
       is_staff: { Args: { p_project: string }; Returns: boolean }
       is_unit_manager: { Args: { p_unit: string }; Returns: boolean }
+      unit_project: { Args: { p_unit: string }; Returns: string }
     }
     Enums: {
       invoice_status: "draft" | "issued" | "partial" | "paid" | "void"
