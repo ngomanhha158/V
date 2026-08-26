@@ -38,6 +38,9 @@ alter default privileges in schema public revoke all on sequences from anon, aut
 -- anon giữ usage trên schema nhưng không có bảng nào -> PostgREST không trả dữ liệu.
 grant usage on schema public to anon, authenticated;
 grant select on units, buildings, projects, documents, sla_policies, fee_types to authenticated;
+-- profiles có RLS (policy profile_read): chỉ thấy chính mình và thành viên
+-- các căn mình quản lý, không phải cả danh bạ khu.
+grant select on profiles to authenticated;
 grant select, insert, update on unit_memberships to authenticated;
 grant select, insert on tickets to authenticated;
 grant select on invoices, invoice_lines, announcements, notifications to authenticated;
@@ -58,6 +61,7 @@ revoke execute on all functions in schema public from public, anon, authenticate
 grant execute on function current_unit_ids()    to authenticated;
 grant execute on function is_staff(uuid)        to authenticated;
 grant execute on function is_unit_manager(uuid) to authenticated;
+grant execute on function can_see_profile(uuid)  to authenticated;
 
 -- Còn lại là trigger function và job nền: không phải RPC endpoint, để nguyên là
 -- chúng nằm chình ình ở /rest/v1/rpc/...
@@ -69,3 +73,4 @@ alter table invoices         force row level security;
 alter table unit_memberships force row level security;
 alter table notifications    force row level security;
 alter table invoice_lines    force row level security;
+alter table profiles         force row level security;

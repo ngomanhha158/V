@@ -1,7 +1,7 @@
 -- Smoke test cho phần rủi ro nhất: RLS + hết hạn hợp đồng thuê.
 -- Chạy: psql -f schema.sql && psql -1 -f test_rls.sql
 --   (-1 = bọc trong 1 transaction; assert fail -> raise exception -> rollback toàn bộ)
--- ponytail: 1 file assert, không framework. Chỉ test 10 invariant dễ vỡ nhất.
+-- ponytail: 1 file assert, không framework. Chỉ test 11 invariant dễ vỡ nhất.
 --
 -- HAI CÁI BẪY LÀM TEST PASS GIẢ:
 --   1. Table owner mặc định BYPASS RLS -> phải FORCE ROW LEVEL SECURITY.
@@ -55,11 +55,13 @@ begin
   execute 'alter table unit_memberships force row level security';
   execute 'alter table notifications force row level security';
   execute 'alter table invoice_lines force row level security';
+  execute 'alter table profiles force row level security';
 
   begin execute 'create role vb_rls_test nologin'; exception when duplicate_object then null; end;
   execute 'grant usage on schema public to vb_rls_test';
   execute 'grant select on invoices to vb_rls_test';
   execute 'grant select on notifications, invoice_lines to vb_rls_test';
+  execute 'grant select on profiles to vb_rls_test';
   execute 'grant select, insert, update on unit_memberships to vb_rls_test';
   execute 'set local role vb_rls_test';   -- từ đây RLS mới thực sự có hiệu lực
 
@@ -123,12 +125,28 @@ begin
   select count(*) into n from invoice_lines;
   if n <> 0 then raise exception 'FAIL 9b: family member doc duoc chi tiet hoa don qua invoice_lines'; end if;
 
-  -- 10. Không cho 2 chủ hộ active trên cùng 1 căn (test constraint, không phải RLS)
+  -- 10. profiles: chủ hộ đọc được thành viên căn mình, người khác thì không.
+  --     Mở cả bảng = lộ danh bạ toàn khu; đóng hẳn = màn duyệt hiện dòng trống.
+  --     (Tới đây u_stranger đã là tenant active trên v_unit nhờ assert 7.)
+  perform set_config('test.uid', u_owner::text, true);
+  select count(*) into n from profiles where id = u_stranger;
+  if n <> 1 then raise exception 'FAIL 10a: chu ho khong doc duoc profile thanh vien can minh'; end if;
+
+  -- Family member không phải người quản lý căn -> không được xem profile người khác
+  perform set_config('test.uid', u_family::text, true);
+  select count(*) into n from profiles where id = u_stranger;
+  if n <> 0 then raise exception 'FAIL 10b: family member doc duoc profile nguoi khac'; end if;
+
+  -- Nhưng ai cũng đọc được profile của chính mình
+  select count(*) into n from profiles where id = u_family;
+  if n <> 1 then raise exception 'FAIL 10c: khong doc duoc profile cua chinh minh'; end if;
+
+  -- 11. Không cho 2 chủ hộ active trên cùng 1 căn (test constraint, không phải RLS)
   execute 'reset role';
   begin
     insert into unit_memberships (unit_id, user_id, role, status)
       values (v_unit, u_stranger, 'owner', 'active');
-    raise exception 'FAIL 10: cho phep 2 chu ho active tren cung 1 can';
+    raise exception 'FAIL 11: cho phep 2 chu ho active tren cung 1 can';
   exception when unique_violation then null;
   end;
 

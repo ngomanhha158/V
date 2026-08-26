@@ -330,6 +330,31 @@ create policy membership_self_request on unit_memberships for insert
 create policy membership_manager_write on unit_memberships for update
   using (is_unit_manager(unit_id));
 
+-- Chủ hộ phải đọc được tên/SĐT của người xin gia nhập căn mình, nếu không màn
+-- duyệt chỉ hiện một dòng trống. Nhưng mở select cả bảng profiles = lộ danh bạ
+-- toàn khu (họ tên, SĐT, email). Giới hạn đúng phạm vi cần:
+--   - profile của chính mình
+--   - profile của người có bản ghi thành viên trên căn mình đang quản lý
+-- SECURITY DEFINER vì hàm đọc unit_memberships, mà unit_memberships lại có
+-- policy đọc ngược về đây — invoker sẽ đệ quy.
+create or replace function can_see_profile(p_user uuid)
+returns boolean language sql stable security definer set search_path = public as $fn$
+  select p_user = auth.uid()
+      or exists (
+           select 1
+             from unit_memberships them
+             join unit_memberships mine on mine.unit_id = them.unit_id
+            where them.user_id = p_user
+              and mine.user_id = auth.uid()
+              and mine.status = 'active'
+              and mine.role in ('owner','authorized')
+              and (mine.valid_to is null or mine.valid_to >= current_date)
+         );
+$fn$;
+
+alter table profiles enable row level security;
+create policy profile_read on profiles for select using (can_see_profile(id));
+
 -- ──────────────── 7. JOBS: hết hạn thuê + leo thang SLA ──────────────
 -- pg_cron 5 phút/lần. escalate ghi ticket_events -> Edge Function đọc & push ZNS.
 create or replace function expire_memberships() returns void
