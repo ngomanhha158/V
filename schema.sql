@@ -517,6 +517,48 @@ end $fn$;
 create trigger trg_ticket_stamp before update on tickets
   for each row execute function ticket_stamp_times();
 
+-- N13 — cư dân chấm điểm sau khi việc xong.
+-- Vì sao là hàm chứ không phải update thẳng: cư dân phải sửa được rating nhưng
+-- KHÔNG được đụng status/assignee. `authenticated` là một role dùng chung cho
+-- cả cư dân lẫn BQL nên grant theo cột không phân biệt được hai bên. Hàm ghi
+-- đúng hai cột đánh giá là cách duy nhất giữ được ranh giới đó.
+-- SECURITY DEFINER nên hàm BỎ QUA RLS -> phải tự kiểm tra quyền, không được
+-- dựa vào policy như create_ticket.
+create or replace function rate_ticket(p_ticket uuid, p_rating int, p_note text default null)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare v_unit uuid; v_status ticket_status;
+begin
+  if p_rating is null or p_rating < 1 or p_rating > 5 then
+    -- Bảo đảm thật là CHECK constraint trên cột rating; dòng này chỉ để trả về
+    -- lỗi đọc được thay vì ném nguyên constraint violation lên mặt người dùng.
+    -- SQLSTATE riêng cho từng loại từ chối, để test bắt được ĐÚNG loại thay vì
+    -- nuốt bừa mọi lỗi (nuốt bừa thì chính dòng assert cũng bị nuốt).
+    raise exception 'Diem danh gia phai tu 1 den 5' using errcode = '22023';
+  end if;
+
+  select unit_id, status into v_unit, v_status from tickets where id = p_ticket;
+  if v_unit is null then
+    raise exception 'Khong tim thay yeu cau' using errcode = '42501';
+  end if;
+
+  if not exists (
+    select 1 from unit_memberships
+     where unit_id = v_unit and user_id = auth.uid() and status = 'active'
+       and valid_from <= current_date
+       and (valid_to is null or valid_to >= current_date)
+  ) then
+    raise exception 'Ban khong thuoc can ho cua yeu cau nay' using errcode = '42501';
+  end if;
+
+  -- Chấm điểm khi việc chưa xong thì điểm đo cái gì?
+  if v_status not in ('resolved', 'closed') then
+    raise exception 'Chi danh gia duoc khi yeu cau da xong' using errcode = '55000';
+  end if;
+
+  update tickets set rating = p_rating, rating_note = nullif(p_note, '')
+   where id = p_ticket;
+end $fn$;
+
 -- Sinh hóa đơn 1 kỳ cho toàn dự án. CHẠY LẠI ĐƯỢC: chỉ đụng hóa đơn còn 'draft',
 -- hóa đơn đã 'issued' trở lên không bị ghi đè -> không nhân đôi tiền của cư dân.
 -- ponytail: điện tính 1 giá phẳng. Điện VN thực tế là bậc thang — khi cần, đổi

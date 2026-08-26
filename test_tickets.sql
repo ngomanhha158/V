@@ -142,6 +142,42 @@ begin
   if n <> 1 then raise exception 'FAIL 9b: BQL khong doi duoc trang thai ticket'; end if;
   execute 'reset role';
 
+  -- 10. Đánh giá: chỉ người trong căn, chỉ khi đã xong, chỉ điểm 1-5.
+  --     Hàm là DEFINER nên bỏ qua RLS — nếu nó kiểm tra hụt thì ai cũng chấm
+  --     điểm hộ được, và KPI hài lòng của BQT thành số bịa.
+  execute 'grant execute on function rate_ticket(uuid, int, text) to vb_ticket_test';
+  execute 'set local role vb_ticket_test';
+
+  -- (t_elev đang ở 'resolved' sau assert 9b)
+  perform set_config('test.uid', '00000000-0000-0000-0000-0000000000ff', true);
+  begin
+    perform rate_ticket(t_elev, 5);
+    raise exception 'FAIL 10a: nguoi ngoai can ho cham diem duoc';
+  exception when insufficient_privilege then null;
+  end;
+
+  perform set_config('test.uid', u_rep::text, true);
+  begin
+    perform rate_ticket(t_elev, 9);
+    raise exception 'FAIL 10b: nhan diem ngoai thang 1-5';
+  exception when invalid_parameter_value then null;   -- 22023, đúng loại từ chối
+  end;
+
+  perform rate_ticket(t_elev, 4, 'Xu ly nhanh');
+  execute 'reset role';
+  select count(*) into n from tickets where id = t_elev and rating = 4 and rating_note = 'Xu ly nhanh';
+  if n <> 1 then raise exception 'FAIL 10c: cu dan trong can khong cham diem duoc'; end if;
+
+  -- Ticket chưa xong thì không chấm được
+  execute 'set local role vb_ticket_test';
+  perform set_config('test.uid', u_rep::text, true);
+  begin
+    perform rate_ticket(t_weird, 5);
+    raise exception 'FAIL 10d: cham diem duoc ticket chua xong';
+  exception when object_not_in_prerequisite_state then null;   -- 55000
+  end;
+  execute 'reset role';
+
   raise notice 'ALL TICKET TESTS PASSED';
 end $test$;
 

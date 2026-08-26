@@ -949,6 +949,10 @@ export type Database = {
       }
       is_staff: { Args: { p_project: string }; Returns: boolean }
       is_unit_manager: { Args: { p_unit: string }; Returns: boolean }
+      rate_ticket: {
+        Args: { p_note?: string; p_rating: number; p_ticket: string }
+        Returns: undefined
+      }
       unit_project: { Args: { p_unit: string }; Returns: string }
     }
     Enums: {

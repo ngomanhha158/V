@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { RatingForm } from './rating-form'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,10 +24,15 @@ export default async function TicketDetail({ params }: { params: Promise<{ id: s
 
   const { data: ticket } = await supabase
     .from('tickets')
-    .select('id, title, description, category, priority, status, created_at, sla_respond_due, sla_resolve_due, responded_at, resolved_at, units(code, buildings(name))')
+    .select('id, title, description, category, priority, status, created_at, sla_respond_due, sla_resolve_due, responded_at, resolved_at, rating, rating_note, unit_id, units(code, buildings(name))')
     .eq('id', id)
     .maybeSingle()
   if (!ticket) notFound()
+
+  // BQL cũng thấy ticket này (policy ticket_resident_read có nhánh is_staff),
+  // nhưng chấm điểm là việc của cư dân — không hiện form cho BQL.
+  const { data: myUnits } = await supabase.rpc('current_unit_ids')
+  const isMember = (myUnits ?? []).includes(ticket.unit_id)
 
   // ticket_events chỉ đọc được nếu đọc được chính ticket (policy ticket_event_read).
   const { data: events } = await supabase
@@ -66,6 +72,18 @@ export default async function TicketDetail({ params }: { params: Promise<{ id: s
           <p className="opacity-70">Danh mục này chưa có hạn SLA nên không có cảnh báo tự động.</p>
         )}
       </section>
+
+      {(ticket.status === 'resolved' || ticket.status === 'closed') && (
+        ticket.rating
+          ? (
+            <section className="rounded border p-3 text-sm">
+              <div className="font-medium">Bạn đã đánh giá {ticket.rating}/5 sao</div>
+              {ticket.rating_note && <p className="mt-1 opacity-70">{ticket.rating_note}</p>}
+            </section>
+          )
+          // Chỉ người trong căn mới gửi được; rate_ticket từ chối người ngoài.
+          : isMember && <RatingForm ticketId={ticket.id} />
+      )}
 
       <section className="space-y-2">
         <h2 className="font-medium">Diễn biến</h2>

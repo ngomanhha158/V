@@ -77,6 +77,8 @@ grant execute on function unit_project(uuid)     to authenticated;
 
 -- RPC app gọi thẳng. Security invoker nên RLS vẫn là chốt chặn.
 grant execute on function create_ticket(uuid, text, ticket_priority, text, text) to authenticated;
+-- rate_ticket là DEFINER: nó tự kiểm tra quyền bên trong, xem schema.sql.
+grant execute on function rate_ticket(uuid, int, text) to authenticated;
 
 -- Còn lại là trigger function và job nền: không phải RPC endpoint, để nguyên là
 -- chúng nằm chình ình ở /rest/v1/rpc/...
