@@ -13,6 +13,12 @@ export default async function Home() {
     .select('id, role, status, valid_to, units(code, floor_no, buildings(name))')
     .eq('user_id', user?.id ?? '')
 
+  // Chỉ để hiện/ẩn link. RLS mới là chốt chặn thật cho trang BQL.
+  const { data: project } = await supabase.from('projects').select('id').limit(1).maybeSingle()
+  const { data: isStaff } = project
+    ? await supabase.rpc('is_staff', { p_project: project.id })
+    : { data: false }
+
   const active = memberships?.filter((m) => m.status === 'active') ?? []
   const pending = memberships?.filter((m) => m.status === 'pending') ?? []
 
@@ -48,6 +54,7 @@ export default async function Home() {
       <nav className="flex gap-4 text-sm underline">
         <Link href="/onboarding">Thêm căn hộ</Link>
         <Link href="/approvals">Duyệt thành viên</Link>
+        {isStaff && <Link href="/bql/import">Import căn hộ (BQL)</Link>}
       </nav>
     </main>
   )

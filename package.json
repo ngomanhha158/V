@@ -6,7 +6,9 @@
     "verify": "node scripts/verify-schema.mjs",
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test:js": "node --experimental-strip-types --test \"lib/**/*.test.ts\"",
+    "test": "npm run verify && npm run test:js"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.16",
@@ -19,6 +21,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
+    "exceljs": "^4.4.0",
     "next": "^16.3.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
