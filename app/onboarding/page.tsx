@@ -22,7 +22,7 @@ export default async function Onboarding() {
           <option value="">— Chọn căn hộ —</option>
           {units?.map((u) => (
             <option key={u.id} value={u.id}>
-              {u.code} · {(u.buildings as any)?.name}
+              {u.code} · {u.buildings?.name}
             </option>
           ))}
         </select>

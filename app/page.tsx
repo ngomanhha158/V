@@ -36,9 +36,9 @@ export default async function Home() {
       <ul className="space-y-2">
         {active.map((m) => (
           <li key={m.id} className="rounded border p-3">
-            <div className="font-medium">{(m.units as any)?.code}</div>
+            <div className="font-medium">{m.units?.code}</div>
             <div className="text-sm opacity-70">
-              {(m.units as any)?.buildings?.name} · vai trò: {m.role}
+              {m.units?.buildings?.name} · vai trò: {m.role}
               {m.valid_to && ` · đến ${m.valid_to}`}
             </div>
           </li>

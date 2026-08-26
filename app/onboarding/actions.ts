@@ -2,10 +2,19 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { Constants, type Database } from '@/lib/supabase/database.types'
+
+type UnitRole = Database['public']['Enums']['unit_role']
+
+// Đối chiếu với enum sinh từ DB: thêm vai trò mới trong schema là chỗ này tự có.
+function parseRole(value: string): UnitRole | null {
+  const allowed: readonly string[] = Constants.public.Enums.unit_role
+  return allowed.includes(value) ? (value as UnitRole) : null
+}
 
 export async function requestJoin(formData: FormData) {
   const unitId = String(formData.get('unit_id') ?? '')
-  const role = String(formData.get('role') ?? '')
+  const role = parseRole(String(formData.get('role') ?? ''))
   if (!unitId || !role) return
 
   const supabase = await createClient()

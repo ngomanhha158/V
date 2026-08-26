@@ -7,7 +7,9 @@ export default async function Approvals() {
   const supabase = await createClient()
   const { data: pending } = await supabase
     .from('unit_memberships')
-    .select('id, role, created_at, profiles(full_name, phone), units(code)')
+    // Phải chỉ đích danh FK: unit_memberships có 2 đường sang profiles
+    // (user_id và approved_by). Để trống thì PostgREST không đoán được và query lỗi.
+    .select('id, role, created_at, profiles!unit_memberships_user_id_fkey(full_name, phone), units(code)')
     .eq('status', 'pending')
 
   return (
@@ -18,9 +20,9 @@ export default async function Approvals() {
       {pending?.map((m) => (
         <form key={m.id} action={decide} className="space-y-2 rounded border p-3">
           <input type="hidden" name="id" value={m.id} />
-          <div className="font-medium">{(m.profiles as any)?.full_name}</div>
+          <div className="font-medium">{m.profiles?.full_name}</div>
           <div className="text-sm opacity-70">
-            {(m.profiles as any)?.phone} · xin vào {(m.units as any)?.code} · vai trò {m.role}
+            {m.profiles?.phone} · xin vào {m.units?.code} · vai trò {m.role}
           </div>
 
           {/* Người thuê / ủy quyền phải có hạn, nếu không quyền không bao giờ tự thu hồi */}
