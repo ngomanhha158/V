@@ -325,6 +325,68 @@ language sql as $fn$
    where status = 'active' and valid_to is not null and valid_to < current_date;
 $fn$;
 
+-- ── Ticket: suy ra vị trí + hạn SLA ở DB, không để app tự tính ──
+-- App chỉ gửi unit_id/category/priority. Suy ra building_id, project_id ở đây thì
+-- không bao giờ có ticket gắn sai dự án (gắn sai = RLS lọc sai = rò dữ liệu).
+create or replace function ticket_fill_defaults() returns trigger
+language plpgsql as $fn$
+declare v_policy sla_policies%rowtype;
+begin
+  select b.id, b.project_id into new.building_id, new.project_id
+    from units u join buildings b on b.id = u.building_id
+   where u.id = new.unit_id;
+
+  select * into v_policy from sla_policies
+   where project_id = new.project_id and category = new.category
+     and priority = new.priority;
+
+  -- Không có policy khớp -> để hạn NULL, ticket vẫn tạo được.
+  -- Cron escalate bỏ qua hạn NULL, nên chỉ mất cảnh báo, không mất báo cáo.
+  if found then
+    new.sla_respond_due := now() + make_interval(mins => v_policy.respond_mins);
+    new.sla_resolve_due := now() + make_interval(mins => v_policy.resolve_mins);
+  end if;
+  return new;
+end $fn$;
+
+create trigger trg_ticket_fill before insert on tickets
+  for each row execute function ticket_fill_defaults();
+
+-- Audit trail viết bằng trigger, không viết ở app: nhiều nơi ghi ticket (app BQL,
+-- app cư dân, cron) — để app tự log thì sớm muộn có nhánh quên log, và KPI của
+-- BQT tính từ ticket_events sẽ sai mà không ai biết.
+create or replace function ticket_log_change() returns trigger
+language plpgsql as $fn$
+begin
+  if tg_op = 'INSERT' then
+    insert into ticket_events (ticket_id, actor_id, event_type, to_value)
+      values (new.id, new.reporter_id, 'created', new.status::text);
+  elsif new.status is distinct from old.status then
+    insert into ticket_events (ticket_id, actor_id, event_type, from_value, to_value)
+      values (new.id, new.assignee_id, 'status_changed', old.status::text, new.status::text);
+  end if;
+  return new;
+end $fn$;
+
+create trigger trg_ticket_log after insert or update on tickets
+  for each row execute function ticket_log_change();
+
+-- Mốc thời gian đo SLA: đóng dấu lần đầu, không ghi đè khi đổi trạng thái tiếp.
+create or replace function ticket_stamp_times() returns trigger
+language plpgsql as $fn$
+begin
+  if new.status in ('assigned','in_progress') and new.responded_at is null then
+    new.responded_at := now();
+  end if;
+  if new.status in ('resolved','closed') and new.resolved_at is null then
+    new.resolved_at := now();
+  end if;
+  return new;
+end $fn$;
+
+create trigger trg_ticket_stamp before update on tickets
+  for each row execute function ticket_stamp_times();
+
 -- Sinh hóa đơn 1 kỳ cho toàn dự án. CHẠY LẠI ĐƯỢC: chỉ đụng hóa đơn còn 'draft',
 -- hóa đơn đã 'issued' trở lên không bị ghi đè -> không nhân đôi tiền của cư dân.
 -- ponytail: điện tính 1 giá phẳng. Điện VN thực tế là bậc thang — khi cần, đổi
