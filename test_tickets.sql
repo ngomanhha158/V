@@ -111,7 +111,7 @@ begin
   -- 8. create_ticket() phải ĐI QUA RLS, không được thành cửa sau. Hàm là
   --    security invoker nên insert bên trong vẫn bị ticket_resident_insert lọc.
   execute 'grant insert on tickets to vb_ticket_test';
-  execute 'grant execute on function create_ticket(uuid, text, ticket_priority, text, text) to vb_ticket_test';
+  execute 'grant execute on function create_ticket(uuid, text, ticket_priority, text, text, text[]) to vb_ticket_test';
   execute 'set local role vb_ticket_test';
 
   perform set_config('test.uid', u_rep::text, true);

@@ -17,6 +17,8 @@ export async function createTicket(_prev: NewTicketState, formData: FormData): P
   const priority = parsePriority(String(formData.get('priority') ?? 'normal'))
   const title = String(formData.get('title') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim() || null
+  // Ảnh đã upload xong ở trình duyệt; form chỉ mang theo đường dẫn.
+  const photoUrls = formData.getAll('photo_urls').map(String).filter(Boolean)
 
   if (!unitId) return { error: 'Chưa chọn căn hộ.' }
   if (!category) return { error: 'Chưa chọn danh mục sự cố.' }
@@ -37,6 +39,7 @@ export async function createTicket(_prev: NewTicketState, formData: FormData): P
     p_priority: priority,
     p_title: title,
     ...(description ? { p_description: description } : {}),
+    ...(photoUrls.length ? { p_photo_urls: photoUrls } : {}),
   })
 
   if (error) {

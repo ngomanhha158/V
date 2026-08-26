@@ -467,15 +467,20 @@ create trigger trg_ticket_fill before insert on tickets
 -- unit/category/priority" thành hợp đồng có kiểu, không phải ép kiểu cho qua.
 -- KHÔNG phải security definer: insert chạy dưới quyền người gọi nên policy
 -- ticket_resident_insert vẫn là chốt chặn.
+-- p_photo_urls phải truyền NGAY LÚC TẠO: cư dân không có policy update trên
+-- tickets nên không thể gắn ảnh sau. Ảnh upload lên Storage trước, lấy đường
+-- dẫn rồi mới gọi hàm này (xem storage.sql).
 create or replace function create_ticket(
   p_unit        uuid,
   p_category    text,
   p_priority    ticket_priority,
   p_title       text,
-  p_description text default null
+  p_description text default null,
+  p_photo_urls  text[] default '{}'
 ) returns uuid language sql set search_path = public as $fn$
-  insert into tickets (unit_id, reporter_id, category, priority, title, description)
-  values (p_unit, auth.uid(), p_category, p_priority, p_title, nullif(p_description, ''))
+  insert into tickets (unit_id, reporter_id, category, priority, title, description, photo_urls)
+  values (p_unit, auth.uid(), p_category, p_priority, p_title, nullif(p_description, ''),
+          coalesce(p_photo_urls, '{}'))
   returning id;
 $fn$;
 

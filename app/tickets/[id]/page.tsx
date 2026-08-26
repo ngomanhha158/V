@@ -24,7 +24,7 @@ export default async function TicketDetail({ params }: { params: Promise<{ id: s
 
   const { data: ticket } = await supabase
     .from('tickets')
-    .select('id, title, description, category, priority, status, created_at, sla_respond_due, sla_resolve_due, responded_at, resolved_at, rating, rating_note, unit_id, units(code, buildings(name))')
+    .select('id, title, description, category, priority, status, created_at, sla_respond_due, sla_resolve_due, responded_at, resolved_at, rating, rating_note, unit_id, photo_urls, units(code, buildings(name))')
     .eq('id', id)
     .maybeSingle()
   if (!ticket) notFound()
@@ -44,6 +44,14 @@ export default async function TicketDetail({ params }: { params: Promise<{ id: s
   const overdue = !ticket.resolved_at && ticket.sla_resolve_due
     && new Date(ticket.sla_resolve_due) < new Date()
 
+  // Bucket riêng tư nên URL thẳng không xem được — phải ký, hạn 1 giờ.
+  // RLS của Storage vẫn là chốt chặn: ký hộ đường dẫn không phải căn mình thì
+  // Supabase từ chối ngay ở đây.
+  const photos = ticket.photo_urls ?? []
+  const { data: signed } = photos.length
+    ? await supabase.storage.from('ticket-photos').createSignedUrls(photos, 3600)
+    : { data: null }
+
   return (
     <main className="space-y-5">
       <Link href="/tickets" className="text-sm underline">← Yêu cầu của tôi</Link>
@@ -57,6 +65,28 @@ export default async function TicketDetail({ params }: { params: Promise<{ id: s
       </div>
 
       {ticket.description && <p className="whitespace-pre-wrap">{ticket.description}</p>}
+
+      {signed && signed.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="font-medium">Ảnh kèm theo</h2>
+          <div className="flex flex-wrap gap-2">
+            {signed.map((s, i) =>
+              s.signedUrl ? (
+                <a key={i} href={s.signedUrl} target="_blank" rel="noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={s.signedUrl} alt={`Ảnh ${i + 1}`}
+                       className="h-28 w-28 rounded border object-cover" />
+                </a>
+              ) : (
+                // Ký hụt (ảnh bị xóa, hoặc hết quyền) — nói ra thay vì hiện ô vỡ.
+                <span key={i} className="flex h-28 w-28 items-center justify-center rounded border p-2 text-center text-xs opacity-70">
+                  Không mở được ảnh {i + 1}
+                </span>
+              ),
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="rounded border p-3 text-sm">
         <div className="font-medium">Hạn xử lý</div>

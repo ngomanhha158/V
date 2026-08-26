@@ -934,6 +934,7 @@ export type Database = {
         Args: {
           p_category: string
           p_description?: string
+          p_photo_urls?: string[]
           p_priority: Database["public"]["Enums"]["ticket_priority"]
           p_title: string
           p_unit: string
