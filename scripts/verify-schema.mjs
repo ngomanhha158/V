@@ -27,5 +27,8 @@ async function run(file) {
   }
 }
 
-const ok = (await run('schema.sql')) && (await run('test_rls.sql'))
+// test_rls.sql chạy cuối: nó SET ROLE + FORCE RLS, ảnh hưởng các test sau nếu chạy trước.
+const files = ['schema.sql', 'seed.sql', 'test_billing.sql', 'test_rls.sql']
+let ok = true
+for (const f of files) ok = (await run(f)) && ok
 process.exit(ok ? 0 : 1)

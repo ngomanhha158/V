@@ -190,6 +190,20 @@ create table invoice_lines (
   amount      bigint not null
 );
 
+-- Chỉ số điện/nước theo kỳ. consumption = curr_index - prev_index.
+create table meter_readings (
+  id          uuid primary key default gen_random_uuid(),
+  unit_id     uuid not null references units(id) on delete cascade,
+  fee_type_id uuid not null references fee_types(id) on delete cascade,
+  period      date not null,
+  prev_index  numeric(12,2) not null,
+  curr_index  numeric(12,2) not null,
+  recorded_by uuid references profiles(id),
+  recorded_at timestamptz not null default now(),
+  unique (unit_id, fee_type_id, period),
+  constraint reading_not_backwards check (curr_index >= prev_index)
+);
+
 -- Idempotent: bank_ref unique -> webhook bắn lại KHÔNG gạch nợ 2 lần
 create table payments (
   id          uuid primary key default gen_random_uuid(),
@@ -291,6 +305,54 @@ language sql as $fn$
   update unit_memberships set status = 'expired'
    where status = 'active' and valid_to is not null and valid_to < current_date;
 $fn$;
+
+-- Sinh hóa đơn 1 kỳ cho toàn dự án. CHẠY LẠI ĐƯỢC: chỉ đụng hóa đơn còn 'draft',
+-- hóa đơn đã 'issued' trở lên không bị ghi đè -> không nhân đôi tiền của cư dân.
+-- ponytail: điện tính 1 giá phẳng. Điện VN thực tế là bậc thang — khi cần, đổi
+-- nhánh 'metered' sang bảng fee_tiers, phần còn lại của hàm giữ nguyên.
+create or replace function generate_invoices(p_project uuid, p_period date)
+returns int language plpgsql as $fn$
+declare v_count int;
+begin
+  insert into invoices (unit_id, project_id, period, due_date, status)
+  select u.id, p_project, p_period, p_period + interval '15 day', 'draft'
+    from units u join buildings b on b.id = u.building_id
+   where b.project_id = p_project
+  on conflict (unit_id, period) do nothing;
+
+  delete from invoice_lines l using invoices i
+   where l.invoice_id = i.id and i.project_id = p_project
+     and i.period = p_period and i.status = 'draft';
+
+  insert into invoice_lines (invoice_id, fee_type_id, description, quantity, unit_price, amount)
+  select i.id, f.id, f.name,
+         case f.calc_method
+           when 'per_m2'  then coalesce(u.area_m2, 0)
+           when 'metered' then coalesce(r.curr_index - r.prev_index, 0)
+           else 1
+         end as qty,
+         f.unit_price,
+         round(f.unit_price * case f.calc_method
+           when 'per_m2'  then coalesce(u.area_m2, 0)
+           when 'metered' then coalesce(r.curr_index - r.prev_index, 0)
+           else 1
+         end)::bigint
+    from invoices i
+    join units u on u.id = i.unit_id
+    join fee_types f on f.project_id = i.project_id
+    left join meter_readings r
+           on r.unit_id = u.id and r.fee_type_id = f.id and r.period = i.period
+   where i.project_id = p_project and i.period = p_period and i.status = 'draft'
+     -- không sinh dòng 0đ cho căn chưa có chỉ số công tơ
+     and (f.calc_method <> 'metered' or r.id is not null);
+
+  update invoices i set total_amount = coalesce(
+      (select sum(l.amount) from invoice_lines l where l.invoice_id = i.id), 0)
+   where i.project_id = p_project and i.period = p_period and i.status = 'draft';
+
+  get diagnostics v_count = row_count;
+  return v_count;
+end $fn$;
 
 create or replace function escalate_overdue_tickets() returns void
 language plpgsql as $fn$
