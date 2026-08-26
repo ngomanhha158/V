@@ -10,7 +10,7 @@ export default async function Home() {
   // RLS lo phần lọc: chỉ trả về căn hộ user thực sự có quyền.
   const { data: memberships } = await supabase
     .from('unit_memberships')
-    .select('id, role, status, valid_to, units(code, floor_no, buildings(name))')
+    .select('id, role, status, valid_to, units(id, code, floor_no, buildings(name))')
     .eq('user_id', user?.id ?? '')
 
   // Chỉ để hiện/ẩn link. RLS mới là chốt chặn thật cho trang BQL.
@@ -42,7 +42,13 @@ export default async function Home() {
       <ul className="space-y-2">
         {active.map((m) => (
           <li key={m.id} className="rounded border p-3">
-            <div className="font-medium">{m.units?.code}</div>
+            {m.units?.id ? (
+              <Link href={`/unit/${m.units.id}`} className="font-medium underline">
+                {m.units.code}
+              </Link>
+            ) : (
+              <div className="font-medium">{m.units?.code}</div>
+            )}
             <div className="text-sm opacity-70">
               {m.units?.buildings?.name} · vai trò: {m.role}
               {m.valid_to && ` · đến ${m.valid_to}`}

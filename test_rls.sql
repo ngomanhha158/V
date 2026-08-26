@@ -69,7 +69,7 @@ begin
   execute 'grant select on notifications, invoice_lines to vb_rls_test';
   execute 'grant select on profiles to vb_rls_test';
   execute 'grant select, insert on units to vb_rls_test';
-  execute 'grant select, insert on unit_vehicles to vb_rls_test';
+  execute 'grant select, insert, delete on unit_vehicles to vb_rls_test';
   execute 'grant select, insert, update on unit_memberships to vb_rls_test';
   execute 'set local role vb_rls_test';   -- từ đây RLS mới thực sự có hiệu lực
 
@@ -183,6 +183,18 @@ begin
     raise exception 'FAIL 12c: BQL ghi de duoc tai san cua can ho';
   exception when insufficient_privilege then null;
   end;
+
+  -- 12d/e. XÓA: RLS chặn delete bằng cách khớp 0 dòng, KHÔNG báo lỗi. Nên nếu
+  --     policy sai thì app vẫn chạy êm, chỉ là dữ liệu người khác bốc hơi.
+  perform set_config('test.uid', u_family::text, true);
+  delete from unit_vehicles where unit_id = v_unit;
+  select count(*) into n from unit_vehicles where unit_id = v_unit;
+  if n <> 1 then raise exception 'FAIL 12d: family member xoa duoc xe cua can ho'; end if;
+
+  perform set_config('test.uid', u_owner::text, true);
+  delete from unit_vehicles where unit_id = v_unit;
+  select count(*) into n from unit_vehicles where unit_id = v_unit;
+  if n <> 0 then raise exception 'FAIL 12e: chu ho khong xoa duoc xe cua can minh'; end if;
 
   -- 13. Không cho 2 chủ hộ active trên cùng 1 căn (test constraint, không phải RLS)
   execute 'reset role';
