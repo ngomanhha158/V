@@ -325,6 +325,22 @@ alter table staff_assignments enable row level security;
 create policy staff_read on staff_assignments for select
   using (user_id = auth.uid() or is_staff(project_id));
 
+-- ── Biểu phí: cư dân đọc (để đối chiếu hóa đơn), chỉ BQL sửa ──
+alter table fee_types enable row level security;
+create policy fee_type_read on fee_types for select using (true);
+create policy fee_type_staff_write on fee_types for all
+  using (is_staff(project_id)) with check (is_staff(project_id));
+
+-- ── Chỉ số công tơ: cư dân xem được chỉ số căn mình (để cãi lại khi hóa đơn
+--    sai), chỉ BQL ghi. Ghi hàng loạt vài trăm dòng nên đi qua RLS chứ không
+--    bọc RPC — mỗi căn một lời gọi thì nhập xong một tòa mất cả buổi.
+alter table meter_readings enable row level security;
+create policy reading_read on meter_readings for select
+  using (unit_id in (select current_unit_ids()) or is_staff(unit_project(unit_id)));
+create policy reading_staff_write on meter_readings for all
+  using (is_staff(unit_project(unit_id)))
+  with check (is_staff(unit_project(unit_id)));
+
 -- Thông báo là dữ liệu riêng từng người. Có grant select mà không có RLS thì
 -- cư dân nào đăng nhập cũng đọc được thông báo của toàn khu.
 alter table notifications enable row level security;
@@ -608,6 +624,45 @@ begin
       (select sum(l.amount) from invoice_lines l where l.invoice_id = i.id), 0)
    where i.project_id = p_project and i.period = p_period and i.status = 'draft';
 
+  get diagnostics v_count = row_count;
+  return v_count;
+end $fn$;
+
+-- ── Đường tiền: mặt tiếp xúc hẹp nhất có thể ──
+-- KHÔNG cấp update trên invoices cho `authenticated`. Role đó dùng chung cho cả
+-- cư dân lẫn BQL, mà quyền theo cột thì không phân biệt được hai bên — cấp một
+-- lần là cư dân cũng có. Chuyển trạng thái tiền đi qua RPC definer, mỗi hàm tự
+-- kiểm tra is_staff và chỉ làm đúng một việc.
+
+create or replace function bql_generate_invoices(p_project uuid, p_period date)
+returns int language plpgsql security definer set search_path = public as $fn$
+begin
+  if not is_staff(p_project) then
+    raise exception 'Chi BQL cua du an nay moi sinh duoc hoa don' using errcode = '42501';
+  end if;
+  -- Kỳ phải là ngày đầu tháng: unique (unit_id, period) tính theo đúng giá trị
+  -- này, lệch một ngày là sinh ra kỳ thứ hai của cùng tháng.
+  if p_period <> date_trunc('month', p_period)::date then
+    raise exception 'Ky phai la ngay dau thang' using errcode = '22023';
+  end if;
+  return generate_invoices(p_project, p_period);
+end $fn$;
+
+-- Phát hành: draft -> issued. Sau bước này generate_invoices không đụng vào nữa
+-- (nó chỉ tính lại hóa đơn còn draft), nên đây là mốc chốt số.
+create or replace function bql_issue_invoices(p_project uuid, p_period date)
+returns int language plpgsql security definer set search_path = public as $fn$
+declare v_count int;
+begin
+  if not is_staff(p_project) then
+    raise exception 'Chi BQL cua du an nay moi phat hanh duoc hoa don' using errcode = '42501';
+  end if;
+
+  -- Bỏ qua hóa đơn 0đ (căn chưa có phí nào áp dụng): phát hành giấy báo nợ 0
+  -- đồng chỉ làm cư dân hoang mang và làm nhiễu báo cáo công nợ.
+  update invoices set status = 'issued', issued_at = now()
+   where project_id = p_project and period = p_period
+     and status = 'draft' and total_amount > 0;
   get diagnostics v_count = row_count;
   return v_count;
 end $fn$;

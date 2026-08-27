@@ -1,6 +1,7 @@
 -- Smoke test cho đường tiền. Sai số tiền = mất niềm tin, không patch lại được.
 -- Chạy: psql -f schema.sql && psql -f seed.sql && psql -1 -f test_billing.sql
--- ponytail: assert thẳng, không framework. 5 invariant dễ vỡ nhất của generate_invoices.
+-- ponytail: assert thẳng, không framework. 5 invariant của generate_invoices,
+-- cộng 6-8 cho lớp QUYỀN trên đường tiền (ai được sinh/phát hành/nhập chỉ số).
 
 do $test$
 declare
@@ -8,6 +9,8 @@ declare
   f_elec    uuid := 'cccccccc-0000-0000-0000-000000000002';
   v_period  date := date_trunc('month', current_date)::date;
   v_unit    uuid;
+  u_res uuid := '77770000-0000-0000-0000-000000000001';
+  u_bql uuid := '77770000-0000-0000-0000-000000000002';
   v_area    numeric;
   v_total   bigint;
   v_first   bigint;
@@ -54,6 +57,63 @@ begin
   if v_total <> v_first then
     raise exception 'FAIL 5: hoa don da phat hanh bi tinh lai, % -> %', v_first, v_total;
   end if;
+
+  -- ── Lớp quyền: đường tiền sai thì mất tiền thật ──
+  insert into profiles (id, full_name) values (u_res,'Cu dan'), (u_bql,'BQL');
+  insert into staff_assignments (user_id, project_id, role) values (u_bql, v_project, 'bql_manager');
+  insert into unit_memberships (unit_id, user_id, role, status)
+    values (v_unit, u_res, 'owner', 'active');
+
+  execute 'alter table invoices force row level security';
+  execute 'alter table fee_types force row level security';
+  execute 'alter table meter_readings force row level security';
+  begin execute 'create role vb_bill_test nologin'; exception when duplicate_object then null; end;
+  execute 'grant usage on schema public, auth to vb_bill_test';
+  execute 'grant select on invoices, units, buildings, projects to vb_bill_test';
+  execute 'grant select, insert on meter_readings to vb_bill_test';
+  execute 'grant insert, update on fee_types to vb_bill_test';
+  execute 'grant execute on function bql_generate_invoices(uuid, date) to vb_bill_test';
+  execute 'grant execute on function bql_issue_invoices(uuid, date) to vb_bill_test';
+  execute 'set local role vb_bill_test';
+
+  -- 6. Cư dân KHÔNG sinh được hóa đơn cho cả dự án
+  perform set_config('test.uid', u_res::text, true);
+  begin
+    perform bql_generate_invoices(v_project, v_period);
+    raise exception 'FAIL 6a: cu dan sinh duoc hoa don toan du an';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform bql_issue_invoices(v_project, v_period);
+    raise exception 'FAIL 6b: cu dan phat hanh duoc hoa don';
+  exception when insufficient_privilege then null;
+  end;
+
+  -- 7. Cư dân KHÔNG ghi được chỉ số công tơ (tự khai số điện của chính mình)
+  begin
+    insert into meter_readings (unit_id, fee_type_id, period, prev_index, curr_index)
+      values (v_unit, f_elec, v_period + 40, 0, 1);
+    raise exception 'FAIL 7a: cu dan tu ghi duoc chi so cong to';
+  exception when insufficient_privilege then null;
+  end;
+  -- nhưng ĐỌC được chỉ số căn mình để còn đối chiếu khi hóa đơn sai
+  select count(*) into n from meter_readings where unit_id = v_unit;
+  if n = 0 then raise exception 'FAIL 7b: cu dan khong doc duoc chi so can minh'; end if;
+
+  -- 8. BQL làm được cả hai, và kỳ sai định dạng bị chặn
+  perform set_config('test.uid', u_bql::text, true);
+  begin
+    perform bql_generate_invoices(v_project, v_period + 5);
+    raise exception 'FAIL 8a: nhan ky khong phai ngay dau thang';
+  exception when invalid_parameter_value then null;
+  end;
+
+  insert into meter_readings (unit_id, fee_type_id, period, prev_index, curr_index)
+    values (v_unit, f_elec, v_period + 40, 250, 300);
+
+  execute 'reset role';
+  select count(*) into n from meter_readings where unit_id = v_unit;
+  if n <> 2 then raise exception 'FAIL 8b: BQL khong ghi duoc chi so, co % dong', n; end if;
 
   raise notice 'ALL BILLING TESTS PASSED';
 end $test$;

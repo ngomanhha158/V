@@ -51,6 +51,12 @@ grant select, insert, update, delete on unit_vehicles, unit_pets to authenticate
 -- định ai được đụng dòng nào — cư dân không có policy update nên vẫn bị chặn.
 grant select, insert, update on tickets to authenticated;
 grant select on staff_assignments to authenticated;
+-- Biểu phí và chỉ số công tơ: RLS quyết định ai ghi (chỉ BQL).
+grant insert, update, delete on fee_types to authenticated;
+grant select, insert, update, delete on meter_readings to authenticated;
+-- CỐ Ý không cấp update/insert trên invoices, invoice_lines, payments cho
+-- authenticated: đường tiền đi qua RPC definer (bql_generate_invoices,
+-- bql_issue_invoices) để cư dân không bao giờ có quyền ghi bảng tiền.
 -- Chỉ ĐỌC ticket_events: audit trail mà người bị audit ghi được thì vô nghĩa.
 grant select on ticket_events to authenticated;
 grant select on invoices, invoice_lines, announcements, notifications to authenticated;
@@ -77,8 +83,10 @@ grant execute on function unit_project(uuid)     to authenticated;
 
 -- RPC app gọi thẳng. Security invoker nên RLS vẫn là chốt chặn.
 grant execute on function create_ticket(uuid, text, ticket_priority, text, text, text[]) to authenticated;
--- rate_ticket là DEFINER: nó tự kiểm tra quyền bên trong, xem schema.sql.
 grant execute on function rate_ticket(uuid, int, text) to authenticated;
+grant execute on function bql_generate_invoices(uuid, date) to authenticated;
+grant execute on function bql_issue_invoices(uuid, date)   to authenticated;
+
 
 -- Còn lại là trigger function và job nền: không phải RPC endpoint, để nguyên là
 -- chúng nằm chình ình ở /rest/v1/rpc/...
@@ -95,3 +103,4 @@ alter table unit_vehicles    force row level security;
 alter table unit_pets        force row level security;
 alter table ticket_events    force row level security;
 alter table staff_assignments force row level security;
+alter table meter_readings   force row level security;
