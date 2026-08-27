@@ -57,6 +57,7 @@ export default async function Bql() {
       <nav className="flex flex-wrap gap-4 underline">
         <Link href="/bql/import">Import danh sách căn hộ từ Excel →</Link>
         <Link href="/bql/tickets">Điều phối yêu cầu →</Link>
+        <Link href="/bql/billing">Hóa đơn →</Link>
       </nav>
     </main>
   )

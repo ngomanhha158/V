@@ -928,6 +928,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bql_generate_invoices: {
+        Args: { p_period: string; p_project: string }
+        Returns: number
+      }
+      bql_issue_invoices: {
+        Args: { p_period: string; p_project: string }
+        Returns: number
+      }
       building_project: { Args: { p_building: string }; Returns: string }
       can_see_profile: { Args: { p_user: string }; Returns: boolean }
       create_ticket: {
