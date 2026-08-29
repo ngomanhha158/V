@@ -58,6 +58,7 @@ export default async function Bql() {
         <Link href="/bql/import">Import danh sách căn hộ từ Excel →</Link>
         <Link href="/bql/tickets">Điều phối yêu cầu →</Link>
         <Link href="/bql/billing">Hóa đơn →</Link>
+        <Link href="/bql/cong-no">Công nợ →</Link>
       </nav>
     </main>
   )

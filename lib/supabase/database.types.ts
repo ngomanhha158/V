@@ -936,6 +936,20 @@ export type Database = {
         Args: { p_period: string; p_project: string }
         Returns: number
       }
+      bql_debt_report: {
+        Args: { p_project: string }
+        Returns: {
+          building_code: string
+          con_no: number
+          dien_thoai: string | null
+          han_cu_nhat: string
+          so_hoa_don: number
+          so_ngay_qua_han: number
+          ten_lien_he: string | null
+          unit_code: string
+          unit_id: string
+        }[]
+      }
       building_project: { Args: { p_building: string }; Returns: string }
       can_see_profile: { Args: { p_user: string }; Returns: boolean }
       create_ticket: {

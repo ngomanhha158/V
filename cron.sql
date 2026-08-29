@@ -26,6 +26,14 @@ select cron.schedule(
   $job$ select public.escalate_overdue_tickets() $job$
 );
 
+-- N21 — nhắc nợ, 1 lần/ngày lúc 08:00 giờ VN = 01:00 UTC.
+-- Hàm tự chống nhắc trùng trong 20 giờ nên chạy lại (retry) không hại gì.
+select cron.schedule(
+  'remind-unpaid-invoices',
+  '0 1 * * *',
+  $job$ select public.remind_unpaid_invoices() $job$
+);
+
 -- Gỡ lịch:            select cron.unschedule('expire-memberships');
 -- Xem lịch hiện có:   select jobname, schedule, active from cron.job;
 -- Xem lần chạy gần đây: select * from cron.job_run_details order by start_time desc limit 20;

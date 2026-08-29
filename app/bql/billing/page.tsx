@@ -53,7 +53,10 @@ export default async function Billing({
     <main className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Hóa đơn</h1>
-        <Link href="/bql" className="text-sm underline">Quản lý tòa</Link>
+        <div className="flex gap-3 text-sm underline">
+          <Link href="/bql/cong-no">Công nợ</Link>
+          <Link href="/bql">Quản lý tòa</Link>
+        </div>
       </div>
 
       <form className="flex items-center gap-2 text-sm">

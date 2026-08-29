@@ -86,6 +86,7 @@ grant execute on function create_ticket(uuid, text, ticket_priority, text, text,
 grant execute on function rate_ticket(uuid, int, text) to authenticated;
 grant execute on function bql_generate_invoices(uuid, date) to authenticated;
 grant execute on function bql_issue_invoices(uuid, date)   to authenticated;
+grant execute on function bql_debt_report(uuid)            to authenticated;
 
 
 -- Còn lại là trigger function và job nền: không phải RPC endpoint, để nguyên là

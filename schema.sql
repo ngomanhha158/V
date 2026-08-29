@@ -667,6 +667,100 @@ begin
   return v_count;
 end $fn$;
 
+-- N21 — nhắc nợ 3 mốc: trước hạn 3 ngày, đúng ngày hạn, quá hạn 3 ngày.
+-- Chỉ nhắc người ĐƯỢC XEM công nợ (cùng quy tắc với policy invoice_read): con
+-- cái trong nhà không cần nhận tin nhắn đòi tiền.
+create or replace function remind_unpaid_invoices() returns int
+language plpgsql security definer set search_path = public as $fn$
+declare v_count int;
+begin
+  insert into notifications (user_id, kind, ref_id, title, body)
+  select m.user_id, 'invoice', i.id,
+         case
+           when i.due_date - current_date = 3 then 'Hoa don ' || to_char(i.period,'MM/YYYY') || ' sap den han'
+           when i.due_date = current_date     then 'Hoa don ' || to_char(i.period,'MM/YYYY') || ' den han hom nay'
+           else 'Hoa don ' || to_char(i.period,'MM/YYYY') || ' da qua han'
+         end,
+         -- 'G' lay dau phan nhom theo lc_numeric cua server -> ra '1,500,000'
+         -- kieu My. Dung dau phay LITERAL roi doi sang '.' cho dung kieu VN va
+         -- khong phu thuoc locale cua may chu.
+         'Con lai ' || replace(to_char(i.total_amount - i.paid_amount, 'FM999,999,999,999'), ',', '.')
+           || 'd, han ' || to_char(i.due_date,'DD/MM/YYYY')
+    from invoices i
+    join unit_memberships m on m.unit_id = i.unit_id
+   where i.status in ('issued','partial')
+     and i.total_amount > i.paid_amount
+     and (i.due_date - current_date) in (3, 0, -3)
+     and m.status = 'active'
+     and (m.valid_to is null or m.valid_to >= current_date)
+     and (m.role in ('owner','authorized','tenant') or m.can_view_finance)
+     -- Không nhắc lại trong 20 giờ. Cron chạy lại (retry, hoặc BQL bấm tay)
+     -- không được bắn hai lần vào điện thoại cư dân — đó là cách nhanh nhất để
+     -- họ tắt thông báo và không bao giờ bật lại. Dùng khoảng thời gian chứ
+     -- không dùng current_date: mốc 'sang ngày mới' phụ thuộc TimeZone của
+     -- server (Supabase để UTC), mà cron lại chạy 01:00 UTC — chỉ cần lệch nửa
+     -- tiếng là qua ngày và nhắc lại lần hai. 20h < 24h nên hôm sau vẫn nhắc.
+     and not exists (
+       select 1 from notifications n
+        where n.user_id = m.user_id and n.kind = 'invoice' and n.ref_id = i.id
+          and n.created_at > now() - interval '20 hours'
+     );
+  get diagnostics v_count = row_count;
+  return v_count;
+end $fn$;
+
+-- N21 — báo cáo công nợ cho BQL, gộp theo căn.
+-- Phải là SECURITY DEFINER: policy membership_read chỉ cho chính chủ và người
+-- trong căn đọc unit_memberships, BQL KHÔNG đọc được roster. Mà đi đòi nợ thì
+-- bắt buộc phải có tên + số điện thoại người liên hệ. Đổi lại, hàm tự kiểm
+-- is_staff và khóa cứng vào p_project — definer mà quên hai thứ đó là dựng sẵn
+-- một API dump công nợ toàn hệ thống.
+create or replace function bql_debt_report(p_project uuid)
+returns table (
+  unit_id         uuid,
+  unit_code       text,
+  building_code   text,
+  so_hoa_don      int,
+  con_no          bigint,
+  han_cu_nhat     date,
+  so_ngay_qua_han int,     -- âm = chưa tới hạn, còn ngần đó ngày
+  ten_lien_he     text,
+  dien_thoai      text
+)
+language plpgsql stable security definer set search_path = public as $fn$
+begin
+  if not is_staff(p_project) then
+    raise exception 'Chi BQL cua du an nay moi xem duoc cong no' using errcode = '42501';
+  end if;
+
+  return query
+    select u.id, u.code, b.code,
+           count(*)::int,
+           sum(i.total_amount - i.paid_amount)::bigint,
+           min(i.due_date),
+           -- Tuổi nợ tính theo hóa đơn CŨ NHẤT còn thiếu, không phải mới nhất.
+           (current_date - min(i.due_date))::int,
+           o.full_name, o.phone
+      from invoices i
+      join units u     on u.id = i.unit_id
+      join buildings b on b.id = u.building_id
+      -- left join: căn chưa có chủ hộ hoạt động vẫn phải hiện ra. Nợ không tự
+      -- mất đi vì thiếu người đứng tên.
+      left join lateral (
+        select p.full_name, p.phone
+          from unit_memberships m
+          join profiles p on p.id = m.user_id
+         where m.unit_id = u.id and m.role = 'owner' and m.status = 'active'
+           and (m.valid_to is null or m.valid_to >= current_date)
+         limit 1
+      ) o on true
+     where i.project_id = p_project
+       and i.status in ('issued','partial')
+       and i.total_amount > i.paid_amount
+     group by u.id, u.code, b.code, o.full_name, o.phone
+     order by sum(i.total_amount - i.paid_amount) desc, u.code;
+end $fn$;
+
 create or replace function escalate_overdue_tickets() returns void
 language plpgsql set search_path = public as $fn$
 begin

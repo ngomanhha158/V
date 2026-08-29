@@ -21,6 +21,8 @@ declare
   u_family   uuid := '22222222-2222-2222-2222-222222222222';
   u_tenant   uuid := '33333333-3333-3333-3333-333333333333';
   u_stranger uuid := '44444444-4444-4444-4444-444444444444';
+  u_thu_hoi  uuid := '44444444-4444-4444-4444-444444444440';
+  u_cho_duyet uuid := '44444444-4444-4444-4444-444444444441';
   u_bql      uuid := '55555555-5555-5555-5555-555555555550';
   n int;
 begin
@@ -31,7 +33,7 @@ begin
 
   insert into profiles (id, full_name) values
     (u_owner,'Chu ho'), (u_family,'Con'), (u_tenant,'Nguoi thue'), (u_stranger,'Nguoi la'),
-    (u_bql,'Nhan vien BQL');
+    (u_bql,'Nhan vien BQL'), (u_thu_hoi,'Da bi thu hoi'), (u_cho_duyet,'Cho BQL duyet');
 
   insert into staff_assignments (user_id, project_id, role) values (u_bql, v_project, 'bql_manager');
 
@@ -40,7 +42,13 @@ begin
     (v_unit, u_family, 'family', 'active', current_date, null, false),
     -- HĐ thuê 1 năm, hết hạn hôm qua. valid_from phải lùi về quá khứ,
     -- nếu không constraint valid_range chặn (valid_to >= valid_from).
-    (v_unit, u_tenant, 'tenant', 'active', current_date - 365, current_date - 1, false);
+    (v_unit, u_tenant, 'tenant', 'active', current_date - 365, current_date - 1, false),
+    -- Bị thu hồi GIỮA CHỪNG hợp đồng: ngày tháng vẫn còn hiệu lực và
+    -- can_view_finance vẫn bật, nên chỉ cột status chặn được họ. Nếu quên
+    -- lọc status thì người đã bị đuổi vẫn đọc được công nợ của căn.
+    (v_unit, u_thu_hoi, 'tenant', 'revoked', current_date - 30, current_date + 300, true),
+    -- Mới xin gia nhập, BQL chưa duyệt. 'pending' chưa phải là quyền.
+    (v_unit, u_cho_duyet,'tenant', 'pending', current_date - 1, null, true);
 
   insert into invoices (unit_id, project_id, period, total_amount, due_date, status)
     values (v_unit, v_project, date_trunc('month', current_date), 1500000, current_date + 10, 'issued')
@@ -87,6 +95,17 @@ begin
   perform set_config('test.uid', u_tenant::text, true);
   select count(*) into n from invoices where unit_id = v_unit;
   if n <> 0 then raise exception 'FAIL 3: tenant het han van truy cap duoc'; end if;
+
+  -- 3b. Bị thu hồi quyền giữa chừng -> mất quyền ngay, dù hợp đồng còn hạn
+  perform set_config('test.uid', u_thu_hoi::text, true);
+  select count(*) into n from invoices where unit_id = v_unit;
+  if n <> 0 then raise exception 'FAIL 3b: nguoi da bi thu hoi van doc duoc hoa don'; end if;
+
+  -- 3c. Chờ BQL duyệt -> chưa có quyền. Đây là mặt sau của FAIL 5: người lạ chỉ
+  --     tạo được bản ghi 'pending', nên 'pending' bắt buộc phải là vô hiệu.
+  perform set_config('test.uid', u_cho_duyet::text, true);
+  select count(*) into n from invoices where unit_id = v_unit;
+  if n <> 0 then raise exception 'FAIL 3c: don cho duyet da doc duoc hoa don'; end if;
 
   -- 4. Người lạ không thấy gì
   perform set_config('test.uid', u_stranger::text, true);
