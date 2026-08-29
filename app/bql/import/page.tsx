@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { ImportForm } from './import-form'
+import { PageHead, Trong } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,7 +9,7 @@ export default async function ImportUnits() {
   const supabase = await createClient()
   const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) {
-    return <main><p>Chưa có dự án nào trong hệ thống.</p></main>
+    return <Trong title="Chưa có dự án nào trong hệ thống" />
   }
 
   // Guard này chỉ để không hiện màn hình vô nghĩa cho cư dân. Chốt chặn thật là
@@ -19,10 +20,12 @@ export default async function ImportUnits() {
   const { data: buildings } = await supabase.from('buildings').select('code').order('code')
 
   return (
-    <main className="space-y-5">
-      <h1 className="text-2xl font-semibold">Import danh sách căn hộ</h1>
-      <p className="text-sm opacity-70">{project.name}</p>
+    <div className="space-y-5">
+      <PageHead
+        title="Import danh sách căn hộ"
+        sub={`${project.name} · đọc file Excel, kiểm tra trước khi ghi`}
+      />
       <ImportForm buildingCodes={(buildings ?? []).map((b) => b.code)} />
-    </main>
+    </div>
   )
 }

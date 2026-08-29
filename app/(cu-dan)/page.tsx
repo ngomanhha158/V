@@ -1,7 +1,13 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { Card, CardHead, LinkButton, Pill, Trong } from '@/components/ui'
+import { IcHoaDon, IcPhai, IcThem, IcToaNha } from '@/components/icons'
 
 export const dynamic = 'force-dynamic'
+
+const VAI: Record<string, string> = {
+  owner: 'Chủ hộ', authorized: 'Được ủy quyền', tenant: 'Người thuê', family: 'Thành viên',
+}
 
 export default async function Home() {
   const supabase = await createClient()
@@ -10,7 +16,7 @@ export default async function Home() {
   // RLS lo phần lọc: chỉ trả về căn hộ user thực sự có quyền.
   const { data: memberships } = await supabase
     .from('unit_memberships')
-    .select('id, role, status, valid_to, units(id, code, floor_no, buildings(name))')
+    .select('id, role, status, valid_to, units(id, code, floor_no, area_m2, buildings(name))')
     .eq('user_id', user?.id ?? '')
 
   // Chỉ để hiện/ẩn link. RLS mới là chốt chặn thật cho trang BQL.
@@ -23,47 +29,81 @@ export default async function Home() {
   const pending = memberships?.filter((m) => m.status === 'pending') ?? []
 
   return (
-    <main className="space-y-6">
-      <h1 className="text-2xl font-semibold">VBuilding</h1>
-
-      {active.length === 0 && pending.length === 0 && (
-        <p>
-          Chưa gắn với căn hộ nào.{' '}
-          <Link href="/onboarding" className="underline">Xin gia nhập căn hộ</Link>
-        </p>
-      )}
-
+    <div className="space-y-5">
       {pending.length > 0 && (
-        <p className="rounded bg-amber-100 p-3 text-amber-900">
-          Đang chờ chủ hộ duyệt {pending.length} yêu cầu.
-        </p>
+        <div className="rounded-card border border-warn-line bg-warn-soft px-4 py-3 text-[0.8125rem] text-warn">
+          Đang chờ chủ hộ duyệt <b className="font-semibold">{pending.length}</b> yêu cầu gia nhập.
+        </div>
       )}
 
-      <ul className="space-y-2">
-        {active.map((m) => (
-          <li key={m.id} className="rounded border p-3">
-            {m.units?.id ? (
-              <Link href={`/unit/${m.units.id}`} className="font-medium underline">
-                {m.units.code}
-              </Link>
-            ) : (
-              <div className="font-medium">{m.units?.code}</div>
-            )}
-            <div className="text-sm opacity-70">
-              {m.units?.buildings?.name} · vai trò: {m.role}
-              {m.valid_to && ` · đến ${m.valid_to}`}
-            </div>
-          </li>
-        ))}
-      </ul>
+      {active.length === 0 && pending.length === 0 ? (
+        <Trong
+          title="Chưa gắn với căn hộ nào"
+          action={<LinkButton href="/onboarding" dang="chinh" co="sm">Xin gia nhập căn hộ</LinkButton>}
+        >
+          Chọn căn hộ của bạn để BQL duyệt. Sau khi được duyệt bạn sẽ thấy hóa
+          đơn và gửi được yêu cầu sửa chữa.
+        </Trong>
+      ) : (
+        <Card>
+          <CardHead
+            title="Căn hộ của tôi"
+            right={<span className="text-[0.8125rem] text-faint">{active.length}</span>}
+          />
+          <ul className="divide-y divide-line">
+            {active.map((m) => (
+              <li key={m.id}>
+                <Link
+                  href={m.units?.id ? `/unit/${m.units.id}` : '#'}
+                  className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-raised"
+                >
+                  <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-sunken text-faint">
+                    <IcToaNha />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-ink">{m.units?.code}</div>
+                    <div className="truncate text-[0.8125rem] text-muted">
+                      {m.units?.buildings?.name}
+                      {m.units?.floor_no != null && ` · tầng ${m.units.floor_no}`}
+                      {m.units?.area_m2 != null && ` · ${m.units.area_m2} m²`}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Pill tone={m.role === 'owner' ? 'brand' : 'trung'} cham={false}>
+                      {VAI[m.role] ?? m.role}
+                    </Pill>
+                    <span className="text-faint"><IcPhai width={16} height={16} /></span>
+                  </div>
+                </Link>
+                {m.valid_to && (
+                  <div className="px-4 pb-2 text-[0.75rem] text-faint">
+                    Hợp đồng đến {m.valid_to}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
-      <nav className="flex gap-4 text-sm underline">
-        <Link href="/onboarding">Thêm căn hộ</Link>
-        <Link href="/tickets">Yêu cầu / sự cố</Link>
-        <Link href="/invoices">Hóa đơn</Link>
-        <Link href="/approvals">Duyệt thành viên</Link>
-        {isStaff && <Link href="/bql">Quản lý tòa nhà (BQL)</Link>}
+      <div className="grid grid-cols-2 gap-3">
+        <LinkButton href="/tickets/new" dang="chinh" className="h-11">
+          <IcThem width={16} height={16} /> Báo sự cố
+        </LinkButton>
+        <LinkButton href="/invoices" dang="phu" className="h-11">
+          <IcHoaDon width={16} height={16} /> Xem hóa đơn
+        </LinkButton>
+      </div>
+
+      <nav className="flex flex-wrap gap-x-4 gap-y-2 text-[0.8125rem]">
+        <Link href="/onboarding" className="font-medium text-muted hover:text-ink">Thêm căn hộ</Link>
+        <Link href="/approvals" className="font-medium text-muted hover:text-ink">Duyệt thành viên</Link>
+        {isStaff && (
+          <Link href="/bql" className="font-medium text-brand hover:underline">
+            Quản lý tòa nhà (BQL) →
+          </Link>
+        )}
       </nav>
-    </main>
+    </div>
   )
 }

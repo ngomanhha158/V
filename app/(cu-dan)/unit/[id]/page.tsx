@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { removeVehicle, removePet, updateMember } from './actions'
 import { AddVehicleForm, AddPetForm } from './forms'
+import { Button, Card, CardHead, Hop, Input, PageHead, Pill, Trong, ngayVN } from '@/components/ui'
+import { IcTrai } from '@/components/icons'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,103 +39,160 @@ export default async function UnitProfile({ params }: { params: Promise<{ id: st
     supabase.from('unit_pets').select('id, name, species, vaccinated_until').eq('unit_id', id).order('name'),
   ])
 
+  const TT: Record<string, 'trung' | 'tot' | 'canh' | 'xau'> = {
+    pending: 'canh', active: 'tot', revoked: 'xau', expired: 'trung',
+  }
+
   return (
-    <main className="space-y-6">
-      <div>
-        <Link href="/" className="text-sm underline">← Trang chủ</Link>
-        <h1 className="text-2xl font-semibold">{unit.code}</h1>
-        <p className="text-sm opacity-70">
-          {unit.buildings?.name} · tầng {unit.floor_no}
-          {unit.area_m2 && ` · ${unit.area_m2} m²`}
-        </p>
-      </div>
+    <div className="space-y-5">
+      <Link
+        href="/"
+        className="inline-flex items-center gap-1 text-[0.8125rem] font-medium text-muted hover:text-ink"
+      >
+        <IcTrai width={16} height={16} /> Trang chủ
+      </Link>
+
+      <PageHead
+        title={unit.code}
+        sub={
+          `${unit.buildings?.name} · tầng ${unit.floor_no}` +
+          (unit.area_m2 ? ` · ${unit.area_m2} m²` : '')
+        }
+      />
 
       {!isManager && (
-        <p className="rounded bg-neutral-100 p-3 text-sm">
-          Bạn đang xem ở chế độ chỉ đọc. Chỉ chủ hộ và người được ủy quyền mới sửa được hồ sơ căn hộ.
-        </p>
+        <Hop tone="trung" title="Chế độ chỉ đọc">
+          Chỉ chủ hộ và người được ủy quyền mới sửa được hồ sơ căn hộ.
+        </Hop>
       )}
 
-      <section className="space-y-2">
-        <h2 className="font-medium">Thành viên</h2>
-        <ul className="space-y-2">
-          {members?.map((m) => (
-            <li key={m.id} className="rounded border p-3">
-              <div className="font-medium">{m.profiles?.full_name ?? '(chưa có tên)'}</div>
-              <div className="text-sm opacity-70">
-                {m.profiles?.phone} · {ROLE_LABEL[m.role] ?? m.role} · {STATUS_LABEL[m.status] ?? m.status}
-                {m.valid_to && ` · đến ${m.valid_to}`}
-              </div>
-
-              {isManager && m.status === 'active' && (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <form action={updateMember.bind(null, id)} className="flex items-center gap-1">
-                    <input type="hidden" name="id" value={m.id} />
-                    <input type="hidden" name="action" value="valid_to" />
-                    <input type="date" name="valid_to" defaultValue={m.valid_to ?? ''} className="rounded border p-1 text-sm" />
-                    <button className="rounded border px-2 py-1 text-sm">Đặt hạn</button>
-                  </form>
-                  <form action={updateMember.bind(null, id)}>
-                    <input type="hidden" name="id" value={m.id} />
-                    <input type="hidden" name="action" value="revoke" />
-                    <button className="rounded border px-2 py-1 text-sm text-red-700">Thu hồi</button>
-                  </form>
+      <Card>
+        <CardHead
+          title="Thành viên"
+          right={<span className="text-[0.8125rem] text-faint">{members?.length ?? 0}</span>}
+        />
+        {!members?.length ? (
+          <div className="p-4"><Trong title="Chưa có thành viên nào" /></div>
+        ) : (
+          <ul className="divide-y divide-line">
+            {members.map((m) => (
+              <li key={m.id} className="px-4 py-3.5">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-ink">
+                      {m.profiles?.full_name ?? '(chưa có tên)'}
+                    </div>
+                    <div className="num mt-0.5 text-[0.8125rem] text-muted">
+                      {m.profiles?.phone ?? '—'}
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <Pill tone="trung" cham={false}>{ROLE_LABEL[m.role] ?? m.role}</Pill>
+                      <Pill tone={TT[m.status] ?? 'trung'}>
+                        {STATUS_LABEL[m.status] ?? m.status}
+                      </Pill>
+                      {m.valid_to && (
+                        <span className="num text-[0.75rem] text-faint">
+                          đến {ngayVN(String(m.valid_to))}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              )}
-            </li>
-          ))}
-          {!members?.length && <li className="text-sm opacity-70">Chưa có thành viên nào.</li>}
-        </ul>
-      </section>
 
-      <section className="space-y-2">
-        <h2 className="font-medium">Xe</h2>
-        {isManager && <AddVehicleForm unitId={id} />}
-        <ul className="space-y-2">
-          {vehicles?.map((v) => (
-            <li key={v.id} className="flex items-center justify-between rounded border p-3">
-              <span>
-                <b>{v.plate}</b>
-                <span className="text-sm opacity-70">
-                  {v.vehicle_type && ` · ${v.vehicle_type}`}{v.card_no && ` · thẻ ${v.card_no}`}
-                </span>
-              </span>
-              {isManager && (
-                <form action={removeVehicle.bind(null, id)}>
-                  <input type="hidden" name="id" value={v.id} />
-                  <button className="text-sm text-red-700 underline">Xóa</button>
-                </form>
-              )}
-            </li>
-          ))}
-          {!vehicles?.length && <li className="text-sm opacity-70">Chưa đăng ký xe nào.</li>}
-        </ul>
-      </section>
+                {isManager && m.status === 'active' && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+                    <form action={updateMember.bind(null, id)} className="flex items-center gap-1.5">
+                      <input type="hidden" name="id" value={m.id} />
+                      <input type="hidden" name="action" value="valid_to" />
+                      <Input
+                        type="date" name="valid_to" defaultValue={m.valid_to ?? ''}
+                        className="h-8 w-40 text-[0.8125rem]"
+                      />
+                      <Button co="sm">Đặt hạn</Button>
+                    </form>
+                    <form action={updateMember.bind(null, id)}>
+                      <input type="hidden" name="id" value={m.id} />
+                      <input type="hidden" name="action" value="revoke" />
+                      <Button co="sm" dang="nguy">Thu hồi</Button>
+                    </form>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
-      <section className="space-y-2">
-        <h2 className="font-medium">Thú cưng</h2>
-        {isManager && <AddPetForm unitId={id} />}
-        <ul className="space-y-2">
-          {pets?.map((p) => (
-            <li key={p.id} className="flex items-center justify-between rounded border p-3">
-              <span>
-                <b>{p.name}</b>
-                <span className="text-sm opacity-70">
-                  {p.species && ` · ${p.species}`}
-                  {p.vaccinated_until && ` · tiêm phòng đến ${p.vaccinated_until}`}
-                </span>
-              </span>
-              {isManager && (
-                <form action={removePet.bind(null, id)}>
-                  <input type="hidden" name="id" value={p.id} />
-                  <button className="text-sm text-red-700 underline">Xóa</button>
-                </form>
-              )}
-            </li>
-          ))}
-          {!pets?.length && <li className="text-sm opacity-70">Chưa đăng ký thú cưng nào.</li>}
-        </ul>
-      </section>
-    </main>
+      <Card>
+        <CardHead
+          title="Xe đăng ký"
+          sub="BQL đọc được để đối chiếu đỗ xe sai, nhưng không sửa hộ"
+          right={<span className="text-[0.8125rem] text-faint">{vehicles?.length ?? 0}</span>}
+        />
+        {isManager && <div className="border-b border-line p-4"><AddVehicleForm unitId={id} /></div>}
+        {!vehicles?.length ? (
+          <div className="p-4"><Trong title="Chưa đăng ký xe nào" /></div>
+        ) : (
+          <ul className="divide-y divide-line">
+            {vehicles.map((v) => (
+              <li key={v.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <span className="num font-semibold text-ink">{v.plate}</span>
+                  <span className="ml-2 text-[0.8125rem] text-muted">
+                    {v.vehicle_type}
+                    {v.card_no && ` · thẻ ${v.card_no}`}
+                  </span>
+                </div>
+                {isManager && (
+                  <form action={removeVehicle.bind(null, id)}>
+                    <input type="hidden" name="id" value={v.id} />
+                    <Button co="sm" dang="nguy">Xóa</Button>
+                  </form>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card>
+        <CardHead
+          title="Thú cưng"
+          right={<span className="text-[0.8125rem] text-faint">{pets?.length ?? 0}</span>}
+        />
+        {isManager && <div className="border-b border-line p-4"><AddPetForm unitId={id} /></div>}
+        {!pets?.length ? (
+          <div className="p-4"><Trong title="Chưa đăng ký thú cưng nào" /></div>
+        ) : (
+          <ul className="divide-y divide-line">
+            {pets.map((p) => {
+              const hetTiem = p.vaccinated_until
+                && String(p.vaccinated_until) < new Date().toISOString().slice(0, 10)
+              return (
+                <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <span className="font-semibold text-ink">{p.name}</span>
+                    {p.species && <span className="ml-2 text-[0.8125rem] text-muted">{p.species}</span>}
+                    {p.vaccinated_until && (
+                      <div className="mt-1">
+                        <Pill tone={hetTiem ? 'xau' : 'tot'}>
+                          {hetTiem ? 'Hết hạn tiêm phòng' : 'Tiêm phòng'} {ngayVN(String(p.vaccinated_until))}
+                        </Pill>
+                      </div>
+                    )}
+                  </div>
+                  {isManager && (
+                    <form action={removePet.bind(null, id)}>
+                      <input type="hidden" name="id" value={p.id} />
+                      <Button co="sm" dang="nguy">Xóa</Button>
+                    </form>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </Card>
+    </div>
   )
 }

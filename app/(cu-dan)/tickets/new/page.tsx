@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { NewTicketForm } from './form'
+import { Card, LinkButton, PageHead, Trong } from '@/components/ui'
+import { IcTrai } from '@/components/icons'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,10 +22,16 @@ export default async function NewTicket() {
 
   if (units.length === 0) {
     return (
-      <main className="space-y-3">
-        <h1 className="text-2xl font-semibold">Báo sự cố</h1>
-        <p>Bạn chưa gắn với căn hộ nào. <Link href="/onboarding" className="underline">Xin gia nhập căn hộ</Link>.</p>
-      </main>
+      <div className="space-y-5">
+        <PageHead title="Báo sự cố" />
+        <Trong
+          title="Bạn chưa gắn với căn hộ nào"
+          action={<LinkButton href="/onboarding" dang="chinh" co="sm">Xin gia nhập căn hộ</LinkButton>}
+        >
+          Phải là thành viên của một căn hộ thì mới gửi được yêu cầu, để BQL biết
+          sự cố xảy ra ở đâu.
+        </Trong>
+      </div>
     )
   }
 
@@ -34,10 +42,22 @@ export default async function NewTicket() {
   const categories = [...new Set((policies ?? []).map((p) => p.category))].sort()
 
   return (
-    <main className="space-y-4">
-      <Link href="/tickets" className="text-sm underline">← Yêu cầu của tôi</Link>
-      <h1 className="text-2xl font-semibold">Báo sự cố</h1>
-      <NewTicketForm units={units} categories={categories} />
-    </main>
+    <div className="space-y-5">
+      <Link
+        href="/tickets"
+        className="inline-flex items-center gap-1 text-[0.8125rem] font-medium text-muted hover:text-ink"
+      >
+        <IcTrai width={16} height={16} /> Yêu cầu của tôi
+      </Link>
+      <PageHead
+        title="Báo sự cố"
+        sub="BQL nhận ngay và chạy theo cam kết thời gian của danh mục bạn chọn"
+      />
+      <Card>
+        <div className="p-4">
+          <NewTicketForm units={units} categories={categories} />
+        </div>
+      </Card>
+    </div>
   )
 }

@@ -1,4 +1,200 @@
 @import "tailwindcss";
 
-:root { color-scheme: light dark; }
-body { @apply bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100; }
+/* ═══════════════════════════════════════════════════════════════════════════
+   VBuilding — hệ thống thiết kế
+   ───────────────────────────────────────────────────────────────────────────
+   Nguyên tắc: màn hình này là chỗ người ta làm việc 8 tiếng/ngày và nhìn vào
+   để quyết định chuyện tiền bạc. Nên nó ưu tiên ĐỌC ĐƯỢC hơn là ĐẸP MẮT —
+   nền dịu, chữ tương phản cao, số tiền canh cột thẳng hàng, màu chỉ dùng để
+   báo trạng thái chứ không dùng để trang trí.
+
+   Không component nào được viết mã màu thẳng. Tất cả đọc token ngữ nghĩa ở
+   dưới (surface, line, text-muted…) để đổi sáng/tối chỉ sửa một chỗ.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+
+  /* Bề mặt */
+  --color-canvas:     var(--c-canvas);
+  --color-surface:    var(--c-surface);
+  --color-raised:     var(--c-raised);
+  --color-sunken:     var(--c-sunken);
+
+  /* Đường kẻ */
+  --color-line:       var(--c-line);
+  --color-line-firm:  var(--c-line-firm);
+
+  /* Chữ */
+  --color-ink:        var(--c-ink);
+  --color-muted:      var(--c-muted);
+  --color-faint:      var(--c-faint);
+
+  /* Thương hiệu */
+  --color-brand:      var(--c-brand);
+  --color-brand-deep: var(--c-brand-deep);
+  --color-brand-soft: var(--c-brand-soft);
+  --color-brand-line: var(--c-brand-line);
+  --color-on-brand:   var(--c-on-brand);
+
+  /* Ngữ nghĩa trạng thái */
+  --color-ok:         var(--c-ok);
+  --color-ok-soft:    var(--c-ok-soft);
+  --color-ok-line:    var(--c-ok-line);
+  --color-warn:       var(--c-warn);
+  --color-warn-soft:  var(--c-warn-soft);
+  --color-warn-line:  var(--c-warn-line);
+  --color-bad:        var(--c-bad);
+  --color-bad-soft:   var(--c-bad-soft);
+  --color-bad-line:   var(--c-bad-line);
+
+  --radius-card: 0.75rem;
+  --radius-ctl: 0.5rem;
+
+  --shadow-card: 0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.06);
+  --shadow-pop:  0 4px 6px -2px rgb(16 24 40 / 0.03), 0 12px 16px -4px rgb(16 24 40 / 0.08);
+}
+
+:root {
+  color-scheme: light;
+
+  --c-canvas:  #f7f8fa;
+  --c-surface: #ffffff;
+  --c-raised:  #f9fafb;
+  --c-sunken:  #f2f4f7;
+
+  --c-line:      #e7eaee;
+  --c-line-firm: #d3d8e0;
+
+  --c-ink:   #101828;
+  --c-muted: #525f72;
+  --c-faint: #7a8699;
+
+  --c-brand:      #2563eb;
+  --c-brand-deep: #1d4ed8;
+  --c-brand-soft: #eff5ff;
+  --c-brand-line: #c7dbfe;
+  --c-on-brand:   #ffffff;
+
+  --c-ok:        #067647;
+  --c-ok-soft:   #ecfdf3;
+  --c-ok-line:   #abefc6;
+  --c-warn:      #b54708;
+  --c-warn-soft: #fffaeb;
+  --c-warn-line: #fedf89;
+  --c-bad:       #b42318;
+  --c-bad-soft:  #fef3f2;
+  --c-bad-line:  #fecdc9;
+}
+
+/* Nền tối: KHÔNG phải nghịch đảo màu sáng. Nền đen tuyền + chữ trắng tinh gây
+   loá khi nhìn lâu, nên nền là xanh-đen rất tối và chữ hạ xuống dưới trắng. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --c-canvas:  #0b0f17;
+  --c-surface: #121826;
+  --c-raised:  #182130;
+  --c-sunken:  #0e131e;
+
+  --c-line:      #232d3f;
+  --c-line-firm: #33405a;
+
+  --c-ink:   #eceff4;
+  --c-muted: #97a3b6;
+  --c-faint: #6b7789;
+
+  --c-brand:      #5b8dff;
+  --c-brand-deep: #7aa4ff;
+  --c-brand-soft: #15203a;
+  --c-brand-line: #26365c;
+  --c-on-brand:   #0b0f17;
+
+  --c-ok:        #47cd89;
+  --c-ok-soft:   #0d2018;
+  --c-ok-line:   #1c3d2c;
+  --c-warn:      #f5b544;
+  --c-warn-soft: #241a08;
+  --c-warn-line: #45330f;
+  --c-bad:       #fd8a80;
+  --c-bad-soft:  #2a1210;
+  --c-bad-line:  #4d211d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --c-canvas:  #0b0f17;
+    --c-surface: #121826;
+    --c-raised:  #182130;
+    --c-sunken:  #0e131e;
+
+    --c-line:      #232d3f;
+    --c-line-firm: #33405a;
+
+    --c-ink:   #eceff4;
+    --c-muted: #97a3b6;
+    --c-faint: #6b7789;
+
+    --c-brand:      #5b8dff;
+    --c-brand-deep: #7aa4ff;
+    --c-brand-soft: #15203a;
+    --c-brand-line: #26365c;
+    --c-on-brand:   #0b0f17;
+
+    --c-ok:        #47cd89;
+    --c-ok-soft:   #0d2018;
+    --c-ok-line:   #1c3d2c;
+    --c-warn:      #f5b544;
+    --c-warn-soft: #241a08;
+    --c-warn-line: #45330f;
+    --c-bad:       #fd8a80;
+    --c-bad-soft:  #2a1210;
+    --c-bad-line:  #4d211d;
+  }
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  background: var(--c-canvas);
+  color: var(--c-ink);
+  font-family: var(--font-sans);
+  /* Tiếng Việt có dấu chồng hai tầng (ế, ỗ, ự). Line-height chật là dấu chạm
+     dòng trên. 1.55 là mức đọc thoải mái mà không rời rạc. */
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Số tiền và số liệu bảng phải cùng bề rộng ký tự, nếu không mắt không dóng
+   được cột và người đọc phải dừng lại đếm chữ số. */
+.num { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+
+/* Tiêu đề bám sát nhau hơn thân bài — chuẩn typographic, chữ càng to thì
+   khoảng cách tương đối càng phải chặt. */
+h1, h2, h3 { line-height: 1.25; letter-spacing: -0.018em; }
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--c-brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection { background: var(--c-brand-line); color: var(--c-ink); }
+
+/* Thanh cuộn trong vùng bảng: mảnh, không cướp sự chú ý khỏi dữ liệu. */
+.scroll-x { scrollbar-width: thin; scrollbar-color: var(--c-line-firm) transparent; }
+.scroll-x::-webkit-scrollbar { height: 8px; }
+.scroll-x::-webkit-scrollbar-thumb {
+  background: var(--c-line-firm); border-radius: 4px;
+}
+.scroll-x::-webkit-scrollbar-track { background: transparent; }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
+}

@@ -3,6 +3,8 @@ import { useActionState, useState } from 'react'
 import { createTicket, type NewTicketState } from './actions'
 import { createClient } from '@/lib/supabase/client'
 import { compressImage, photoPath } from '@/lib/photo'
+import { Button, Field, Hop, Input, Select, Textarea, cx } from '@/components/ui'
+import { IcXong } from '@/components/icons'
 
 type Unit = { id: string; code: string }
 
@@ -46,46 +48,69 @@ export function NewTicketForm({ units, categories }: { units: Unit[]; categories
   }
 
   return (
-    <form action={action} className="space-y-3">
+    <form action={action} className="space-y-4">
       {units.length > 1 ? (
-        <select name="unit_id" required className="w-full rounded border p-3">
-          <option value="">— Căn hộ —</option>
-          {units.map((u) => <option key={u.id} value={u.id}>{u.code}</option>)}
-        </select>
+        <Field label="Căn hộ">
+          <Select name="unit_id" required defaultValue="">
+            <option value="" disabled>— Chọn căn hộ —</option>
+            {units.map((u) => <option key={u.id} value={u.id}>{u.code}</option>)}
+          </Select>
+        </Field>
       ) : (
         <input type="hidden" name="unit_id" value={units[0]?.id ?? ''} />
       )}
 
-      <select name="category" required className="w-full rounded border p-3">
-        <option value="">— Sự cố gì? —</option>
-        {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-      </select>
+      <Field label="Loại sự cố" hint="Mỗi loại có hạn xử lý riêng do BQL cam kết">
+        <Select name="category" required defaultValue="">
+          <option value="" disabled>— Sự cố gì? —</option>
+          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+        </Select>
+      </Field>
 
-      <select name="priority" defaultValue="normal" className="w-full rounded border p-3">
-        {Object.entries(PRIORITY_LABEL).map(([v, label]) => (
-          <option key={v} value={v}>{label}</option>
-        ))}
-      </select>
+      <Field label="Mức độ">
+        <Select name="priority" defaultValue="normal">
+          {Object.entries(PRIORITY_LABEL).map(([v, label]) => (
+            <option key={v} value={v}>{label}</option>
+          ))}
+        </Select>
+      </Field>
 
-      <div className="space-y-2 rounded border p-3">
-        <label className="block text-sm font-medium">Ảnh (không bắt buộc)</label>
-        <input type="file" accept="image/*" multiple capture="environment"
-               onChange={onPick} disabled={uploading}
-               className="w-full text-sm" />
-        {uploading && <p className="text-sm opacity-70">Đang tải ảnh lên…</p>}
-        {photoError && <p className="text-sm text-red-700">{photoError}</p>}
-        {paths.length > 0 && <p className="text-sm text-green-700">Đã đính kèm {paths.length} ảnh.</p>}
-        {paths.map((p) => <input key={p} type="hidden" name="photo_urls" value={p} />)}
-      </div>
+      <Field label="Tóm tắt">
+        <Input name="title" required placeholder="Ví dụ: Rò nước trần nhà vệ sinh" />
+      </Field>
 
-      <input name="title" required placeholder="Tóm tắt ngắn" className="w-full rounded border p-3" />
-      <textarea name="description" rows={4} placeholder="Mô tả thêm (không bắt buộc)" className="w-full rounded border p-3" />
+      <Field label="Mô tả thêm" hint="Không bắt buộc, nhưng càng rõ thì thợ càng mang đúng đồ">
+        <Textarea name="description" rows={4} placeholder="Xảy ra từ khi nào, ở đâu trong căn…" />
+      </Field>
 
-      {state.error && <p className="rounded bg-red-100 p-3 text-sm text-red-900">{state.error}</p>}
+      <Field label="Ảnh chụp" hint="Ảnh được nén trên máy bạn trước khi gửi, đỡ tốn dung lượng">
+        <div className="rounded-ctl border border-dashed border-line-firm bg-raised p-3">
+          <input
+            type="file" accept="image/*" multiple capture="environment"
+            onChange={onPick} disabled={uploading}
+            className={cx(
+              'w-full text-[0.8125rem] text-muted',
+              'file:mr-3 file:rounded-ctl file:border file:border-line-firm file:bg-surface',
+              'file:px-3 file:py-1.5 file:text-[0.8125rem] file:font-medium file:text-ink',
+              'hover:file:bg-sunken',
+            )}
+          />
+          {uploading && <p className="mt-2 text-[0.8125rem] text-muted">Đang tải ảnh lên…</p>}
+          {photoError && <p className="mt-2 text-[0.8125rem] text-bad">{photoError}</p>}
+          {paths.length > 0 && (
+            <p className="mt-2 inline-flex items-center gap-1.5 text-[0.8125rem] font-medium text-ok">
+              <IcXong width={14} height={14} /> Đã đính kèm {paths.length} ảnh
+            </p>
+          )}
+          {paths.map((p) => <input key={p} type="hidden" name="photo_urls" value={p} />)}
+        </div>
+      </Field>
 
-      <button disabled={busy} className="w-full rounded bg-neutral-900 p-3 text-white disabled:opacity-50">
+      {state.error && <Hop tone="xau" title="Không gửi được yêu cầu">{state.error}</Hop>}
+
+      <Button type="submit" dang="chinh" disabled={busy || uploading} className="w-full">
         {busy ? 'Đang gửi…' : 'Gửi yêu cầu'}
-      </button>
+      </Button>
     </form>
   )
 }

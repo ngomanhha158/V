@@ -1,14 +1,19 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { InvoiceActions, ReadingsForm } from './forms'
+import {
+  Bang, Button, Card, CardHead, Input, PageHead, Pill, Stat, Td, Th, Tr, Trong, vnd,
+} from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
 
-const STATUS_LABEL: Record<string, string> = {
-  draft: 'Nháp', issued: 'Đã phát hành', partial: 'Trả một phần', paid: 'Đã thu', void: 'Đã hủy',
+const TT: Record<string, { nhan: string; tone: 'trung' | 'brand' | 'canh' | 'tot' }> = {
+  draft: { nhan: 'Nháp', tone: 'trung' },
+  issued: { nhan: 'Đã phát hành', tone: 'brand' },
+  partial: { nhan: 'Trả một phần', tone: 'canh' },
+  paid: { nhan: 'Đã thu', tone: 'tot' },
+  void: { nhan: 'Đã hủy', tone: 'trung' },
 }
-const vnd = (n: number) => n.toLocaleString('vi-VN') + 'đ'
 
 export default async function Billing({
   searchParams,
@@ -17,7 +22,7 @@ export default async function Billing({
   const supabase = await createClient()
 
   const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
-  if (!project) return <main><p>Chưa có dự án nào.</p></main>
+  if (!project) return <Trong title="Chưa có dự án nào" />
   const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
@@ -49,43 +54,73 @@ export default async function Billing({
   const tong = (invoices ?? []).reduce((s, i) => s + (i.total_amount ?? 0), 0)
   const nhap = (invoices ?? []).filter((i) => i.status === 'draft').length
 
+  const daNhap = rows.filter((r) => r.curr !== null).length
+
   return (
-    <main className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Hóa đơn</h1>
-        <div className="flex gap-3 text-sm underline">
-          <Link href="/bql/cong-no">Công nợ</Link>
-          <Link href="/bql">Quản lý tòa</Link>
-        </div>
+    <div className="space-y-5">
+      <PageHead
+        title="Hóa đơn"
+        sub={`${project.name} · kỳ ${period}`}
+        actions={
+          <form className="flex items-center gap-2">
+            <Input type="month" name="period" defaultValue={period} className="h-10 w-40" />
+            <Button type="submit">Xem kỳ</Button>
+          </form>
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat nhan="Tổng hóa đơn" so={invoices?.length ?? 0} phu={vnd(tong)} />
+        <Stat
+          nhan="Còn nháp" so={nhap} phu="Chưa phát hành cho cư dân"
+          tone={nhap ? 'canh' : 'tot'}
+        />
+        <Stat
+          nhan="Đã thu"
+          so={(invoices ?? []).filter((i) => i.status === 'paid').length}
+          tone="tot"
+        />
+        <Stat
+          nhan="Đã nhập chỉ số" so={`${daNhap}/${rows.length}`}
+          phu={daNhap < rows.length ? 'Căn thiếu sẽ không có dòng điện' : 'Đã đủ'}
+          tone={daNhap < rows.length ? 'canh' : 'tot'}
+        />
       </div>
-
-      <form className="flex items-center gap-2 text-sm">
-        <label>Kỳ</label>
-        <input type="month" name="period" defaultValue={period} className="rounded border p-2" />
-        <button className="rounded border px-3 py-2">Xem</button>
-      </form>
-
-      <section className="rounded border p-3 text-sm">
-        <div>
-          <b>{invoices?.length ?? 0}</b> hóa đơn · <b>{nhap}</b> còn nháp · tổng <b>{vnd(tong)}</b>
-        </div>
-      </section>
 
       <ReadingsForm period={period} feeTypes={metered} rows={rows} />
       <InvoiceActions period={period} />
 
-      <section className="space-y-2">
-        <h2 className="font-medium">Danh sách hóa đơn kỳ {period}</h2>
-        {!invoices?.length && <p className="text-sm opacity-70">Chưa có hóa đơn nào cho kỳ này.</p>}
-        <ul className="space-y-1">
-          {invoices?.map((i) => (
-            <li key={i.id} className="flex justify-between rounded border p-2 text-sm">
-              <span>{i.units?.code}</span>
-              <span>{vnd(i.total_amount)} · {STATUS_LABEL[i.status] ?? i.status}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </main>
+      <Card>
+        <CardHead
+          title={`Danh sách hóa đơn kỳ ${period}`}
+          right={<span className="text-[0.8125rem] text-faint">{invoices?.length ?? 0}</span>}
+        />
+        {!invoices?.length ? (
+          <div className="p-4">
+            <Trong title="Chưa có hóa đơn nào cho kỳ này">
+              Bấm “Tính lại hóa đơn nháp” ở khối bên trên để sinh hóa đơn.
+            </Trong>
+          </div>
+        ) : (
+          <Bang>
+            <thead>
+              <tr><Th>Căn hộ</Th><Th phai>Số tiền</Th><Th>Trạng thái</Th></tr>
+            </thead>
+            <tbody>
+              {invoices.map((i) => {
+                const tt = TT[i.status] ?? { nhan: i.status, tone: 'trung' as const }
+                return (
+                  <Tr key={i.id}>
+                    <Td className="font-medium text-ink">{i.units?.code}</Td>
+                    <Td phai so>{vnd(i.total_amount)}</Td>
+                    <Td><Pill tone={tt.tone}>{tt.nhan}</Pill></Td>
+                  </Tr>
+                )
+              })}
+            </tbody>
+          </Bang>
+        )}
+      </Card>
+    </div>
   )
 }

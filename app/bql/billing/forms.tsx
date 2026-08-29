@@ -1,12 +1,14 @@
 'use client'
 import { useActionState } from 'react'
 import { generateInvoices, issueInvoices, saveReadings, type BillingState } from './actions'
+import { Button, Card, CardHead, Hop, Input, Select, Trong } from '@/components/ui'
+import { IcHoaDon, IcXong } from '@/components/icons'
 
 const empty: BillingState = {}
 
 function Msg({ state }: { state: BillingState }) {
-  if (state.error) return <p className="rounded bg-red-100 p-3 text-sm text-red-900">{state.error}</p>
-  if (state.ok) return <p className="rounded bg-green-100 p-3 text-sm text-green-900">{state.ok}</p>
+  if (state.error) return <Hop tone="xau" title="Không thực hiện được">{state.error}</Hop>
+  if (state.ok) return <Hop tone="tot" title="Đã xong">{state.ok}</Hop>
   return null
 }
 
@@ -15,31 +17,37 @@ export function InvoiceActions({ period }: { period: string }) {
   const [iss, doIss, issBusy] = useActionState(issueInvoices, empty)
 
   return (
-    <div className="space-y-3 rounded border p-4">
-      <h2 className="font-medium">Hóa đơn kỳ {period}</h2>
+    <Card>
+      <CardHead title={`Sinh và phát hành — kỳ ${period}`} />
 
-      <form action={doGen} className="space-y-2">
+      <form action={doGen} className="space-y-2.5 border-b border-line p-4">
         <input type="hidden" name="period" value={period} />
-        <button disabled={genBusy} className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-50">
+        <Button type="submit" disabled={genBusy}>
+          <IcHoaDon width={15} height={15} />
           {genBusy ? 'Đang tính…' : 'Tính lại hóa đơn nháp'}
-        </button>
-        <p className="text-sm opacity-70">
-          Chạy lại được bao nhiêu lần cũng được: chỉ đụng hóa đơn còn nháp, hóa đơn đã phát hành giữ nguyên.
+        </Button>
+        <p className="text-[0.8125rem] leading-relaxed text-muted">
+          Chạy lại được bao nhiêu lần cũng được: chỉ đụng hóa đơn còn nháp, hóa
+          đơn đã phát hành giữ nguyên.
         </p>
         <Msg state={gen} />
       </form>
 
-      <form action={doIss} className="space-y-2 border-t pt-3">
+      <form action={doIss} className="space-y-2.5 p-4">
         <input type="hidden" name="period" value={period} />
-        <button disabled={issBusy} className="rounded border border-neutral-900 px-4 py-2 disabled:opacity-50">
+        <Button type="submit" dang="chinh" disabled={issBusy}>
+          <IcXong width={15} height={15} />
           {issBusy ? 'Đang phát hành…' : 'Phát hành hóa đơn'}
-        </button>
-        <p className="text-sm opacity-70">
-          Đây là mốc chốt số. Sau khi phát hành, tính lại sẽ không đụng vào nữa — kiểm kỹ trước khi bấm.
-        </p>
+        </Button>
+        {/* Cảnh báo phải nằm CẠNH nút, không nằm cuối thẻ: người ta bấm trước
+            khi đọc hết trang. */}
+        <Hop tone="canh" title="Đây là mốc chốt số">
+          Sau khi phát hành, tính lại sẽ không đụng vào nữa và cư dân nhìn thấy
+          hóa đơn. Kiểm kỹ chỉ số công tơ trước khi bấm.
+        </Hop>
         <Msg state={iss} />
       </form>
-    </div>
+    </Card>
   )
 }
 
@@ -55,57 +63,91 @@ export function ReadingsForm({
   const [state, action, busy] = useActionState(saveReadings, empty)
 
   if (feeTypes.length === 0) {
-    return <p className="text-sm opacity-70">Chưa có loại phí nào tính theo chỉ số (điện, nước).</p>
+    return (
+      <Card>
+        <div className="p-4">
+          <Trong title="Chưa có loại phí nào tính theo chỉ số">
+            Thêm loại phí có cách tính “metered” (điện, nước) thì màn nhập chỉ số
+            mới dùng được.
+          </Trong>
+        </div>
+      </Card>
+    )
   }
 
+  const daNhap = rows.filter((r) => r.curr !== null).length
+
   return (
-    <form action={action} className="space-y-3 rounded border p-4">
-      <h2 className="font-medium">Nhập chỉ số kỳ {period}</h2>
-      <input type="hidden" name="period" value={period} />
+    <Card>
+      <form action={action}>
+        <CardHead
+          title={`Nhập chỉ số kỳ ${period}`}
+          sub={`${daNhap}/${rows.length} căn đã có chỉ số`}
+          right={
+            <Select name="fee_type_id" required className="h-8 w-auto text-[0.8125rem]">
+              {feeTypes.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </Select>
+          }
+        />
+        <input type="hidden" name="period" value={period} />
 
-      <select name="fee_type_id" required className="rounded border p-2">
-        {feeTypes.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-      </select>
+        <div className="border-b border-line px-4 py-3">
+          <Hop tone="trung">
+            Bỏ trống căn nào là chưa đọc được công tơ căn đó — không phải lỗi, chỉ
+            là chưa lưu. Sai một dòng thì <b>không lưu dòng nào</b>, để không có kỳ
+            nửa vời.
+          </Hop>
+        </div>
 
-      <p className="text-sm opacity-70">
-        Bỏ trống căn nào là chưa đọc được công tơ căn đó — không phải lỗi, chỉ là chưa lưu.
-        Sai một dòng thì KHÔNG lưu dòng nào, để không có kỳ nửa vời.
-      </p>
-
-      <div className="max-h-96 overflow-y-auto rounded border">
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-neutral-100">
-            <tr>
-              <th className="p-2 text-left">Căn</th>
-              <th className="p-2 text-left">Chỉ số cũ</th>
-              <th className="p-2 text-left">Chỉ số mới</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.unit_id} className="border-t">
-                <td className="p-2">
-                  {r.code}
-                  <input type="hidden" name={`code:${r.unit_id}`} value={r.code} />
-                </td>
-                <td className="p-2">
-                  <input name={`prev:${r.unit_id}`} defaultValue={r.prev ?? ''} inputMode="decimal"
-                         className="w-24 rounded border p-1" />
-                </td>
-                <td className="p-2">
-                  <input name={`curr:${r.unit_id}`} defaultValue={r.curr ?? ''} inputMode="decimal"
-                         className="w-24 rounded border p-1" />
-                </td>
+        <div className="scroll-x max-h-96 overflow-y-auto">
+          <table className="w-full text-sm">
+            {/* sticky: bảng này dài hàng trăm dòng, cuộn mất tiêu đề là nhập
+                nhầm cột cũ sang cột mới. */}
+            <thead className="sticky top-0 z-10 bg-raised">
+              <tr>
+                <th className="border-b border-line px-3 py-2.5 text-left text-[0.75rem] font-semibold tracking-wide text-muted uppercase">
+                  Căn hộ
+                </th>
+                <th className="border-b border-line px-3 py-2.5 text-left text-[0.75rem] font-semibold tracking-wide text-muted uppercase">
+                  Chỉ số cũ
+                </th>
+                <th className="border-b border-line px-3 py-2.5 text-left text-[0.75rem] font-semibold tracking-wide text-muted uppercase">
+                  Chỉ số mới
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.unit_id} className="hover:bg-raised">
+                  <td className="border-b border-line px-3 py-1.5 font-medium text-ink">
+                    {r.code}
+                    <input type="hidden" name={`code:${r.unit_id}`} value={r.code} />
+                  </td>
+                  <td className="border-b border-line px-3 py-1.5">
+                    <Input
+                      name={`prev:${r.unit_id}`} defaultValue={r.prev ?? ''} inputMode="decimal"
+                      className="num h-8 w-24 text-[0.8125rem]"
+                    />
+                  </td>
+                  <td className="border-b border-line px-3 py-1.5">
+                    <Input
+                      name={`curr:${r.unit_id}`} defaultValue={r.curr ?? ''} inputMode="decimal"
+                      className="num h-8 w-24 text-[0.8125rem]"
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      <Msg state={state} />
-      <button disabled={busy} className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-50">
-        {busy ? 'Đang lưu…' : 'Lưu chỉ số'}
-      </button>
-    </form>
+        <div className="space-y-2.5 border-t border-line p-4">
+          <Msg state={state} />
+          <Button type="submit" dang="chinh" disabled={busy}>
+            {busy ? 'Đang lưu…' : 'Lưu chỉ số'}
+          </Button>
+        </div>
+      </form>
+    </Card>
   )
 }

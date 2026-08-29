@@ -1,5 +1,5 @@
-// Màn cư dân: đọc trên điện thoại, giữ khung hẹp cho dễ đọc.
-// Nhóm route (cu-dan) không đổi URL — /tickets vẫn là /tickets.
+import { ResidentShell } from '@/components/shell/resident-shell'
+
 export default function CuDanLayout({ children }: { children: React.ReactNode }) {
-  return <div className="mx-auto max-w-lg">{children}</div>
+  return <ResidentShell>{children}</ResidentShell>
 }

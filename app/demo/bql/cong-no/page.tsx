@@ -1,123 +1,150 @@
-import Link from 'next/link'
 import { CONG_NO } from '@/lib/demo/data'
+import {
+  Bang, Card, CardHead, Chip, Hop, PageHead, Pill, Stat, Td, Th, Tr, Trong,
+  cx, ngayVN, vnd, vndGon,
+} from '@/components/ui'
+import { IcDienThoai } from '@/components/icons'
 
-const vnd = (n: number) => n.toLocaleString('vi-VN') + 'đ'
+export const dynamic = 'force-dynamic'
 
 const NHOM = [
   { key: 'chua_han', nhan: 'Chưa tới hạn', hop: (d: number) => d < 0 },
-  { key: 'd0_30', nhan: 'Quá hạn ≤ 30 ngày', hop: (d: number) => d >= 0 && d <= 30 },
-  { key: 'd31_90', nhan: 'Quá hạn 31–90 ngày', hop: (d: number) => d > 30 && d <= 90 },
-  { key: 'd90', nhan: 'Quá hạn > 90 ngày', hop: (d: number) => d > 90 },
+  { key: 'd0_30', nhan: '≤ 30 ngày', hop: (d: number) => d >= 0 && d <= 30 },
+  { key: 'd31_90', nhan: '31–90 ngày', hop: (d: number) => d > 30 && d <= 90 },
+  { key: 'd90', nhan: '> 90 ngày', hop: (d: number) => d > 90 },
 ] as const
+
+/** Nợ càng già càng khó đòi — bảng phải nói được điều đó chỉ bằng một cái liếc. */
+function tuoiNo(d: number) {
+  if (d < 0) return { nhan: `còn ${-d} ngày`, tone: 'trung' as const }
+  if (d === 0) return { nhan: 'đến hạn hôm nay', tone: 'canh' as const }
+  if (d <= 30) return { nhan: `quá ${d} ngày`, tone: 'canh' as const }
+  return { nhan: `quá ${d} ngày`, tone: 'xau' as const }
+}
 
 export default async function DemoCongNo({
   searchParams,
 }: { searchParams: Promise<{ nhom?: string }> }) {
   const sp = await searchParams
   const all = CONG_NO
-  const nhomHienTai = NHOM.find((n) => n.key === sp.nhom)
-  const hienThi = nhomHienTai ? all.filter((r) => nhomHienTai.hop(r.so_ngay_qua_han)) : all
+  const chon = NHOM.find((n) => n.key === sp.nhom)
+  const hien = chon ? all.filter((r) => chon.hop(r.so_ngay_qua_han)) : all
 
-  const tongNo = all.reduce((s, r) => s + r.con_no, 0)
+  const tong = all.reduce((s, r) => s + r.con_no, 0)
   const quaHan = all.filter((r) => r.so_ngay_qua_han >= 0)
+  const tienQuaHan = quaHan.reduce((s, r) => s + r.con_no, 0)
+  const nang = all.filter((r) => r.so_ngay_qua_han > 90)
+  const khongChuHo = all.filter((r) => !r.ten_lien_he)
 
   return (
-    <main className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Công nợ</h1>
-        <Link href="/demo/bql" className="text-sm underline">Quản lý tòa</Link>
+    <div className="space-y-5">
+      <PageHead
+        title="Công nợ"
+        sub="Gộp theo căn, xếp theo số tiền còn thiếu"
+      />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat nhan="Tổng phải thu" so={vnd(tong)} phu={`${all.length} căn còn nợ`} />
+        <Stat
+          nhan="Đã quá hạn"
+          so={vnd(tienQuaHan)}
+          phu={`${quaHan.length} căn · ${Math.round((tienQuaHan / tong) * 100)}% tổng nợ`}
+          tone="xau"
+        />
+        <Stat
+          nhan="Nợ trên 90 ngày"
+          so={nang.length}
+          phu={nang.length ? `${vndGon(nang.reduce((s, r) => s + r.con_no, 0))} — cần đưa ban quản trị` : 'Không có'}
+          tone={nang.length ? 'xau' : 'tot'}
+        />
+        <Stat
+          nhan="Chưa có chủ hộ"
+          so={khongChuHo.length}
+          phu={khongChuHo.length ? 'Không có ai để liên hệ đòi' : 'Đủ người liên hệ'}
+          tone={khongChuHo.length ? 'canh' : 'trung'}
+        />
       </div>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="rounded border p-3">
-          <div className="text-xs opacity-70">Tổng phải thu</div>
-          <div className="text-lg font-semibold">{vnd(tongNo)}</div>
-        </div>
-        <div className="rounded border p-3">
-          <div className="text-xs opacity-70">Trong đó quá hạn</div>
-          <div className="text-lg font-semibold">
-            {vnd(quaHan.reduce((s, r) => s + r.con_no, 0))}
-          </div>
-        </div>
-        <div className="rounded border p-3">
-          <div className="text-xs opacity-70">Số căn còn nợ</div>
-          <div className="text-lg font-semibold">
-            {all.length} <span className="text-sm font-normal opacity-70">({quaHan.length} quá hạn)</span>
-          </div>
-        </div>
-      </section>
+      <Card>
+        <CardHead
+          title="Danh sách căn còn nợ"
+          right={
+            <div className="flex flex-wrap gap-1.5">
+              <Chip href="/demo/bql/cong-no" active={!chon}>Tất cả ({all.length})</Chip>
+              {NHOM.map((n) => {
+                const c = all.filter((r) => n.hop(r.so_ngay_qua_han)).length
+                return (
+                  <Chip key={n.key} href={`/demo/bql/cong-no?nhom=${n.key}`} active={chon?.key === n.key}>
+                    {n.nhan} ({c})
+                  </Chip>
+                )
+              })}
+            </div>
+          }
+        />
 
-      <nav className="flex flex-wrap gap-2 text-sm">
-        <Link
-          href="/demo/bql/cong-no"
-          className={`rounded border px-3 py-1 ${!nhomHienTai ? 'bg-black text-white' : ''}`}
-        >
-          Tất cả ({all.length})
-        </Link>
-        {NHOM.map((n) => (
-          <Link
-            key={n.key}
-            href={`/demo/bql/cong-no?nhom=${n.key}`}
-            className={`rounded border px-3 py-1 ${nhomHienTai?.key === n.key ? 'bg-black text-white' : ''}`}
-          >
-            {n.nhan} ({all.filter((r) => n.hop(r.so_ngay_qua_han)).length})
-          </Link>
-        ))}
-      </nav>
-
-      {!hienThi.length ? (
-        <p className="text-sm opacity-70">Không có căn nào trong nhóm này.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[40rem] border-collapse text-sm">
+        {!hien.length ? (
+          <div className="p-4"><Trong title="Không có căn nào trong nhóm này" /></div>
+        ) : (
+          <Bang>
             <thead>
-              <tr className="border-b text-left">
-                <th className="p-2">Căn</th>
-                <th className="p-2">Người liên hệ</th>
-                <th className="p-2 text-right">Số HĐ</th>
-                <th className="p-2 text-right">Còn nợ</th>
-                <th className="p-2 text-right">Hạn cũ nhất</th>
+              <tr>
+                <Th>Căn hộ</Th>
+                <Th>Người liên hệ</Th>
+                <Th phai>Số HĐ</Th>
+                <Th phai>Còn nợ</Th>
+                <Th phai>Hạn cũ nhất</Th>
+                <Th phai>Tuổi nợ</Th>
               </tr>
             </thead>
             <tbody>
-              {hienThi.map((r) => (
-                <tr key={r.unit_id} className="border-b align-top">
-                  <td className="p-2 font-medium">
-                    {r.unit_code}
-                    <div className="text-xs opacity-60">{r.building_code}</div>
-                  </td>
-                  <td className="p-2">
-                    {r.ten_lien_he ?? <span className="opacity-60">Chưa có chủ hộ</span>}
-                    {r.dien_thoai && (
-                      <div className="text-xs">
-                        <a href={`tel:${r.dien_thoai}`} className="underline">{r.dien_thoai}</a>
-                      </div>
-                    )}
-                  </td>
-                  <td className="p-2 text-right tabular-nums">{r.so_hoa_don}</td>
-                  <td className="p-2 text-right font-medium tabular-nums">{vnd(r.con_no)}</td>
-                  <td className="p-2 text-right tabular-nums">
-                    {r.han_cu_nhat}
-                    <div className={`text-xs ${r.so_ngay_qua_han > 30 ? 'text-red-600' : 'opacity-60'}`}>
-                      {r.so_ngay_qua_han < 0
-                        ? `còn ${-r.so_ngay_qua_han} ngày`
-                        : r.so_ngay_qua_han === 0
-                          ? 'đến hạn hôm nay'
-                          : `quá ${r.so_ngay_qua_han} ngày`}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {hien.map((r) => {
+                const t = tuoiNo(r.so_ngay_qua_han)
+                return (
+                  <Tr key={r.unit_id}>
+                    <Td>
+                      <div className="font-semibold text-ink">{r.unit_code}</div>
+                      <div className="text-[0.75rem] text-faint">Tòa {r.building_code}</div>
+                    </Td>
+                    <Td>
+                      {r.ten_lien_he ? (
+                        <>
+                          <div className="text-ink">{r.ten_lien_he}</div>
+                          {r.dien_thoai && (
+                            <a
+                              href={`tel:${r.dien_thoai}`}
+                              className="num mt-0.5 inline-flex items-center gap-1 text-[0.8125rem] text-brand hover:underline"
+                            >
+                              <IcDienThoai width={13} height={13} /> {r.dien_thoai}
+                            </a>
+                          )}
+                        </>
+                      ) : (
+                        <Pill tone="canh">Chưa có chủ hộ</Pill>
+                      )}
+                    </Td>
+                    <Td phai so className="text-muted">{r.so_hoa_don}</Td>
+                    <Td phai so>
+                      <span className={cx('font-semibold', r.so_ngay_qua_han > 90 ? 'text-bad' : 'text-ink')}>
+                        {vnd(r.con_no)}
+                      </span>
+                    </Td>
+                    <Td phai so className="text-muted">{ngayVN(r.han_cu_nhat)}</Td>
+                    <Td phai><Pill tone={t.tone}>{t.nhan}</Pill></Td>
+                  </Tr>
+                )
+              })}
             </tbody>
-          </table>
-        </div>
-      )}
+          </Bang>
+        )}
+      </Card>
 
-      <p className="rounded border p-3 text-sm opacity-70">
-        Cron nhắc nợ chạy 08:00 hằng ngày, bắn thông báo ở ba mốc: trước hạn 3
-        ngày, đúng ngày đến hạn, và quá hạn 3 ngày. Chỉ người được xem công nợ
-        mới nhận.
-      </p>
-    </main>
+      <Hop tone="brand" title="Nhắc nợ tự động">
+        Cron chạy 08:00 hằng ngày, bắn thông báo ở ba mốc: trước hạn 3 ngày,
+        đúng ngày đến hạn, và quá hạn 3 ngày. Chỉ người được xem công nợ mới
+        nhận — con cái trong nhà không nhận tin đòi tiền. Hàm tự chống nhắc
+        trùng trong 20 giờ nên chạy lại không bắn hai lần.
+      </Hop>
+    </div>
   )
 }

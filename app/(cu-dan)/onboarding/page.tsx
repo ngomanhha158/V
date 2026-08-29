@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { requestJoin } from './actions'
+import { Button, Card, Field, Hop, PageHead, Select } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,32 +12,46 @@ export default async function Onboarding() {
     .order('code')
 
   return (
-    <main className="space-y-4">
-      <h1 className="text-2xl font-semibold">Xin gia nhập căn hộ</h1>
-      <p className="text-sm opacity-70">
-        Yêu cầu sẽ gửi tới chủ hộ. Được duyệt thì bạn mới thấy dữ liệu căn hộ.
-      </p>
+    <div className="space-y-5">
+      <PageHead
+        title="Xin gia nhập căn hộ"
+        sub="Yêu cầu gửi tới chủ hộ. Được duyệt thì bạn mới thấy dữ liệu căn hộ."
+      />
 
-      <form action={requestJoin} className="space-y-3">
-        <select name="unit_id" required className="w-full rounded border p-3">
-          <option value="">— Chọn căn hộ —</option>
-          {units?.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.code} · {u.buildings?.name}
-            </option>
-          ))}
-        </select>
+      <Card>
+        <form action={requestJoin} className="space-y-4 p-4">
+          <Field label="Căn hộ" hint="Tìm theo mã căn ghi trên cửa hoặc hợp đồng">
+            <Select name="unit_id" required defaultValue="">
+              <option value="" disabled>— Chọn căn hộ —</option>
+              {units?.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.code} · {u.buildings?.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
 
-        <select name="role" required className="w-full rounded border p-3">
-          <option value="">— Vai trò —</option>
-          <option value="owner">Chủ sở hữu</option>
-          <option value="tenant">Người thuê</option>
-          <option value="family">Thành viên gia đình</option>
-          <option value="authorized">Người được ủy quyền</option>
-        </select>
+          <Field
+            label="Vai trò của bạn"
+            hint="Người thuê và người được ủy quyền sẽ được chủ hộ đặt ngày hết hạn."
+          >
+            <Select name="role" required defaultValue="">
+              <option value="" disabled>— Chọn vai trò —</option>
+              <option value="owner">Chủ sở hữu</option>
+              <option value="tenant">Người thuê</option>
+              <option value="family">Thành viên gia đình</option>
+              <option value="authorized">Người được ủy quyền</option>
+            </Select>
+          </Field>
 
-        <button className="w-full rounded bg-neutral-900 p-3 text-white">Gửi yêu cầu</button>
-      </form>
-    </main>
+          <Hop tone="trung">
+            Yêu cầu tạo ra ở trạng thái <b>chờ duyệt</b> và chưa có quyền gì. Bạn
+            không tự cấp quyền cho mình được — chủ hộ hoặc BQL phải duyệt.
+          </Hop>
+
+          <Button type="submit" dang="chinh" className="w-full">Gửi yêu cầu</Button>
+        </form>
+      </Card>
+    </div>
   )
 }

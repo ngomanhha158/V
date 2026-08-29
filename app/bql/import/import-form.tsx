@@ -1,6 +1,10 @@
 'use client'
 import { useActionState } from 'react'
 import { previewUnits, commitUnits, type PreviewState } from './actions'
+import {
+  Bang, Button, Card, CardHead, Hop, LinkButton, Stat, Td, Th, Tr, cx,
+} from '@/components/ui'
+import { IcNhap, IcXong } from '@/components/icons'
 
 const initial: PreviewState = { phase: 'idle' }
 
@@ -13,87 +17,117 @@ export function ImportForm({ buildingCodes }: { buildingCodes: string[] }) {
 
   if (state.phase === 'done') {
     return (
-      <div className="space-y-3">
-        <p className="rounded bg-green-100 p-3 text-green-900">
-          Đã import {state.inserted} căn hộ.
-        </p>
-        <a href="/bql/import" className="underline">Import file khác</a>
-      </div>
+      <Card>
+        <div className="space-y-4 p-6 text-center">
+          <span className="inline-grid size-12 place-items-center rounded-full bg-ok-soft text-ok">
+            <IcXong width={26} height={26} />
+          </span>
+          <div>
+            <p className="text-base font-semibold text-ink">
+              Đã import {state.inserted} căn hộ
+            </p>
+            <p className="mt-1 text-[0.8125rem] text-muted">
+              Dữ liệu đã vào hệ thống và cư dân xin gia nhập được ngay.
+            </p>
+          </div>
+          <div className="flex justify-center gap-2">
+            <LinkButton href="/bql/import" co="sm">Import file khác</LinkButton>
+            <LinkButton href="/bql" dang="chinh" co="sm">Về quản lý tòa</LinkButton>
+          </div>
+        </div>
+      </Card>
     )
   }
 
   return (
     <div className="space-y-5">
-      <form action={doPreview} className="space-y-3">
-        <input
-          type="file" name="file" accept=".xlsx" required
-          className="w-full rounded border p-3"
+      <Card>
+        <CardHead
+          title="Chọn file Excel"
+          sub="File được đọc và kiểm tra trước, không ghi gì cho tới khi bạn xác nhận"
         />
-        <button
-          disabled={previewing}
-          className="w-full rounded bg-neutral-900 p-3 text-white disabled:opacity-50"
-        >
-          {previewing ? 'Đang đọc file…' : 'Kiểm tra file'}
-        </button>
-        <p className="text-sm opacity-70">
-          Cột bắt buộc: <b>Tòa</b>, <b>Mã căn</b>, <b>Tầng</b>. Không bắt buộc: Diện tích, Loại, Tình trạng.
-          {buildingCodes.length > 0 && <> Tòa đã có: {buildingCodes.join(', ')}.</>}
-        </p>
-      </form>
+        <form action={doPreview} className="space-y-3 p-4">
+          <input
+            type="file" name="file" accept=".xlsx" required
+            className={cx(
+              'w-full rounded-ctl border border-dashed border-line-firm bg-raised p-3',
+              'text-[0.8125rem] text-muted',
+              'file:mr-3 file:rounded-ctl file:border file:border-line-firm file:bg-surface',
+              'file:px-3 file:py-1.5 file:text-[0.8125rem] file:font-medium file:text-ink',
+              'hover:file:bg-sunken',
+            )}
+          />
+          <Button type="submit" dang="chinh" disabled={previewing}>
+            <IcNhap width={15} height={15} />
+            {previewing ? 'Đang đọc file…' : 'Kiểm tra file'}
+          </Button>
+          <div className="text-[0.8125rem] leading-relaxed text-muted">
+            Cột bắt buộc: <b className="text-ink">Tòa</b>, <b className="text-ink">Mã căn</b>,{' '}
+            <b className="text-ink">Tầng</b>. Không bắt buộc: Diện tích, Loại, Tình trạng.
+            {buildingCodes.length > 0 && (
+              <> Tòa đã có: <span className="text-ink">{buildingCodes.join(', ')}</span>.</>
+            )}
+          </div>
+        </form>
+      </Card>
 
       {state.phase === 'error' && (
-        <p className="rounded bg-red-100 p-3 text-red-900">{state.message}</p>
+        <Hop tone="xau" title="Không đọc được file">{state.message}</Hop>
       )}
 
       {state.phase === 'preview' && (
-        <section className="space-y-3">
-          <h2 className="font-medium">{state.fileName}</h2>
-          <p className="text-sm">
-            <b>{state.ok.length}</b> dòng hợp lệ
-            {state.issues.length > 0 && <> · <b className="text-red-700">{state.issues.length}</b> lỗi</>}
-            {state.skippedBlank > 0 && <> · {state.skippedBlank} dòng trống được bỏ qua</>}
-          </p>
+        <>
+          <div className="grid grid-cols-3 gap-3">
+            <Stat nhan="Dòng hợp lệ" so={state.ok.length} tone={state.ok.length ? 'tot' : 'trung'} />
+            <Stat
+              nhan="Dòng lỗi" so={state.issues.length}
+              tone={state.issues.length ? 'xau' : 'tot'}
+            />
+            <Stat nhan="Dòng trống bỏ qua" so={state.skippedBlank} />
+          </div>
 
           {state.issues.length > 0 && (
-            <div className="max-h-72 overflow-y-auto rounded border">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-neutral-100">
-                  <tr>
-                    <th className="p-2 text-left">Dòng</th>
-                    <th className="p-2 text-left">Cột</th>
-                    <th className="p-2 text-left">Vấn đề</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {state.issues.map((i, n) => (
-                    <tr key={n} className="border-t">
-                      <td className="p-2 tabular-nums">{i.row}</td>
-                      <td className="p-2 opacity-70">{i.column}</td>
-                      <td className="p-2">{i.message}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Card>
+              <CardHead
+                title="Các dòng có vấn đề"
+                sub={`${state.fileName} — sửa trong Excel rồi tải lên lại phần còn thiếu`}
+              />
+              <div className="max-h-72 overflow-y-auto">
+                <Bang>
+                  <thead className="sticky top-0 z-10">
+                    <tr><Th>Dòng</Th><Th>Cột</Th><Th>Vấn đề</Th></tr>
+                  </thead>
+                  <tbody>
+                    {state.issues.map((i, n) => (
+                      <Tr key={n}>
+                        <Td so className="font-medium text-ink">{i.row}</Td>
+                        <Td className="text-muted">{i.column}</Td>
+                        <Td className="text-bad">{i.message}</Td>
+                      </Tr>
+                    ))}
+                  </tbody>
+                </Bang>
+              </div>
+            </Card>
           )}
 
           {state.ok.length > 0 && (
-            <form action={doCommit}>
-              <input type="hidden" name="payload" value={JSON.stringify(state.ok)} />
-              <button
-                disabled={committing}
-                className="w-full rounded bg-neutral-900 p-3 text-white disabled:opacity-50"
-              >
-                {committing ? 'Đang import…' : `Import ${state.ok.length} căn hộ`}
-              </button>
-              {state.issues.length > 0 && (
-                <p className="mt-2 text-sm opacity-70">
-                  Chỉ import {state.ok.length} dòng hợp lệ. Sửa các dòng lỗi rồi tải lên lại phần còn thiếu.
-                </p>
-              )}
-            </form>
+            <Card>
+              <form action={doCommit} className="space-y-3 p-4">
+                <input type="hidden" name="payload" value={JSON.stringify(state.ok)} />
+                {state.issues.length > 0 && (
+                  <Hop tone="canh" title="Chỉ import phần hợp lệ">
+                    {state.ok.length} dòng sẽ được ghi, {state.issues.length} dòng lỗi bị bỏ qua.
+                    Sửa file rồi tải lên lại phần còn thiếu.
+                  </Hop>
+                )}
+                <Button type="submit" dang="chinh" disabled={committing} className="w-full">
+                  {committing ? 'Đang import…' : `Import ${state.ok.length} căn hộ`}
+                </Button>
+              </form>
+            </Card>
           )}
-        </section>
+        </>
       )}
     </div>
   )

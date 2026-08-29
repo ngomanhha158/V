@@ -3,6 +3,10 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { dispatchTicket } from './actions'
 import { Constants } from '@/lib/supabase/database.types'
+import {
+  Button, Card, CardHead, Chip, Hop, PageHead, Pill, Select, Stat, Trong, cx, ngayVN,
+} from '@/components/ui'
+import { IcNguoi } from '@/components/icons'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +16,13 @@ const STATUS_LABEL: Record<string, string> = {
 }
 const PRIORITY_LABEL: Record<string, string> = {
   low: 'Thấp', normal: 'Bình thường', high: 'Cao', urgent: 'Khẩn cấp',
+}
+const TT_TONE: Record<string, 'trung' | 'canh' | 'brand' | 'tot' | 'xau'> = {
+  new: 'brand', assigned: 'brand', in_progress: 'canh',
+  resolved: 'tot', closed: 'trung', rejected: 'xau',
+}
+const UU_TONE: Record<string, 'trung' | 'canh' | 'xau'> = {
+  low: 'trung', normal: 'trung', high: 'canh', urgent: 'xau',
 }
 const OPEN: string[] = ['new', 'assigned', 'in_progress']
 
@@ -52,87 +63,151 @@ export default async function BqlTickets({
 
   const now = Date.now()
 
+  const tre = (t: (typeof filtered)[number]) =>
+    !t.resolved_at && !!t.sla_resolve_due && new Date(t.sla_resolve_due).getTime() < now
+
+  // Quá hạn lên đầu: màn điều phối phải bày ra việc đang cháy, không xếp theo
+  // ngày tạo rồi bắt người trực tự dò.
+  const sap = [...filtered].sort((a, b) => Number(tre(b)) - Number(tre(a)))
+  const quaHan = filtered.filter(tre)
+  const chuaGiao = filtered.filter((t) => !t.assignee_id && !t.resolved_at)
+  const qs = sp.status ? `?status=${sp.status}` : ''
+
   return (
-    <main className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Điều phối yêu cầu</h1>
-        <Link href="/bql" className="text-sm underline">Quản lý tòa</Link>
+    <div className="space-y-5">
+      <PageHead title="Điều phối yêu cầu" sub={project.name} />
+
+      <div className="grid grid-cols-3 gap-3">
+        <Stat nhan="Đang hiện" so={filtered.length} />
+        <Stat nhan="Quá hạn SLA" so={quaHan.length} tone={quaHan.length ? 'xau' : 'tot'} />
+        <Stat nhan="Chưa phân công" so={chuaGiao.length} tone={chuaGiao.length ? 'canh' : 'tot'} />
       </div>
 
-      <nav className="flex flex-wrap gap-2 text-sm">
-        <Link href="/bql/tickets" className="rounded border px-3 py-1">Chưa xong</Link>
-        {Constants.public.Enums.ticket_status.map((st) => (
-          <Link key={st} href={`/bql/tickets?status=${st}`} className="rounded border px-3 py-1">
-            {STATUS_LABEL[st]}
-          </Link>
-        ))}
-        <Link href="/bql/tickets?status=all" className="rounded border px-3 py-1">Tất cả</Link>
-      </nav>
-
-      {buildings && buildings.length > 1 && (
-        <nav className="flex flex-wrap gap-2 text-sm">
-          <Link href={`/bql/tickets${sp.status ? `?status=${sp.status}` : ''}`} className="rounded border px-3 py-1">
-            Mọi tòa
-          </Link>
-          {buildings.map((b) => (
-            <Link
-              key={b.id}
-              href={`/bql/tickets?building=${b.id}${sp.status ? `&status=${sp.status}` : ''}`}
-              className="rounded border px-3 py-1"
-            >
-              {b.code}
-            </Link>
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-1.5">
+          <Chip href="/bql/tickets" active={!sp.status}>Chưa xong</Chip>
+          {Constants.public.Enums.ticket_status.map((st) => (
+            <Chip key={st} href={`/bql/tickets?status=${st}`} active={sp.status === st}>
+              {STATUS_LABEL[st]}
+            </Chip>
           ))}
-        </nav>
+          <Chip href="/bql/tickets?status=all" active={sp.status === 'all'}>Tất cả</Chip>
+        </div>
+
+        {buildings && buildings.length > 1 && (
+          <div className="flex flex-wrap gap-1.5">
+            <Chip href={`/bql/tickets${qs}`} active={!sp.building}>Mọi tòa</Chip>
+            {buildings.map((b) => (
+              <Chip
+                key={b.id}
+                href={`/bql/tickets?building=${b.id}${sp.status ? `&status=${sp.status}` : ''}`}
+                active={sp.building === b.id}
+              >
+                {b.code}
+              </Chip>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {error && <Hop tone="xau" title="Không đọc được danh sách">{error.message}</Hop>}
+
+      {!error && sap.length === 0 ? (
+        <Trong title="Không có yêu cầu nào">
+          Không có yêu cầu nào khớp bộ lọc hiện tại.
+        </Trong>
+      ) : (
+        <Card>
+          <CardHead
+            title="Danh sách yêu cầu"
+            right={<span className="text-[0.8125rem] text-faint">{sap.length}</span>}
+          />
+          <ul className="divide-y divide-line">
+            {sap.map((t) => {
+              const overdue = tre(t)
+              return (
+                <li
+                  key={t.id}
+                  className={cx('px-4 py-4 transition-colors hover:bg-raised', overdue && 'bg-bad-soft/40')}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/tickets/${t.id}`}
+                        className="text-sm font-semibold text-ink hover:underline"
+                      >
+                        {t.title}
+                      </Link>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <Pill tone={TT_TONE[t.status] ?? 'trung'}>
+                          {STATUS_LABEL[t.status] ?? t.status}
+                        </Pill>
+                        {UU_TONE[t.priority] !== 'trung' && (
+                          <Pill tone={UU_TONE[t.priority]}>{PRIORITY_LABEL[t.priority]}</Pill>
+                        )}
+                        {overdue && (
+                          <Pill tone="xau">
+                            Quá hạn SLA{t.escalated_at && ' · đã leo thang'}
+                          </Pill>
+                        )}
+                        <Pill tone="trung" cham={false}>{t.category}</Pill>
+                      </div>
+                      <div className="mt-2 text-[0.8125rem] text-muted">
+                        <span className="font-medium text-ink">
+                          {t.units?.buildings?.code} · {t.units?.code}
+                        </span>
+                        {' · '}{t.profiles?.full_name ?? '—'}
+                        {t.profiles?.phone && (
+                          <>
+                            {' · '}
+                            <a href={`tel:${t.profiles.phone}`} className="num text-brand hover:underline">
+                              {t.profiles.phone}
+                            </a>
+                          </>
+                        )}
+                        {t.sla_resolve_due && (
+                          <>
+                            {' · hạn '}
+                            <span className={cx('num', overdue && 'font-medium text-bad')}>
+                              {ngayVN(String(t.sla_resolve_due))}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <form
+                    action={dispatchTicket}
+                    className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3"
+                  >
+                    <input type="hidden" name="id" value={t.id} />
+                    <Select name="status" defaultValue={t.status} className="h-8 w-auto text-[0.8125rem]">
+                      {Constants.public.Enums.ticket_status.map((st) => (
+                        <option key={st} value={st}>{STATUS_LABEL[st]}</option>
+                      ))}
+                    </Select>
+                    <Select
+                      name="assignee_id" defaultValue={t.assignee_id ?? ''}
+                      className="h-8 w-auto text-[0.8125rem]"
+                    >
+                      <option value="">— Chưa phân công —</option>
+                      {staff?.map((s) => (
+                        <option key={s.user_id} value={s.user_id}>
+                          {s.profiles?.full_name ?? s.user_id.slice(0, 8)} ({s.role})
+                        </option>
+                      ))}
+                    </Select>
+                    <Button co="sm" dang="chinh" type="submit">
+                      <IcNguoi width={14} height={14} /> Lưu
+                    </Button>
+                  </form>
+                </li>
+              )
+            })}
+          </ul>
+        </Card>
       )}
-
-      {error && (
-        <p className="rounded bg-red-100 p-3 text-sm text-red-900">Không đọc được danh sách: {error.message}</p>
-      )}
-      {!error && filtered.length === 0 && <p className="opacity-70">Không có yêu cầu nào.</p>}
-
-      <ul className="space-y-3">
-        {filtered.map((t) => {
-          const overdue = !t.resolved_at && t.sla_resolve_due && new Date(t.sla_resolve_due).getTime() < now
-          return (
-            <li key={t.id} className={`rounded border p-3 ${overdue ? 'border-red-400' : ''}`}>
-              <div className="flex flex-wrap items-baseline gap-2">
-                <Link href={`/tickets/${t.id}`} className="font-medium underline">{t.title}</Link>
-                <span className="text-sm opacity-70">
-                  {t.units?.buildings?.code} · {t.units?.code} · {t.category} · {PRIORITY_LABEL[t.priority]}
-                </span>
-              </div>
-              <div className="text-sm opacity-70">
-                Người báo: {t.profiles?.full_name ?? '—'}
-                {t.profiles?.phone && ` · ${t.profiles.phone}`}
-              </div>
-              {overdue && (
-                <div className="mt-1 text-sm text-red-700">
-                  Quá hạn SLA{t.escalated_at && ' · đã leo thang'}
-                </div>
-              )}
-
-              <form action={dispatchTicket} className="mt-2 flex flex-wrap items-center gap-2">
-                <input type="hidden" name="id" value={t.id} />
-                <select name="status" defaultValue={t.status} className="rounded border p-1 text-sm">
-                  {Constants.public.Enums.ticket_status.map((st) => (
-                    <option key={st} value={st}>{STATUS_LABEL[st]}</option>
-                  ))}
-                </select>
-                <select name="assignee_id" defaultValue={t.assignee_id ?? ''} className="rounded border p-1 text-sm">
-                  <option value="">— Chưa phân công —</option>
-                  {staff?.map((s) => (
-                    <option key={s.user_id} value={s.user_id}>
-                      {s.profiles?.full_name ?? s.user_id.slice(0, 8)} ({s.role})
-                    </option>
-                  ))}
-                </select>
-                <button className="rounded bg-neutral-900 px-3 py-1 text-sm text-white">Lưu</button>
-              </form>
-            </li>
-          )
-        })}
-      </ul>
-    </main>
+    </div>
   )
 }

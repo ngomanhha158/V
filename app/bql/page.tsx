@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { BuildingForm } from './building-form'
+import { Card, CardHead, Hop, PageHead, Stat, Trong } from '@/components/ui'
+import { IcToaNha } from '@/components/icons'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,42 +26,61 @@ export default async function Bql() {
   const unitCount = new Map<string, number>()
   for (const u of units ?? []) unitCount.set(u.building_id, (unitCount.get(u.building_id) ?? 0) + 1)
 
+  const tongCan = units?.length ?? 0
+
   return (
-    <main className="space-y-5">
-      <h1 className="text-2xl font-semibold">Quản lý tòa nhà</h1>
-      <p className="text-sm opacity-70">{project.name}</p>
+    <div className="space-y-5">
+      <PageHead title="Quản lý tòa nhà" sub={project.name} />
 
-      <BuildingForm />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Stat nhan="Số tòa" so={buildings?.length ?? 0} />
+        <Stat nhan="Tổng căn hộ" so={tongCan} />
+        <Stat
+          nhan="Trung bình mỗi tòa"
+          so={buildings?.length ? Math.round(tongCan / buildings.length) : 0}
+          phu="căn"
+        />
+      </div>
 
-      <section className="space-y-2">
-        <h2 className="font-medium">Danh sách tòa</h2>
-        {error && (
-          <p className="rounded bg-red-100 p-3 text-sm text-red-900">
-            Không đọc được danh sách tòa: {error.message}
-          </p>
+      <Card>
+        <CardHead title="Thêm tòa mới" sub="Tạo tòa trước, rồi mới import căn hộ vào" />
+        <div className="p-4"><BuildingForm /></div>
+      </Card>
+
+      <Card>
+        <CardHead
+          title="Danh sách tòa"
+          right={<span className="text-[0.8125rem] text-faint">{buildings?.length ?? 0}</span>}
+        />
+        {error ? (
+          <div className="p-4">
+            <Hop tone="xau" title="Không đọc được danh sách tòa">{error.message}</Hop>
+          </div>
+        ) : !buildings?.length ? (
+          <div className="p-4">
+            <Trong title="Chưa có tòa nào">
+              Tạo tòa ở khối bên trên trước khi import danh sách căn hộ.
+            </Trong>
+          </div>
+        ) : (
+          <ul className="divide-y divide-line">
+            {buildings.map((b) => (
+              <li key={b.id} className="flex items-center gap-3 px-4 py-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-sunken text-faint">
+                  <IcToaNha />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-ink">{b.code} · {b.name}</div>
+                  <div className="text-[0.8125rem] text-muted">
+                    {b.floor_count ? `${b.floor_count} tầng · ` : ''}
+                    {unitCount.get(b.id) ?? 0} căn hộ
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
-        {!error && !buildings?.length && (
-          <p className="text-sm opacity-70">Chưa có tòa nào. Tạo tòa trước khi import căn hộ.</p>
-        )}
-        <ul className="space-y-2">
-          {buildings?.map((b) => (
-            <li key={b.id} className="rounded border p-3">
-              <div className="font-medium">{b.code} · {b.name}</div>
-              <div className="text-sm opacity-70">
-                {b.floor_count ? `${b.floor_count} tầng · ` : ''}
-                {unitCount.get(b.id) ?? 0} căn hộ
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <nav className="flex flex-wrap gap-4 underline">
-        <Link href="/bql/import">Import danh sách căn hộ từ Excel →</Link>
-        <Link href="/bql/tickets">Điều phối yêu cầu →</Link>
-        <Link href="/bql/billing">Hóa đơn →</Link>
-        <Link href="/bql/cong-no">Công nợ →</Link>
-      </nav>
-    </main>
+      </Card>
+    </div>
   )
 }

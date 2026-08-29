@@ -2,6 +2,9 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { RatingForm } from './rating-form'
+import { Card, CardHead, Hop, PageHead, Pill, Trong, cx } from '@/components/ui'
+import { IcTrai } from '@/components/icons'
+import { Sao, TT, UU } from '../page'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,85 +55,165 @@ export default async function TicketDetail({ params }: { params: Promise<{ id: s
     ? await supabase.storage.from('ticket-photos').createSignedUrls(photos, 3600)
     : { data: null }
 
+  const tt = TT[ticket.status] ?? { nhan: ticket.status, tone: 'trung' as const }
+
   return (
-    <main className="space-y-5">
-      <Link href="/tickets" className="text-sm underline">← Yêu cầu của tôi</Link>
+    <div className="space-y-5">
+      <Link
+        href="/tickets"
+        className="inline-flex items-center gap-1 text-[0.8125rem] font-medium text-muted hover:text-ink"
+      >
+        <IcTrai width={16} height={16} /> Yêu cầu của tôi
+      </Link>
 
-      <div>
-        <h1 className="text-2xl font-semibold">{ticket.title}</h1>
-        <p className="text-sm opacity-70">
-          {ticket.units?.code} · {ticket.units?.buildings?.name} · {ticket.category}
-          {' · '}{STATUS_LABEL[ticket.status] ?? ticket.status}
-        </p>
-      </div>
+      <PageHead
+        title={ticket.title}
+        sub={`${ticket.units?.code} · ${ticket.units?.buildings?.name} · ${ticket.category}`}
+        actions={
+          <div className="flex flex-wrap gap-1.5">
+            <Pill tone={tt.tone}>{tt.nhan}</Pill>
+            {UU[ticket.priority] && UU[ticket.priority].tone !== 'trung' && (
+              <Pill tone={UU[ticket.priority].tone}>{UU[ticket.priority].nhan}</Pill>
+            )}
+          </div>
+        }
+      />
 
-      {ticket.description && <p className="whitespace-pre-wrap">{ticket.description}</p>}
+      {overdue && (
+        <Hop tone="xau" title="Quá hạn xử lý theo SLA">
+          Hạn cam kết là {when(ticket.sla_resolve_due!)}. Hệ thống đã tự đẩy yêu
+          cầu lên trưởng BQL — cron leo thang chạy 5 phút một lần.
+        </Hop>
+      )}
+
+      {ticket.description && (
+        <Card>
+          <CardHead title="Nội dung phản ánh" />
+          <p className="px-4 py-3.5 text-sm leading-relaxed whitespace-pre-wrap text-ink">
+            {ticket.description}
+          </p>
+        </Card>
+      )}
 
       {signed && signed.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="font-medium">Ảnh kèm theo</h2>
-          <div className="flex flex-wrap gap-2">
+        <Card>
+          <CardHead title="Ảnh kèm theo" sub="Đường dẫn có chữ ký, hết hạn sau 1 giờ" />
+          <div className="flex flex-wrap gap-2 p-4">
             {signed.map((s, i) =>
               s.signedUrl ? (
-                <a key={i} href={s.signedUrl} target="_blank" rel="noreferrer">
+                <a
+                  key={i} href={s.signedUrl} target="_blank" rel="noreferrer"
+                  className="overflow-hidden rounded-ctl border border-line transition-opacity hover:opacity-85"
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={s.signedUrl} alt={`Ảnh ${i + 1}`}
-                       className="h-28 w-28 rounded border object-cover" />
+                  <img src={s.signedUrl} alt={`Ảnh ${i + 1}`} className="size-28 object-cover" />
                 </a>
               ) : (
                 // Ký hụt (ảnh bị xóa, hoặc hết quyền) — nói ra thay vì hiện ô vỡ.
-                <span key={i} className="flex h-28 w-28 items-center justify-center rounded border p-2 text-center text-xs opacity-70">
+                <span
+                  key={i}
+                  className="grid size-28 place-items-center rounded-ctl border border-dashed border-line-firm p-2 text-center text-[0.75rem] text-faint"
+                >
                   Không mở được ảnh {i + 1}
                 </span>
               ),
             )}
           </div>
-        </section>
+        </Card>
       )}
 
-      <section className="rounded border p-3 text-sm">
-        <div className="font-medium">Hạn xử lý</div>
-        {ticket.sla_resolve_due ? (
-          <p className={overdue ? 'text-red-700' : ''}>
-            {when(ticket.sla_resolve_due)}
-            {overdue && ' — đã quá hạn'}
-            {ticket.resolved_at && ` · hoàn thành ${when(ticket.resolved_at)}`}
-          </p>
-        ) : (
-          // Danh mục không có trong sla_policies -> hạn NULL. Ticket vẫn hợp lệ,
-          // chỉ là cron escalate bỏ qua nên không có cảnh báo tự động.
-          <p className="opacity-70">Danh mục này chưa có hạn SLA nên không có cảnh báo tự động.</p>
-        )}
-      </section>
+      <Card>
+        <CardHead title="Cam kết thời gian (SLA)" />
+        <div className="px-4 py-3.5 text-sm">
+          {ticket.sla_resolve_due ? (
+            <>
+              <div className="flex items-baseline justify-between gap-4 py-1">
+                <span className="text-muted">Hạn hoàn thành</span>
+                <span className={cx('num font-medium', overdue ? 'text-bad' : 'text-ink')}>
+                  {when(ticket.sla_resolve_due)}
+                </span>
+              </div>
+              {ticket.resolved_at && (
+                <div className="flex items-baseline justify-between gap-4 py-1">
+                  <span className="text-muted">Hoàn thành lúc</span>
+                  <span className="num font-medium text-ok">{when(ticket.resolved_at)}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            // Danh mục không có trong sla_policies -> hạn NULL. Ticket vẫn hợp lệ,
+            // chỉ là cron escalate bỏ qua nên không có cảnh báo tự động.
+            <p className="text-muted">
+              Danh mục này chưa có hạn SLA nên không có cảnh báo tự động.
+            </p>
+          )}
+        </div>
+      </Card>
 
       {(ticket.status === 'resolved' || ticket.status === 'closed') && (
         ticket.rating
           ? (
-            <section className="rounded border p-3 text-sm">
-              <div className="font-medium">Bạn đã đánh giá {ticket.rating}/5 sao</div>
-              {ticket.rating_note && <p className="mt-1 opacity-70">{ticket.rating_note}</p>}
-            </section>
+            <Card>
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+                <span className="text-sm text-muted">Bạn đã đánh giá</span>
+                <Sao n={ticket.rating} />
+              </div>
+              {ticket.rating_note && (
+                <p className="border-t border-line px-4 py-3 text-[0.8125rem] text-muted">
+                  {ticket.rating_note}
+                </p>
+              )}
+            </Card>
           )
           // Chỉ người trong căn mới gửi được; rate_ticket từ chối người ngoài.
-          : isMember && <RatingForm ticketId={ticket.id} />
+          : isMember && (
+            <Card>
+              <CardHead
+                title="Đánh giá chất lượng xử lý"
+                sub="Điểm này vào KPI của ban quản trị, không phải để cho vui"
+              />
+              <div className="p-4"><RatingForm ticketId={ticket.id} /></div>
+            </Card>
+          )
       )}
 
-      <section className="space-y-2">
-        <h2 className="font-medium">Diễn biến</h2>
-        <ol className="space-y-2">
-          {events?.map((e) => (
-            <li key={e.id} className="rounded border p-3 text-sm">
-              <div className="font-medium">{EVENT_LABEL[e.event_type] ?? e.event_type}</div>
-              <div className="opacity-70">
-                {e.from_value && e.to_value && `${STATUS_LABEL[e.from_value] ?? e.from_value} → ${STATUS_LABEL[e.to_value] ?? e.to_value} · `}
-                {when(e.created_at)}
-              </div>
-              {e.note && <div className="mt-1">{e.note}</div>}
-            </li>
-          ))}
-          {!events?.length && <li className="text-sm opacity-70">Chưa có diễn biến nào.</li>}
-        </ol>
-      </section>
-    </main>
+      <Card>
+        <CardHead title="Diễn biến" sub="Nhật ký này bất biến — không ai sửa được sau khi ghi" />
+        {!events?.length ? (
+          <div className="p-4"><Trong title="Chưa có diễn biến nào" /></div>
+        ) : (
+          <ol className="px-4 py-4">
+            {events.map((e, i) => {
+              const cuoi = i === events.length - 1
+              return (
+                <li key={e.id} className="relative flex gap-3 pb-4 last:pb-0">
+                  {!cuoi && <span className="absolute top-4 bottom-0 left-[5px] w-px bg-line" />}
+                  <span
+                    className={cx(
+                      'relative mt-1.5 size-2.5 shrink-0 rounded-full ring-4 ring-surface',
+                      e.event_type === 'escalated' ? 'bg-bad' : cuoi ? 'bg-brand' : 'bg-line-firm',
+                    )}
+                  />
+                  <div className="-mt-0.5 min-w-0 flex-1">
+                    <div className="text-sm font-medium text-ink">
+                      {EVENT_LABEL[e.event_type] ?? e.event_type}
+                    </div>
+                    {e.from_value && e.to_value && (
+                      <div className="mt-0.5 text-[0.8125rem] text-muted">
+                        {STATUS_LABEL[e.from_value] ?? e.from_value}
+                        {' → '}
+                        {STATUS_LABEL[e.to_value] ?? e.to_value}
+                      </div>
+                    )}
+                    {e.note && <div className="mt-0.5 text-[0.8125rem] text-muted">{e.note}</div>}
+                    <div className="mt-0.5 text-[0.75rem] text-faint">{when(e.created_at)}</div>
+                  </div>
+                </li>
+              )
+            })}
+          </ol>
+        )}
+      </Card>
+    </div>
   )
 }
