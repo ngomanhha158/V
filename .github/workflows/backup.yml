@@ -1,0 +1,90 @@
+name: backup-db
+
+# Gói Free của Supabase KHÔNG có backup tự động — tài liệu của họ nói rõ chỉ
+# Pro/Team/Enterprise mới được sao lưu hằng ngày, còn free tier thì "tự dump và
+# giữ bản sao ở nơi khác". Đây chính là cái đó.
+#
+# Bản dump chứa DỮ LIỆU CÁ NHÂN THẬT: họ tên, số điện thoại, email, CCCD của cư
+# dân, cùng toàn bộ hóa đơn và bản ghi thanh toán. Vì vậy:
+#   - KHÔNG commit vào git. Nó nằm ở artifact của workflow, hết hạn tự xóa.
+#   - Ai có quyền đọc repo là tải được artifact. Giữ repo riêng tư.
+
+on:
+  schedule:
+    - cron: '30 18 * * *'      # 01:30 giờ VN — sau cron nhắc nợ, trước giờ làm việc
+  workflow_dispatch:            # chạy tay khi cần bản dump ngay
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kiểm secret trước khi làm gì khác
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then
+            echo "::error::Thiếu secret SUPABASE_DB_URL."
+            echo "Lấy ở Supabase Dashboard > Connect > Session pooler (cổng 5432)."
+            echo "PHẢI là Session pooler, KHÔNG phải Direct connection: direct chỉ có"
+            echo "IPv6 trên gói Free, mà runner của GitHub chỉ chạy IPv4 nên sẽ không nối được."
+            exit 1
+          fi
+
+      # pg_dump phải BẰNG HOẶC MỚI HƠN server, nếu không nó từ chối chạy.
+      # Runner mặc định chỉ có client 16, server Supabase là 17 -> phải thêm kho PGDG.
+      - name: Cài postgresql-client 17
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          pg_dump --version
+
+      - name: Dump
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          TEN="vbuilding-$(date -u +%Y%m%d-%H%M).dump"
+          echo "TEN=$TEN" >> "$GITHUB_ENV"
+
+          # --format=custom: nén sẵn và khôi phục chọn lọc được bằng pg_restore.
+          # --no-owner --no-privileges: khôi phục sang project khác không vấp
+          # chuyện role không tồn tại — mà khôi phục sang project khác chính là
+          # tình huống cần backup nhất.
+          pg_dump "$DB_URL" \
+            --format=custom --compress=9 \
+            --no-owner --no-privileges \
+            --schema=public --schema=storage \
+            --file="$TEN"
+
+      # Dump rỗng vẫn là một file, vẫn upload thành công, và ba tháng sau mới
+      # phát hiện ra là suốt thời gian đó không có backup nào cả. Đếm số bảng
+      # đọc được từ chính bản dump để biết nó có thật sự chứa gì không.
+      - name: Kiểm bản dump có nội dung
+        run: |
+          set -euo pipefail
+          KICH_THUOC=$(stat -c%s "$TEN")
+          SO_BANG=$(pg_restore --list "$TEN" | grep -c 'TABLE DATA' || true)
+          echo "Kích thước: $KICH_THUOC bytes, $SO_BANG bảng có dữ liệu"
+          if [ "$KICH_THUOC" -lt 2000 ]; then
+            echo "::error::Bản dump chỉ $KICH_THUOC bytes — gần như chắc chắn hỏng."
+            exit 1
+          fi
+          if [ "$SO_BANG" -lt 10 ]; then
+            echo "::error::Chỉ thấy $SO_BANG bảng trong bản dump, schema có 18 bảng."
+            echo "Nhiều khả năng dump nhầm database hoặc thiếu quyền."
+            exit 1
+          fi
+
+      - name: Lưu
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.TEN }}
+          path: ${{ env.TEN }}
+          retention-days: 90        # mức tối đa của GitHub
+          if-no-files-found: error

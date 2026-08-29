@@ -1,13 +1,15 @@
 # Go-live
 
-Trạng thái đo trên project Supabase `abobwfohmyukuyxmtwgp` ngày 29/08/2026.
+Trạng thái đo trên project Supabase `upsfjlfonphyazbiwtov` (Singapore) ngày 29/08/2026.
 Không phải kế hoạch — là những gì đã kiểm và những gì còn thiếu.
 
 ## Đã sẵn sàng
 
 | Hạng mục | Trạng thái |
 |---|---|
-| Schema + RLS | 19 migration đã áp. Advisor bảo mật: **0 lỗi ERROR** |
+| Database | Project **Singapore** (`ap-southeast-1`), cùng vùng với Railway |
+| Schema + RLS | 4 migration đã áp. Advisor bảo mật: **0 lỗi ERROR** |
+| Backup | GitHub Actions dump hằng ngày (gói Free không có backup tự động) |
 | Job nền | 3 job pg_cron đang chạy, lần chạy gần nhất `succeeded` |
 | Lưu trữ ảnh | bucket `ticket-photos` riêng tư, 2 policy |
 | Quyền `anon` | **Không có bảng nào** — khóa công khai không đọc được gì |
@@ -90,11 +92,32 @@ Thứ tự bắt buộc — không đảo được:
 1. Deploy xong và đặt Site URL (mục 1 và 2 ở trên)
 2. Người sẽ làm BQL **tự đăng nhập một lần** (để `auth.users` và `profiles`
    có bản ghi của họ)
-3. Điền `v_email` trong `bootstrap_bql.sql` bằng email của họ rồi chạy file đó
+3. Điền `v_email` (và `v_du_an` nếu DB còn trống) trong `bootstrap_bql.sql`
+   rồi chạy file đó
 
 `bootstrap_bql.sql` cố ý chạy bằng quyền `postgres`: `staff_assignments`
 không cấp quyền ghi cho ai, vì tự ghi được bảng đó là tự phong mình làm BQL
 và vượt luôn RLS của toàn bộ ticket/hóa đơn.
+
+### 4b. Backup — đã dựng, cần anh thêm 1 secret
+
+`.github/workflows/backup.yml` dump DB hằng ngày lúc 01:30 giờ VN và lưu thành
+artifact của workflow (giữ 90 ngày). Cần **một** secret trong repo:
+
+- Tên: `SUPABASE_DB_URL`
+- Lấy ở Supabase Dashboard → **Connect** → **Session pooler** (cổng 5432)
+
+**Phải là Session pooler, không phải Direct connection.** Direct chỉ có IPv6
+trên gói Free, mà runner của GitHub chỉ chạy IPv4 — dùng direct là job không
+bao giờ nối được.
+
+Bản dump chứa **dữ liệu cá nhân thật**: họ tên, SĐT, email, CCCD cư dân, toàn
+bộ hóa đơn và thanh toán. Nó không vào git (chỉ là artifact), nhưng ai đọc
+được repo là tải được — giữ repo riêng tư.
+
+Job tự kiểm bản dump có nội dung thật (đếm số bảng có dữ liệu) rồi mới lưu.
+Không có bước đó thì một bản dump rỗng vẫn upload thành công và ba tháng sau
+mới phát hiện suốt thời gian đó không có backup nào.
 
 ### 4. Dữ liệu trên DB đang là dữ liệu MẪU
 
@@ -103,8 +126,12 @@ sinh ra. Chính file đó ghi "KHÔNG chạy trên production" nhưng đã lỡ 
 
 Cư dân thật đăng nhập vào mà thấy 24 căn ma thì hỏng ngay ấn tượng đầu.
 
-Cần: chạy `reset_demo_data.sql` (có ba chốt an toàn, từ chối chạy nếu đã có
-tài khoản / thanh toán / hóa đơn đã phát hành), rồi:
+DB Singapore mới **hoàn toàn trống** — không chạy `seed.sql`, nên không có dữ
+liệu mẫu nào. `reset_demo_data.sql` chỉ cần cho project Mumbai cũ, nếu anh muốn
+dọn trước khi xóa nó.
+
+Trên DB mới, `bootstrap_bql.sql` **tự tạo dự án** nếu chưa có — điền `v_du_an`
+bằng tên tòa thật. Sau đó:
 
 1. Tạo tòa thật ở màn `/bql`
 2. Import căn hộ thật từ Excel ở `/bql/import` — cột bắt buộc: Tòa, Mã căn, Tầng
@@ -132,8 +159,6 @@ chiếu sao kê và nhập tay. Với 24 căn thì chịu được; vài trăm c
 [anh] người làm BQL đăng nhập một lần bằng email
         ↓
 [anh] đưa email đó  →  [em] chạy bootstrap_bql.sql
-        ↓
-[em] chạy reset_demo_data.sql xóa dữ liệu mẫu
         ↓
 [anh] đưa danh sách căn hộ thật (Excel) + mức phí thật + số tài khoản nhận tiền
         ↓

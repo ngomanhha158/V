@@ -18,6 +18,10 @@ declare
   v_email   text := 'ten@example.com';     -- << SỬA: email người làm BQL (đang dùng email OTP)
   v_phone   text := null;                  -- << hoặc SĐT dạng E.164, khi đã chuyển sang SMS
   v_role    staff_role := 'bql_manager';   -- bql_manager | bql_staff | technician | security | bqt
+  -- Trên DB mới tinh chưa có dự án nào. Điền tên tòa thật vào đây thì script tự
+  -- tạo; đã có dự án rồi thì bỏ qua và dùng cái đang có.
+  v_du_an   text := 'Tên khu dân cư';    -- << SỬA nếu DB còn trống
+  v_dia_chi text := null;                 -- << địa chỉ, không bắt buộc
   v_project uuid;
   v_user    uuid;
   v_name    text;
@@ -29,7 +33,12 @@ begin
 
   select id into v_project from projects order by created_at limit 1;
   if v_project is null then
-    raise exception 'Chua co du an nao trong bang projects. Tao du an truoc.';
+    if v_du_an is null or trim(v_du_an) = '' or v_du_an = 'Tên khu dân cư' then
+      raise exception 'DB chua co du an nao. Sua v_du_an thanh ten toa nha that roi chay lai.';
+    end if;
+    insert into projects (name, address) values (trim(v_du_an), v_dia_chi)
+      returning id into v_project;
+    raise notice 'Da tao du an "%"', trim(v_du_an);
   end if;
 
   if v_email is not null then
