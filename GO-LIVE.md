@@ -22,11 +22,21 @@ Ba job nền và giờ chạy (giờ VN):
 
 ## Chưa go-live được — và vì sao
 
-### 1. Chưa có nơi chạy
+### 1. Nơi chạy — Railway  ✔ đã cấu hình
 
-Repo không có cấu hình deploy nào. App mới chỉ chạy trên máy dev.
+`railway.json` đã có trong repo. Railway là đường deploy Node.js chính thức
+được Next.js 16 liệt kê trong tài liệu, và anh đã dùng Railway cho dự án khác
+nên không phải mở thêm nhà cung cấp.
 
-Cần: chọn nơi host (Vercel là hợp nhất với Next.js), rồi đặt 5 biến môi trường:
+- Build `npm ci && npm run build`, chạy `npm run start` (Next tự nghe `$PORT`)
+- Health check `/api/health` — cố ý KHÔNG chạm Supabase, vì health check trả
+  lời "tiến trình còn sống không" chứ không phải "Supabase còn sống không".
+  Gọi DB trong đó thì một sự cố bên Supabase sẽ làm Railway giết container và
+  chặn mọi lần deploy sau.
+- **Chọn vùng Southeast Asia (Singapore)** khi tạo service. Railway chỉ có 4
+  vùng: US West, US East, EU West, Singapore — Singapore gần VN nhất.
+
+Cần đặt 6 biến môi trường:
 
 ```
 NEXT_PUBLIC_SUPABASE_URL
@@ -39,6 +49,11 @@ VBUILDING_BANK_NAME                # tên chủ tài khoản, in trên màn hóa
 
 Ba biến ngân hàng thiếu thì hóa đơn vẫn xem được, chỉ là không có mã QR và
 cư dân phải hỏi BQL số tài khoản.
+
+**Lưu ý về biến `NEXT_PUBLIC_`**: Next nhúng chúng vào bundle JavaScript lúc
+`next build`, không đọc lúc chạy. Nên đổi `NEXT_PUBLIC_VBUILDING_AUTH` từ
+email sang sms là phải **build lại**, không chỉ restart. Railway đổi biến thì
+tự deploy lại nên vẫn đúng một thao tác.
 
 ### 2. Đăng nhập — đang tạm dùng email OTP  ✔ đã làm
 

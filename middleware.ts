@@ -32,7 +32,10 @@ export async function middleware(request: NextRequest) {
   // /auth/confirm là đích của link trong email đăng nhập. Nó đến lúc người dùng
   // CHƯA có phiên — đó là cả mục đích của nó. Không mở đường ở đây thì link
   // email bị đá về /login và không ai đăng nhập được bằng link bao giờ.
-  const congMo = path === '/login' || path.startsWith('/auth/')
+  // /api/health phải đi qua TRƯỚC vòng kiểm đăng nhập: Railway gọi nó không
+  // kèm cookie, bị đá về /login thì health check trượt và deploy không bao giờ
+  // xanh.
+  const congMo = path === '/login' || path.startsWith('/auth/') || path === '/api/health'
   if (!user && !congMo) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
