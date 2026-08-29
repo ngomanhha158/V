@@ -23,6 +23,8 @@ declare
   u_stranger uuid := '44444444-4444-4444-4444-444444444444';
   u_thu_hoi  uuid := '44444444-4444-4444-4444-444444444440';
   u_cho_duyet uuid := '44444444-4444-4444-4444-444444444441';
+  v_unit2 uuid; v_bld2 uuid; n_ann int;
+  p_khac uuid; b_khac uuid; u_khac uuid;
   u_bql      uuid := '55555555-5555-5555-5555-555555555550';
   n int;
 begin
@@ -50,6 +52,35 @@ begin
     -- Mới xin gia nhập, BQL chưa duyệt. 'pending' chưa phải là quyền.
     (v_unit, u_cho_duyet,'tenant', 'pending', current_date - 1, null, true);
 
+  -- Tòa thứ hai + căn ở tầng khác: không có hai thứ này thì mọi thông báo đều
+  -- trúng đích một cách tình cờ và test không chứng minh được gì.
+  insert into buildings (project_id, code, name) values (v_project,'P4','Park 4') returning id into v_bld2;
+  insert into units (building_id, code, floor_no) values (v_bld2,'P4-05.01',5) returning id into v_unit2;
+
+  -- Dự án KHÁC. Nếu thiếu, mọi thông báo trong test đều cùng dự án nên điều
+  -- kiện khóa dự án không bao giờ được kiểm — bỏ nó đi test vẫn xanh, mà thực
+  -- tế là cư dân khu này đọc được thông báo của khu kia.
+  insert into projects (name) values ('Khu khac') returning id into p_khac;
+  insert into buildings (project_id, code, name) values (p_khac,'X1','Toa X1') returning id into b_khac;
+  insert into units (building_id, code, floor_no) values (b_khac,'X1-12.05',12) returning id into u_khac;
+
+  insert into announcements (project_id, building_id, floor_no, unit_id, title, body, author_id, published_at) values
+    -- Toàn dự án KHÁC: cùng số tầng 12, cùng mã căn, chỉ khác dự án. Nhắm đúng
+    -- vào kiểu lỗi so tầng/mã mà quên so dự án.
+    (p_khac, null, null, null, 'Khu khac toan du an', 'x', u_bql, now() - interval '1 hour'),
+    (p_khac, null, 12,   null, 'Khu khac tang 12',    'x', u_bql, now() - interval '1 hour'),
+    (v_project, null,      null, null,    'Toan du an',        'x', u_bql, now() - interval '1 hour'),
+    (v_project, v_building,null, null,    'Rieng toa P3',      'x', u_bql, now() - interval '1 hour'),
+    (v_project, v_building,12,   null,    'Rieng tang 12 P3',  'x', u_bql, now() - interval '1 hour'),
+    (v_project, null,      null, v_unit,  'Rieng can 12.05',   'x', u_bql, now() - interval '1 hour'),
+    -- Nhắm sang tòa/căn KHÁC: chủ hộ P3-12.05 không được thấy.
+    (v_project, v_bld2,    null, null,    'Rieng toa P4',      'x', u_bql, now() - interval '1 hour'),
+    (v_project, v_building,7,    null,    'Rieng tang 7 P3',   'x', u_bql, now() - interval '1 hour'),
+    (v_project, null,      null, v_unit2, 'Rieng can P4-05.01','x', u_bql, now() - interval '1 hour'),
+    -- Chưa phát hành và hẹn giờ tương lai: bản nháp của BQL, cư dân chưa được thấy.
+    (v_project, null,      null, null,    'Con nhap',          'x', u_bql, null),
+    (v_project, null,      null, null,    'Hen gio mai',       'x', u_bql, now() + interval '1 day');
+
   insert into invoices (unit_id, project_id, period, total_amount, due_date, status)
     values (v_unit, v_project, date_trunc('month', current_date), 1500000, current_date + 10, 'issued')
     returning id into v_invoice;
@@ -57,12 +88,19 @@ begin
   insert into invoice_lines (invoice_id, description, quantity, unit_price, amount)
     values (v_invoice, 'Phi quan ly', 1, 1500000, 1500000);
 
+  -- Gói tin ngân hàng thật: có tên và số tài khoản người chuyển.
+  insert into payments (invoice_id, unit_id, amount, bank_ref, raw_payload)
+    values (v_invoice, v_unit, 500000, 'FT99001',
+            '{"nguoi_chuyen":"NGUYEN VAN A","stk_nguon":"0011002233"}'::jsonb);
+
   -- Thông báo của người lạ: dùng làm mồi, chủ hộ KHÔNG được thấy dòng này.
   insert into notifications (user_id, kind, title) values
     (u_owner,    'invoice', 'Hoa don thang nay'),
     (u_stranger, 'invoice', 'Hoa don cua nguoi khac');
 
   -- ── bật RLS thật ──
+  execute 'alter table announcements force row level security';
+  execute 'alter table payments force row level security';
   execute 'alter table invoices force row level security';
   execute 'alter table unit_memberships force row level security';
   execute 'alter table notifications force row level security';
@@ -75,6 +113,9 @@ begin
   execute 'grant usage on schema public to vb_rls_test';
   execute 'grant select on invoices to vb_rls_test';
   execute 'grant select on notifications, invoice_lines to vb_rls_test';
+  execute 'grant select on announcements to vb_rls_test';
+  execute 'grant select on payments to vb_rls_test';
+  execute 'grant execute on function announcement_targets_me(uuid, uuid, int, uuid) to vb_rls_test';
   execute 'grant select on profiles to vb_rls_test';
   execute 'grant select, insert on units to vb_rls_test';
   execute 'grant select, insert, delete on unit_vehicles to vb_rls_test';
@@ -106,6 +147,35 @@ begin
   perform set_config('test.uid', u_cho_duyet::text, true);
   select count(*) into n from invoices where unit_id = v_unit;
   if n <> 0 then raise exception 'FAIL 3c: don cho duyet da doc duoc hoa don'; end if;
+
+  -- 3d. Thông báo nhắm đối tượng. Chủ hộ P3-12.05 phải thấy ĐÚNG 4 bản:
+  --     toàn dự án, riêng tòa P3, riêng tầng 12 P3, riêng căn mình.
+  --     Không thấy: tòa P4, tầng 7, căn P4-05.01, bản nháp, bản hẹn giờ mai.
+  perform set_config('test.uid', u_owner::text, true);
+  select count(*) into n_ann from announcements;
+  if n_ann <> 4 then
+    raise exception 'FAIL 3d: chu ho thay % thong bao, phai thay dung 4', n_ann;
+  end if;
+  -- Đếm đúng nhưng trúng nhầm bản thì vẫn hỏng, nên soi thẳng tiêu đề.
+  select count(*) into n_ann from announcements
+   where title in ('Rieng toa P4','Rieng tang 7 P3','Rieng can P4-05.01','Con nhap','Hen gio mai',
+                   'Khu khac toan du an','Khu khac tang 12');
+  if n_ann <> 0 then
+    raise exception 'FAIL 3e: lo % thong bao khong danh cho chu ho nay', n_ann;
+  end if;
+
+  -- 3f. Người lạ (không có căn nào) không thấy thông báo nào, kể cả bản toàn dự án
+  perform set_config('test.uid', u_stranger::text, true);
+  select count(*) into n_ann from announcements;
+  if n_ann <> 0 then raise exception 'FAIL 3f: nguoi la doc duoc % thong bao', n_ann; end if;
+
+  -- 3g. Chủ hộ KHÔNG đọc được bảng payments, dù đó là thanh toán căn mình.
+  --     raw_payload có tên và số tài khoản người chuyển; RLS không lọc theo cột
+  --     nên mở bảng này là mở luôn dữ liệu ngân hàng. Số đã trả cư dân xem ở
+  --     invoices.paid_amount là đủ.
+  perform set_config('test.uid', u_owner::text, true);
+  select count(*) into n from payments;
+  if n <> 0 then raise exception 'FAIL 3g: chu ho doc duoc % dong payments', n; end if;
 
   -- 4. Người lạ không thấy gì
   perform set_config('test.uid', u_stranger::text, true);

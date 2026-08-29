@@ -80,6 +80,7 @@ grant execute on function is_unit_manager(uuid)  to authenticated;
 grant execute on function can_see_profile(uuid)  to authenticated;
 grant execute on function building_project(uuid) to authenticated;
 grant execute on function unit_project(uuid)     to authenticated;
+grant execute on function announcement_targets_me(uuid, uuid, int, uuid) to authenticated;
 
 -- RPC app gọi thẳng. Security invoker nên RLS vẫn là chốt chặn.
 grant execute on function create_ticket(uuid, text, ticket_priority, text, text, text[]) to authenticated;
@@ -105,3 +106,10 @@ alter table unit_pets        force row level security;
 alter table ticket_events    force row level security;
 alter table staff_assignments force row level security;
 alter table meter_readings   force row level security;
+-- Bốn bảng dữ liệu dùng chung + bảng tiền. FORCE hiện chưa đổi gì vì chủ bảng
+-- là postgres và role đó có BYPASSRLS, nhưng để sót thì ngày đổi chủ bảng sang
+-- role thường là RLS im lặng ngừng áp cho chính chủ.
+alter table buildings        force row level security;
+alter table units            force row level security;
+alter table fee_types        force row level security;
+alter table payments         force row level security;

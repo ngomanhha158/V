@@ -424,6 +424,91 @@ create policy unit_staff_write on units for all
   using (is_staff(building_project(building_id)))
   with check (is_staff(building_project(building_id)));
 
+-- ── Thanh toán: CHỈ BQL đọc, không ai ghi từ phía client ──
+-- payments.raw_payload giữ nguyên gói tin ngân hàng gửi về — trong đó có tên
+-- người chuyển, số tài khoản nguồn, nội dung giao dịch. RLS không lọc được theo
+-- CỘT, nên cho cư dân đọc bảng này là cho họ đọc luôn dữ liệu ngân hàng của
+-- hàng xóm. Cư dân không cần: số đã trả hiện sẵn ở invoices.paid_amount, mà
+-- hóa đơn thì họ đọc được rồi.
+--
+-- Không có policy GHI cho bất kỳ ai. Ghi vào bảng này là việc của webhook đối
+-- soát chạy bằng service_role (có BYPASSRLS) — đường tiền vào không đi qua
+-- trình duyệt của ai cả.
+alter table payments enable row level security;
+create policy payment_staff_read on payments for select
+  using (is_staff(unit_project(unit_id)));
+
+-- ── Dữ liệu dùng chung: ai đăng nhập cũng ĐỌC, chỉ BQL GHI ──
+-- Ba bảng này ai cũng đọc được là ĐÚNG ý đồ: cư dân phải xem được nội quy, biết
+-- BQL cam kết bao lâu, và duyệt danh sách căn để xin gia nhập.
+--
+-- Vậy bật RLS làm gì khi policy là `using (true)`? Vì tắt RLS và "đọc mở" là hai
+-- chuyện khác nhau. Tắt RLS nghĩa là NGÀY NÀO ĐÓ ai cấp thêm quyền ghi cho
+-- authenticated — thêm một dòng grant, hoặc Supabase đổi mặc định — thì cả khu
+-- sửa được nội quy và biểu SLA mà không có gì chặn. Bật RLS khóa cửa đó lại
+-- trước, đúng như đã làm với buildings/units.
+alter table projects enable row level security;
+create policy project_read on projects for select using (true);
+create policy project_staff_write on projects for all
+  using (is_staff(id)) with check (is_staff(id));
+
+alter table sla_policies enable row level security;
+create policy sla_read on sla_policies for select using (true);
+create policy sla_staff_write on sla_policies for all
+  using (is_staff(project_id)) with check (is_staff(project_id));
+
+alter table documents enable row level security;
+create policy document_read on documents for select using (true);
+create policy document_staff_write on documents for all
+  using (is_staff(project_id)) with check (is_staff(project_id));
+
+-- ── Thông báo: bảng DUY NHẤT trong nhóm này có nhắm đối tượng ──
+-- announcements có building_id / floor_no / unit_id để gửi riêng một tòa, một
+-- tầng, hay một căn. Không có RLS thì mấy cột đó chỉ là trang trí: thông báo
+-- "mời anh chị lên làm việc về khoản nợ" gửi riêng căn 10.01 mà cả khu đọc
+-- được. Đó là lộ dữ liệu, không phải phiền toái.
+--
+-- Quy tắc: cột nào để NULL là không giới hạn theo chiều đó. Cả ba cùng NULL =
+-- toàn dự án. Điều kiện dưới đây đọc đúng như vậy — mỗi cột chỉ lọc khi nó có
+-- giá trị.
+-- SECURITY DEFINER, không viết thẳng phép join vào policy: biểu thức policy
+-- chạy dưới quyền NGƯỜI TRUY VẤN, nên join sang units/buildings ngay trong
+-- policy sẽ vỡ thành 'permission denied for table buildings' nếu ngày nào đó
+-- thu hồi quyền đọc buildings. Bọc vào hàm definer là chỗ này tự đứng được,
+-- đúng như current_unit_ids() và unit_project().
+create or replace function announcement_targets_me(
+  p_project uuid, p_building uuid, p_floor int, p_unit uuid
+) returns boolean
+language sql stable security definer set search_path = public as $fn$
+  select exists (
+    select 1
+      from units u
+      join buildings b on b.id = u.building_id
+     where u.id in (select current_unit_ids())
+       and b.project_id = p_project
+       and (p_unit     is null or u.id          = p_unit)
+       and (p_building is null or u.building_id = p_building)
+       and (p_floor    is null or u.floor_no    = p_floor)
+  );
+$fn$;
+
+alter table announcements enable row level security;
+create policy announcement_read on announcements for select
+  using (
+    is_staff(project_id)
+    or (
+      -- Cư dân chỉ thấy bản ĐÃ phát hành. published_at null = bản nháp BQL đang
+      -- soạn; hẹn giờ tương lai thì chưa tới giờ chưa được thấy.
+      published_at is not null and published_at <= now()
+      and announcement_targets_me(project_id, building_id, floor_no, unit_id)
+    )
+  );
+-- Chưa cấp quyền ghi bảng cho authenticated (xem auth_hooks.sql) nên policy này
+-- hiện chưa dùng tới. Để sẵn cho đúng: lúc có màn soạn thông báo thì chỉ cần
+-- thêm grant, không phải nghĩ lại chuyện ai được ghi.
+create policy announcement_staff_write on announcements for all
+  using (is_staff(project_id)) with check (is_staff(project_id));
+
 -- ── Xe và thú cưng: chủ hộ / người được ủy quyền tự quản lý căn mình.
 --    BQL đọc được để đối chiếu đỗ xe sai, chó thả rông — nhưng không sửa hộ.
 alter table unit_vehicles enable row level security;
