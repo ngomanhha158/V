@@ -31,26 +31,39 @@ Cần: chọn nơi host (Vercel là hợp nhất với Next.js), rồi đặt 5 
 ```
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-VBUILDING_BANK_BIN            # BIN NAPAS 6 số, VD Vietcombank 970436
-VBUILDING_BANK_ACCOUNT        # số tài khoản nhận phí
-VBUILDING_BANK_NAME           # tên chủ tài khoản, in trên màn hóa đơn
+NEXT_PUBLIC_VBUILDING_AUTH=email   # 'email' hoặc 'sms'; đang tạm email
+VBUILDING_BANK_BIN                 # BIN NAPAS 6 số, VD Vietcombank 970436
+VBUILDING_BANK_ACCOUNT             # số tài khoản nhận phí
+VBUILDING_BANK_NAME                # tên chủ tài khoản, in trên màn hóa đơn
 ```
 
 Ba biến ngân hàng thiếu thì hóa đơn vẫn xem được, chỉ là không có mã QR và
 cư dân phải hỏi BQL số tài khoản.
 
-### 2. Chưa ai đăng nhập được
+### 2. Đăng nhập — đang tạm dùng email OTP  ✔ đã làm
 
-Màn đăng nhập dùng OTP qua **SMS**. Supabase cần được cắm nhà cung cấp SMS
-thì mới gửi được mã. Chưa cắm thì không ai — kể cả BQL — vào được hệ thống.
+Đã chuyển sang **email OTP**. Supabase gửi email sẵn, không cần nhà cung cấp
+nào. SMS để sau; lúc có thì đổi `NEXT_PUBLIC_VBUILDING_AUTH=sms` rồi deploy
+lại — code đã hỗ trợ sẵn cả hai đường, không phải sửa gì.
 
-Cần chọn một trong hai:
+Còn **hai việc phải làm trong dashboard Supabase**, không làm được từ code:
 
-- **Nhà cung cấp SMS**: Twilio / Vonage, hoặc eSMS / SpeedSMS của VN (rẻ hơn
-  đáng kể cho đầu số nội địa). Phải tự mở tài khoản, rồi đưa khóa để cắm vào
-  Supabase Auth.
-- **Tạm dùng OTP qua email**: Supabase gửi sẵn, không cần nhà cung cấp nào.
-  Đổi màn đăng nhập mất vài dòng. Đi trước được ngay, sau có SMS thì đổi lại.
+**a. Site URL và Redirect URLs** (Authentication → URL Configuration).
+Link trong email trỏ về đây. Đặt Site URL là domain thật sau khi deploy, và
+thêm `<domain>/auth/confirm` vào danh sách Redirect URLs. Thiếu bước này thì
+bấm link trong email sẽ rơi về localhost.
+
+**b. Mẫu email** (Authentication → Email Templates → Magic Link).
+Mẫu mặc định **chỉ có đường link, không có mã 6 số**. Thêm dòng này vào mẫu
+để cư dân gõ mã cho nhanh:
+
+```html
+<p>Mã đăng nhập của bạn: <b>{{ .Token }}</b></p>
+```
+
+Không sửa cũng vẫn đăng nhập được — app có sẵn route `/auth/confirm` xử lý
+đường link, nên bấm link là vào. Sửa mẫu chỉ để có thêm đường gõ mã, tiện hơn
+khi mở email trên máy khác.
 
 ### 3. Chưa có tài khoản BQL
 
@@ -59,10 +72,10 @@ Cần chọn một trong hai:
 
 Thứ tự bắt buộc — không đảo được:
 
-1. Sửa mục 2 ở trên để đăng nhập được
+1. Deploy xong và đặt Site URL (mục 1 và 2 ở trên)
 2. Người sẽ làm BQL **tự đăng nhập một lần** (để `auth.users` và `profiles`
    có bản ghi của họ)
-3. Sửa `v_phone` trong `bootstrap_bql.sql` thành số của họ rồi chạy file đó
+3. Điền `v_email` trong `bootstrap_bql.sql` bằng email của họ rồi chạy file đó
 
 `bootstrap_bql.sql` cố ý chạy bằng quyền `postgres`: `staff_assignments`
 không cấp quyền ghi cho ai, vì tự ghi được bảng đó là tự phong mình làm BQL
@@ -95,25 +108,25 @@ chiếu sao kê và nhập tay. Với 24 căn thì chịu được; vài trăm c
 ## Thứ tự chạy
 
 ```
-[anh] chọn nhà cung cấp SMS (hoặc chốt tạm dùng email OTP)
+[anh] chọn nơi host, tạo project trên đó
         ↓
-[anh] mở tài khoản, đưa khóa  →  [em] cắm vào Supabase Auth
+[em] deploy + cắm biến môi trường
         ↓
-[anh] người làm BQL đăng nhập một lần
+[anh] đặt Site URL + Redirect URL trong Supabase (Authentication → URL Configuration)
         ↓
-[anh] đưa SĐT đó  →  [em] chạy bootstrap_bql.sql
+[anh] người làm BQL đăng nhập một lần bằng email
+        ↓
+[anh] đưa email đó  →  [em] chạy bootstrap_bql.sql
         ↓
 [em] chạy reset_demo_data.sql xóa dữ liệu mẫu
         ↓
 [anh] đưa danh sách căn hộ thật (Excel) + mức phí thật + số tài khoản nhận tiền
         ↓
-[em] deploy, cắm biến môi trường, import dữ liệu
-        ↓
 mở cho một tầng dùng thử trước, rồi mở cả tòa
 ```
 
-Bốn việc đầu đều cần anh làm hoặc quyết. Em không tự mở tài khoản SMS, không
-tự bịa số điện thoại BQL, và không tự đoán mức phí của tòa.
+Em không tự mở tài khoản host, không tự bịa email BQL, và không tự đoán mức
+phí của tòa. Còn lại em làm được hết.
 
 ## Nên mở dần, đừng mở hết một lượt
 

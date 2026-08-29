@@ -1,36 +1,63 @@
 'use client'
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { cachDangNhap } from '@/lib/auth-method'
+import { normalizeEmail, toE164VN } from '@/lib/phone'
 import { Button, Field, Hop, Input } from '@/components/ui'
 import { IcTrai } from '@/components/icons'
 
-export default function Login() {
-  const [phone, setPhone] = useState('')
+const LOI_URL: Record<string, string> = {
+  thieu_ma: 'Link trong email không hợp lệ. Thử gửi lại mã.',
+  het_han: 'Link đã hết hạn hoặc đã dùng rồi. Gửi lại mã mới.',
+}
+
+function LoginForm() {
+  const cach = cachDangNhap()
+  const laEmail = cach === 'email'
+
+  const [danhTinh, setDanhTinh] = useState('')
   const [code, setCode] = useState('')
-  const [sent, setSent] = useState(false)
+  const [daGui, setDaGui] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const router = useRouter()
+  const loiUrl = LOI_URL[useSearchParams().get('loi') ?? '']
 
-  // VN nhập 0912..., Supabase cần E.164 +84912...
-  const e164 = (v: string) => (v.startsWith('0') ? '+84' + v.slice(1) : v)
+  /** Chuẩn hóa trước khi gửi đi. Trả null nghĩa là người dùng gõ sai. */
+  const chuanHoa = () => (laEmail ? normalizeEmail(danhTinh) : toE164VN(danhTinh))
 
-  async function send() {
+  async function gui() {
+    const v = chuanHoa()
+    if (!v) {
+      return setError(laEmail
+        ? 'Địa chỉ email không hợp lệ.'
+        : 'Số điện thoại không hợp lệ. Nhập số di động 10 chữ số, ví dụ 0901234567.')
+    }
     setBusy(true); setError(null)
     // Tạo client trong handler, không ở thân component: lúc prerender không có
     // biến môi trường nên createClient() ở render sẽ làm chết build.
-    const { error } = await createClient().auth.signInWithOtp({ phone: e164(phone) })
+    const { error } = await createClient().auth.signInWithOtp(
+      laEmail
+        // emailRedirectTo: đích của LINK trong email, khớp với app/auth/confirm.
+        // Không đặt thì link trỏ về Site URL và rơi vào trang không xử lý được.
+        ? { email: v, options: { emailRedirectTo: `${location.origin}/auth/confirm` } }
+        : { phone: v },
+    )
     setBusy(false)
     if (error) return setError(error.message)
-    setSent(true)
+    setDaGui(true)
   }
 
-  async function verify() {
+  async function xacNhan() {
+    const v = chuanHoa()
+    if (!v) return
     setBusy(true); setError(null)
-    const { error } = await createClient().auth.verifyOtp({
-      phone: e164(phone), token: code, type: 'sms',
-    })
+    const { error } = await createClient().auth.verifyOtp(
+      laEmail ? { email: v, token: code, type: 'email' }
+              : { phone: v, token: code, type: 'sms' },
+    )
     setBusy(false)
     if (error) return setError(error.message)
     router.replace('/')
@@ -45,27 +72,38 @@ export default function Login() {
           </span>
           <h1 className="text-xl font-semibold text-ink">Đăng nhập VBuilding</h1>
           <p className="mt-1.5 text-[0.8125rem] text-muted">
-            {sent
-              ? `Mã xác thực đã gửi tới ${phone}`
-              : 'Nhập số điện thoại đã đăng ký với ban quản lý'}
+            {daGui
+              ? `Đã gửi mã tới ${danhTinh}`
+              : laEmail
+                ? 'Nhập email đã đăng ký với ban quản lý'
+                : 'Nhập số điện thoại đã đăng ký với ban quản lý'}
           </p>
         </div>
 
         <div className="rounded-card border border-line bg-surface p-5 shadow-card">
           <form
             className="space-y-4"
-            onSubmit={(e) => { e.preventDefault(); sent ? verify() : send() }}
+            onSubmit={(e) => { e.preventDefault(); daGui ? xacNhan() : gui() }}
           >
-            <Field label="Số điện thoại">
+            <Field label={laEmail ? 'Địa chỉ email' : 'Số điện thoại'}>
               <Input
-                inputMode="tel" autoComplete="tel" placeholder="09xx xxx xxx"
-                className="num"
-                value={phone} onChange={(e) => setPhone(e.target.value)} disabled={sent || busy}
+                type={laEmail ? 'email' : 'tel'}
+                inputMode={laEmail ? 'email' : 'tel'}
+                autoComplete={laEmail ? 'email' : 'tel'}
+                placeholder={laEmail ? 'ten@example.com' : '09xx xxx xxx'}
+                className={laEmail ? undefined : 'num'}
+                value={danhTinh} onChange={(e) => setDanhTinh(e.target.value)}
+                disabled={daGui || busy}
               />
             </Field>
 
-            {sent && (
-              <Field label="Mã OTP" hint="Sáu chữ số vừa gửi qua tin nhắn">
+            {daGui && (
+              <Field
+                label="Mã xác thực"
+                hint={laEmail
+                  ? 'Sáu chữ số trong email. Nếu email chỉ có đường link thì bấm thẳng vào link đó.'
+                  : 'Sáu chữ số vừa gửi qua tin nhắn'}
+              >
                 <Input
                   inputMode="numeric" autoComplete="one-time-code" placeholder="••••••"
                   className="num tracking-[0.4em]" autoFocus
@@ -74,32 +112,44 @@ export default function Login() {
               </Field>
             )}
 
-            {error && <Hop tone="xau" title="Không đăng nhập được">{error}</Hop>}
+            {(error || (!daGui && loiUrl)) && (
+              <Hop tone="xau" title="Không đăng nhập được">{error ?? loiUrl}</Hop>
+            )}
 
             <Button
               type="submit" dang="chinh" className="w-full"
-              disabled={busy || (sent ? code.length < 4 : phone.length < 9)}
+              disabled={busy || (daGui ? code.length < 4 : danhTinh.length < 5)}
             >
-              {busy ? 'Đang xử lý…' : sent ? 'Xác nhận' : 'Gửi mã OTP'}
+              {busy ? 'Đang xử lý…' : daGui ? 'Xác nhận' : 'Gửi mã đăng nhập'}
             </Button>
 
-            {sent && !busy && (
+            {daGui && !busy && (
               <button
                 type="button"
-                onClick={() => { setSent(false); setCode(''); setError(null) }}
+                onClick={() => { setDaGui(false); setCode(''); setError(null) }}
                 className="inline-flex w-full items-center justify-center gap-1 text-[0.8125rem] font-medium text-muted hover:text-ink"
               >
-                <IcTrai width={14} height={14} /> Đổi số điện thoại
+                <IcTrai width={14} height={14} />
+                {laEmail ? 'Đổi email' : 'Đổi số điện thoại'}
               </button>
             )}
           </form>
         </div>
 
         <p className="mt-5 text-center text-[0.75rem] leading-relaxed text-faint">
-          Chưa có tài khoản? Số điện thoại phải được ban quản lý đăng ký trước.
-          Liên hệ BQL tòa nhà của bạn.
+          Chưa có tài khoản? {laEmail ? 'Địa chỉ email' : 'Số điện thoại'} phải được
+          ban quản lý đăng ký trước. Liên hệ BQL tòa nhà của bạn.
         </p>
       </div>
     </div>
+  )
+}
+
+export default function Login() {
+  // useSearchParams cần Suspense, nếu không Next từ chối build trang này.
+  return (
+    <Suspense fallback={<div className="min-h-dvh" />}>
+      <LoginForm />
+    </Suspense>
   )
 }

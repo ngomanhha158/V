@@ -29,7 +29,11 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   const path = request.nextUrl.pathname
-  if (!user && path !== '/login') {
+  // /auth/confirm là đích của link trong email đăng nhập. Nó đến lúc người dùng
+  // CHƯA có phiên — đó là cả mục đích của nó. Không mở đường ở đây thì link
+  // email bị đá về /login và không ai đăng nhập được bằng link bao giờ.
+  const congMo = path === '/login' || path.startsWith('/auth/')
+  if (!user && !congMo) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
   return response
