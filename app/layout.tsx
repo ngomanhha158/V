@@ -9,7 +9,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="vi">
-      <body className="mx-auto max-w-lg p-4">{children}</body>
+      {/* Bề rộng do từng nhóm màn tự quyết: cư dân hẹp (điện thoại),
+          BQL rộng (bảng biểu trên máy tính). Ép ở đây thì lớp con không
+          nới ra được nữa. */}
+      <body className="p-4">{children}</body>
     </html>
   )
 }

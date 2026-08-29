@@ -3,6 +3,16 @@ import { NextResponse, type NextRequest } from 'next/server'
 import type { Database } from '@/lib/supabase/database.types'
 
 export async function middleware(request: NextRequest) {
+  // Bản demo thoát ra TRƯỚC khi dựng client Supabase — hai lý do:
+  // 1. /demo cố ý bỏ qua đăng nhập, không đá về /login.
+  // 2. Quan trọng hơn: createServerClient bên dưới đọc biến môi trường bằng
+  //    dấu `!`. Máy chưa cấu hình Supabase thì middleware ném lỗi và CẢ APP
+  //    trắng màn, kể cả trang demo. Thoát sớm ở đây để `npm run dev` xem được
+  //    giao diện mà không cần bất kỳ khóa nào.
+  // An toàn vì app/demo chỉ đọc dữ liệu giả cứng trong lib/demo/data.ts,
+  // không có đường nào ra database thật.
+  if (request.nextUrl.pathname.startsWith('/demo')) return NextResponse.next({ request })
+
   const response = NextResponse.next({ request })
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
