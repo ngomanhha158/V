@@ -30,7 +30,7 @@ export function BqlShell({
   const nav = (
     <>
       <Muc nhan="Vận hành" />
-      <NavDoc href={`${base}/bql`} icon={<IcBieuDo />} chinhXac>Tổng quan</NavDoc>
+      <NavDoc href={`${base}/bql/dashboard`} icon={<IcBieuDo />}>Sức khỏe vận hành</NavDoc>
       <NavDoc href={`${base}/bql/tickets`} icon={<IcYeuCau />}>Điều phối yêu cầu</NavDoc>
 
       <Muc nhan="Truyền thông" />
@@ -41,7 +41,10 @@ export function BqlShell({
       <NavDoc href={`${base}/bql/billing`} icon={<IcHoaDon />}>Hóa đơn</NavDoc>
       <NavDoc href={`${base}/bql/cong-no`} icon={<IcTien />}>Công nợ</NavDoc>
 
+      {/* Tòa nhà và import là việc DỰNG hệ thống, làm vài lần rồi thôi. Để
+          chúng cạnh việc trực ban hằng ngày là bắt người trực lướt qua mỗi lần. */}
       <Muc nhan="Dữ liệu" />
+      <NavDoc href={`${base}/bql`} icon={<IcToaNha />} chinhXac>Tòa nhà & căn hộ</NavDoc>
       <NavDoc href={`${base}/bql/import`} icon={<IcNhap />}>Nhập từ Excel</NavDoc>
       <NavDoc href={base || '/'} icon={<IcNha />} chinhXac>Về màn cư dân</NavDoc>
     </>

@@ -1,7 +1,12 @@
-// SINH TỰ ĐỘNG TỪ DB — KHÔNG SỬA TAY.
-// Sinh lại sau mỗi lần đổi schema:
-//   npx supabase gen types typescript --project-id abobwfohmyukuyxmtwgp > lib/supabase/database.types.ts
+// SINH TỰ ĐỘNG TỪ DB. Sinh lại sau mỗi lần đổi schema:
+//   npx supabase gen types typescript --project-id upsfjlfonphyazbiwtov > lib/supabase/database.types.ts
 // (hoặc qua Supabase MCP: generate_typescript_types)
+//
+// MỘT chỗ sửa tay, phải giữ lại sau mỗi lần sinh lại: bộ sinh khai mọi cột của
+// `returns table` là non-null, kể cả cột chắc chắn null được — avg/percentile
+// trên tập rỗng, hay hàm trả null tường minh. Tin nó thì `x.toFixed()` qua được
+// TypeScript rồi nổ trên trình duyệt của người dùng. Các cột đó được đánh
+// `| null` bằng tay ở đây; xem `bql_debt_report`, `bql_dashboard`.
 
 export type Json =
   | string
@@ -948,6 +953,50 @@ export type Database = {
           ten_lien_he: string | null
           unit_code: string
           unit_id: string
+        }[]
+      }
+      bql_dashboard: {
+        Args: { p_den?: string; p_project: string; p_tu?: string }
+        Returns: {
+          cong_no: number
+          cong_no_qua_han: number
+          da_thu_ky: number
+          dang_mo_hien_tai: number
+          den_ngay: string
+          // Null khi kỳ chưa có yêu cầu nào ngã ngũ / xong / được chấm điểm.
+          diem_hai_long: number | null
+          gio_phan_hoi_trung_vi: number | null
+          gio_xu_ly_p90: number | null
+          gio_xu_ly_trung_binh: number | null
+          gio_xu_ly_trung_vi: number | null
+          phai_thu_ky: number
+          qua_han_hien_tai: number
+          so_can_no: number
+          so_luot_danh_gia: number
+          ticket_chua_ket_luan: number
+          ticket_co_ket_luan: number
+          ticket_dung_sla: number
+          ticket_khong_co_sla: number
+          ticket_tu_choi: number
+          tien_ve_ky: number
+          tong_ticket: number
+          tu_ngay: string
+          ty_le_danh_gia: number | null
+          ty_le_dung_sla: number | null
+        }[]
+      }
+      bql_dashboard_thang: {
+        Args: { p_project: string; p_so_thang?: number }
+        Returns: {
+          da_thu: number
+          gio_xu_ly_trung_vi: number | null
+          phai_thu: number
+          thang: string
+          ticket_co_ket_luan: number
+          ticket_dung_sla: number
+          ticket_moi: number
+          tien_ve: number
+          ty_le_dung_sla: number | null
         }[]
       }
       building_project: { Args: { p_building: string }; Returns: string }

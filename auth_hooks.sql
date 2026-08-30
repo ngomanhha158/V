@@ -94,6 +94,8 @@ grant execute on function bql_generate_invoices(uuid, date) to authenticated;
 grant execute on function bql_issue_invoices(uuid, date)   to authenticated;
 grant execute on function bql_debt_report(uuid)            to authenticated;
 grant execute on function mark_notifications_read(bigint[]) to authenticated;
+grant execute on function bql_dashboard(uuid, date, date)  to authenticated;
+grant execute on function bql_dashboard_thang(uuid, int)   to authenticated;
 
 
 -- Còn lại là trigger function và job nền: không phải RPC endpoint, để nguyên là

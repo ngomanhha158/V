@@ -846,6 +846,276 @@ begin
      order by sum(i.total_amount - i.paid_amount) desc, u.code;
 end $fn$;
 
+-- N25–N26 — dashboard KPI cho BQT. Chỉ đọc, không một nút bấm nào.
+--
+-- Bốn quy ước dưới đây quyết định con số có dùng được hay không, nên viết ra
+-- thay vì để người đọc đoán:
+--
+-- 1. MỘT TICKET CHỈ TÍNH SLA KHI ĐÃ NGÃ NGŨ. Xong rồi thì so resolved_at với
+--    hạn; còn đang mở mà đã quá hạn thì tính TRỄ ngay, không đợi nó đóng. Cách
+--    làm quen thuộc là chỉ lấy ticket đã đóng làm mẫu số — nhưng như thế cái để
+--    treo mãi không bao giờ thành lỗi, và tỷ lệ đẹp dần lên đúng vào lúc dịch
+--    vụ tệ đi. Ticket còn trong hạn thì chưa kết luận: để ngoài cả tử lẫn mẫu.
+-- 2. TICKET BỊ TỪ CHỐI KHÔNG TÍNH SLA, nhưng đếm riêng. Từ chối là lối thoát
+--    hợp lệ (trùng, spam, không thuộc phạm vi) và cũng là chỗ lách dễ nhất:
+--    từ chối hết thì SLA 100%. Đếm ra thì cái lách nhìn thấy được.
+-- 3. DANH MỤC CHƯA CÓ sla_policies -> sla_resolve_due NULL -> không có gì để so.
+--    Đếm riêng thành ticket_khong_co_sla: đó là vùng mù, không phải điểm tuyệt đối.
+-- 4. GIỜ VIỆT NAM. Server chạy UTC; cắt tháng bằng created_at::date thì ticket
+--    báo lúc 6h sáng ngày 1 rơi về tháng trước và không ai phát hiện ra.
+--
+-- Công nợ là ẢNH CHỤP hiện tại, cố tình không theo kỳ: "đang bị nợ bao nhiêu"
+-- không phải câu hỏi về tháng 8, nó là câu hỏi về hôm nay.
+--
+-- SECURITY DEFINER + tự kiểm is_staff: hàm gộp số của cả dự án, không policy
+-- nào lọc hộ được. Quên self-guard là dựng sẵn API dump KPI toàn hệ thống.
+create or replace function bql_dashboard(
+  p_project uuid,
+  p_tu      date default null,
+  p_den     date default null
+)
+returns table (
+  tu_ngay              date,
+  den_ngay             date,
+  -- Ticket trong kỳ (theo ngày TẠO: một ticket không nhảy tháng về sau)
+  tong_ticket          int,
+  ticket_tu_choi       int,
+  ticket_khong_co_sla  int,
+  ticket_co_ket_luan   int,
+  ticket_dung_sla      int,
+  ticket_chua_ket_luan int,
+  ty_le_dung_sla       numeric,
+  gio_phan_hoi_trung_vi numeric,
+  gio_xu_ly_trung_vi   numeric,
+  gio_xu_ly_trung_binh numeric,
+  gio_xu_ly_p90        numeric,
+  diem_hai_long        numeric,
+  so_luot_danh_gia     int,
+  ty_le_danh_gia       numeric,
+  -- Ảnh chụp hiện tại, KHÔNG theo kỳ
+  dang_mo_hien_tai     int,
+  qua_han_hien_tai     int,
+  cong_no              bigint,
+  cong_no_qua_han      bigint,
+  so_can_no            int,
+  -- Tiền trong kỳ
+  phai_thu_ky          bigint,
+  da_thu_ky            bigint,
+  tien_ve_ky           bigint
+)
+language plpgsql stable security definer set search_path = public as $fn$
+declare
+  v_hom_nay date := (now() at time zone 'Asia/Ho_Chi_Minh')::date;
+  v_tu   date;
+  v_den  date;
+  v_tu_ts  timestamptz;
+  v_den_ts timestamptz;
+begin
+  if not is_staff(p_project) then
+    raise exception 'Chi BQL cua du an nay moi xem duoc dashboard' using errcode = '42501';
+  end if;
+
+  v_tu  := coalesce(p_tu, date_trunc('month', v_hom_nay)::date);
+  v_den := coalesce(p_den, v_hom_nay);
+  if v_den < v_tu then
+    raise exception 'Khoang thoi gian nguoc: % den %', v_tu, v_den using errcode = '22007';
+  end if;
+
+  -- Đổi mốc ngày VN sang timestamptz MỘT LẦN, để so sánh dùng được index thay
+  -- vì bọc hàm quanh created_at của từng dòng.
+  v_tu_ts  := (v_tu::timestamp)        at time zone 'Asia/Ho_Chi_Minh';
+  v_den_ts := ((v_den + 1)::timestamp) at time zone 'Asia/Ho_Chi_Minh';
+
+  return query
+  with tk as (
+    select k.status, k.rating,
+           (k.sla_resolve_due is not null) as co_sla,
+           extract(epoch from (k.responded_at - k.created_at)) / 3600.0 as gio_phan_hoi,
+           extract(epoch from (k.resolved_at  - k.created_at)) / 3600.0 as gio_xu_ly,
+           case
+             when k.status = 'rejected' or k.sla_resolve_due is null then null
+             when k.resolved_at is not null then k.resolved_at <= k.sla_resolve_due
+             when k.sla_resolve_due < now() then false
+             else null                       -- còn hạn, chưa ngã ngũ
+           end as dung_han
+      from tickets k
+     where k.project_id = p_project
+       and k.created_at >= v_tu_ts and k.created_at < v_den_ts
+  ),
+  -- Ảnh chụp: mọi ticket còn mở của dự án, bất kể tạo từ bao giờ. Ticket mở từ
+  -- tháng trước vẫn đang làm phiền người ta trong tháng này.
+  mo as (
+    select count(*)::int as dang_mo,
+           count(*) filter (where k.sla_resolve_due < now())::int as qua_han
+      from tickets k
+     where k.project_id = p_project
+       and k.status in ('new','assigned','in_progress')
+  ),
+  no as (
+    select coalesce(sum(i.total_amount - i.paid_amount), 0)::bigint as tong,
+           coalesce(sum(i.total_amount - i.paid_amount)
+                    filter (where i.due_date < v_hom_nay), 0)::bigint as qua_han,
+           count(distinct i.unit_id)::int as so_can
+      from invoices i
+     where i.project_id = p_project
+       and i.status in ('issued','partial')
+       and i.total_amount > i.paid_amount
+  ),
+  -- phai_thu/da_thu bám theo KỲ HÓA ĐƠN: "tháng 8 thu được bao nhiêu phần của
+  -- tháng 8". Hóa đơn nháp chưa phát hành thì chưa ai nợ ai.
+  hd as (
+    select coalesce(sum(i.total_amount), 0)::bigint as phai_thu,
+           coalesce(sum(i.paid_amount),  0)::bigint as da_thu
+      from invoices i
+     where i.project_id = p_project
+       and i.status <> 'draft'
+       and i.period >= date_trunc('month', v_tu)::date
+       and i.period <= v_den
+  ),
+  -- tien_ve bám theo NGÀY TIỀN VÀO, cố ý khác hd.da_thu: tiền nhận trong tháng
+  -- 8 có thể đang trả cho hóa đơn tháng 6. Gộp hai số này lại là cách quen
+  -- thuộc để một dashboard nói dối mà vẫn cộng đúng.
+  pm as (
+    select coalesce(sum(p.amount), 0)::bigint as tien_ve
+      from payments p
+      join units u     on u.id = p.unit_id
+      join buildings b on b.id = u.building_id
+     where b.project_id = p_project
+       and p.paid_at >= v_tu_ts and p.paid_at < v_den_ts
+  ),
+  -- Gom số ticket thành CTE riêng thay vì group by ở câu ngoài: aggregate
+  -- không GROUP BY luôn trả về đúng một dòng kể cả khi tk rỗng. Nối thẳng tk
+  -- vào thì tháng không có ticket nào sẽ ra BẢNG TRỐNG — công nợ, tiền thu
+  -- biến mất theo, và BQT tưởng hệ thống hỏng.
+  tk_agg as (
+    select
+      count(*)::int as tong,
+      count(*) filter (where tk.status = 'rejected')::int as tu_choi,
+      count(*) filter (where tk.status <> 'rejected' and not tk.co_sla)::int as khong_co_sla,
+      count(*) filter (where tk.dung_han is not null)::int as co_ket_luan,
+      count(*) filter (where tk.dung_han)::int as dung_sla,
+      count(*) filter (where tk.status <> 'rejected' and tk.co_sla
+                         and tk.dung_han is null)::int as chua_ket_luan,
+      round(100.0 * count(*) filter (where tk.dung_han)
+                  / nullif(count(*) filter (where tk.dung_han is not null), 0), 1) as ty_le,
+      -- Trung vị làm số chính chứ không phải trung bình: một ticket bị bỏ quên
+      -- qua Tết kéo trung bình đi đâu không biết, còn trung vị vẫn tả đúng cái
+      -- đa số cư dân gặp. Trung bình vẫn trả ra để đối chiếu — hai số lệch
+      -- nhau nhiều chính là dấu hiệu có ticket đang bị treo.
+      round(percentile_cont(0.5) within group (order by tk.gio_phan_hoi)::numeric, 1) as ph_tv,
+      round(percentile_cont(0.5) within group (order by tk.gio_xu_ly)::numeric, 1)   as xl_tv,
+      round(avg(tk.gio_xu_ly)::numeric, 1)                                           as xl_tb,
+      round(percentile_cont(0.9) within group (order by tk.gio_xu_ly)::numeric, 1)   as xl_p90,
+      round(avg(tk.rating)::numeric, 2) as diem,
+      count(tk.rating)::int as so_danh_gia,
+      -- Mẫu số là ticket đã xong: chỉ ticket xong mới có gì để chấm. 4.9 điểm
+      -- từ 3 lượt trên 200 ticket không phải 4.9 điểm.
+      round(100.0 * count(tk.rating)
+                  / nullif(count(*) filter (where tk.status in ('resolved','closed')), 0), 1)
+        as ty_le_danh_gia
+    from tk
+  )
+  select
+    v_tu, v_den,
+    a.tong, a.tu_choi, a.khong_co_sla, a.co_ket_luan, a.dung_sla, a.chua_ket_luan, a.ty_le,
+    a.ph_tv, a.xl_tv, a.xl_tb, a.xl_p90,
+    a.diem, a.so_danh_gia, a.ty_le_danh_gia,
+    mo.dang_mo, mo.qua_han,
+    no.tong, no.qua_han, no.so_can,
+    hd.phai_thu, hd.da_thu, pm.tien_ve
+  from tk_agg a, mo, no, hd, pm;
+end $fn$;
+
+-- Chuỗi theo tháng để vẽ biểu đồ. Tách khỏi bql_dashboard vì một bên là "hôm
+-- nay thế nào", một bên là "đang tốt lên hay xấu đi" — gộp vào một hàm thì
+-- mỗi lần đổi khoảng ngày lại phải tính lại cả chuỗi.
+--
+-- generate_series dựng đủ tháng kể cả tháng trắng: biểu đồ thiếu cột đọc ra
+-- "không có dữ liệu", trong khi sự thật là "tháng đó không ai báo hỏng". Hai
+-- chuyện khác hẳn nhau.
+create or replace function bql_dashboard_thang(p_project uuid, p_so_thang int default 6)
+returns table (
+  thang              date,
+  ticket_moi         int,
+  ticket_co_ket_luan int,
+  ticket_dung_sla    int,
+  ty_le_dung_sla     numeric,
+  gio_xu_ly_trung_vi numeric,
+  phai_thu           bigint,
+  da_thu             bigint,
+  tien_ve            bigint
+)
+language plpgsql stable security definer set search_path = public as $fn$
+declare
+  v_n       int  := least(greatest(coalesce(p_so_thang, 6), 1), 36);
+  v_dau     date;
+  v_cuoi    date;
+  v_dau_ts  timestamptz;
+begin
+  if not is_staff(p_project) then
+    raise exception 'Chi BQL cua du an nay moi xem duoc dashboard' using errcode = '42501';
+  end if;
+
+  v_cuoi := date_trunc('month', (now() at time zone 'Asia/Ho_Chi_Minh'))::date;
+  v_dau  := (v_cuoi - make_interval(months => v_n - 1))::date;
+  v_dau_ts := (v_dau::timestamp) at time zone 'Asia/Ho_Chi_Minh';
+
+  return query
+  with thang_list as (
+    select generate_series(v_dau, v_cuoi, interval '1 month')::date as m
+  ),
+  tk as (
+    select date_trunc('month', k.created_at at time zone 'Asia/Ho_Chi_Minh')::date as m,
+           extract(epoch from (k.resolved_at - k.created_at)) / 3600.0 as gio_xu_ly,
+           case
+             when k.status = 'rejected' or k.sla_resolve_due is null then null
+             when k.resolved_at is not null then k.resolved_at <= k.sla_resolve_due
+             when k.sla_resolve_due < now() then false
+             else null
+           end as dung_han
+      from tickets k
+     where k.project_id = p_project and k.created_at >= v_dau_ts
+  ),
+  hd as (
+    select i.period as m,
+           sum(i.total_amount)::bigint as phai_thu,
+           sum(i.paid_amount)::bigint  as da_thu
+      from invoices i
+     where i.project_id = p_project and i.status <> 'draft' and i.period >= v_dau
+     group by i.period
+  ),
+  pm as (
+    select date_trunc('month', p.paid_at at time zone 'Asia/Ho_Chi_Minh')::date as m,
+           sum(p.amount)::bigint as tien_ve
+      from payments p
+      join units u     on u.id = p.unit_id
+      join buildings b on b.id = u.building_id
+     where b.project_id = p_project and p.paid_at >= v_dau_ts
+     group by 1
+  )
+  select tl.m,
+         coalesce(t.so_ticket, 0),
+         coalesce(t.ket_luan, 0),
+         coalesce(t.dung_sla, 0),
+         round(100.0 * t.dung_sla / nullif(t.ket_luan, 0), 1),
+         t.gio_tv,
+         coalesce(hd.phai_thu, 0)::bigint,
+         coalesce(hd.da_thu, 0)::bigint,
+         coalesce(pm.tien_ve, 0)::bigint
+    from thang_list tl
+    left join (
+      select tk.m,
+             count(*)::int as so_ticket,
+             count(*) filter (where tk.dung_han is not null)::int as ket_luan,
+             count(*) filter (where tk.dung_han)::int as dung_sla,
+             round(percentile_cont(0.5) within group (order by tk.gio_xu_ly)::numeric, 1) as gio_tv
+        from tk group by tk.m
+    ) t  on t.m  = tl.m
+    left join hd on hd.m = tl.m
+    left join pm on pm.m = tl.m
+   order by tl.m;
+end $fn$;
+
 -- N24 — đánh dấu thông báo đã đọc.
 -- Vì sao là RPC chứ không phải cấp update thẳng lên bảng: `authenticated` là
 -- một role dùng chung, mà quyền theo CỘT thì không phân biệt được ai. Cấp

@@ -17,6 +17,12 @@ export function vndGon(n: number) {
   return String(n)
 }
 
+/**
+ * Số thập phân kiểu Việt: 82.1 -> '82,1'. Dấu phẩy là dấu thập phân ở VN;
+ * để '82.1' trên màn hình tiếng Việt là đọc thành tám mươi hai nghìn một.
+ */
+export const soVN = (n: number, le = 1) => n.toFixed(le).replace('.', ',')
+
 /** 2026-08-29 -> 29/08/2026. Người Việt đọc ngày trước, không phải năm trước. */
 export const ngayVN = (iso: string) => {
   const [y, m, d] = iso.slice(0, 10).split('-')

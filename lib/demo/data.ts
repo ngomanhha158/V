@@ -368,3 +368,44 @@ export const BANG_TIN: TinBangTin[] = [
     documents: { id: 'd4', title: 'Đăng ký xe và thẻ ra vào', section: 'Gửi xe' },
   },
 ]
+
+// ── Dashboard BQT (bql_dashboard + bql_dashboard_thang) ──
+// Số cố ý KHÔNG đẹp: 82% đúng hạn, 3 yêu cầu treo quá hạn, tháng trắng ở giữa
+// chuỗi. Demo toàn 100% xanh lá chẳng chứng minh được gì — cái cần cho người
+// xem thấy chính là màn hình trông thế nào lúc có chuyện.
+export const DASHBOARD = {
+  tu_ngay: ky(0), den_ngay: ngay(0),
+  tong_ticket: 34, ticket_tu_choi: 2, ticket_khong_co_sla: 3,
+  ticket_co_ket_luan: 28, ticket_dung_sla: 23, ticket_chua_ket_luan: 1,
+  ty_le_dung_sla: 82.1,
+  gio_phan_hoi_trung_vi: 0.4,
+  gio_xu_ly_trung_vi: 5.2,
+  gio_xu_ly_trung_binh: 11.8,   // lệch xa trung vị = có cái đang bị treo
+  gio_xu_ly_p90: 38.5,
+  diem_hai_long: 4.35, so_luot_danh_gia: 17, ty_le_danh_gia: 60.7,
+  dang_mo_hien_tai: 9, qua_han_hien_tai: 3,
+  cong_no: 24680000, cong_no_qua_han: 15420000, so_can_no: 11,
+  phai_thu_ky: 61200000, da_thu_ky: 48350000, tien_ve_ky: 52100000,
+}
+
+export const DASHBOARD_THANG = [
+  { thang: ky(-5), ticket_moi: 21, ticket_co_ket_luan: 19, ticket_dung_sla: 17,
+    ty_le_dung_sla: 89.5, gio_xu_ly_trung_vi: 4.1,
+    phai_thu: 58900000, da_thu: 57200000, tien_ve: 56800000 },
+  { thang: ky(-4), ticket_moi: 26, ticket_co_ket_luan: 24, ticket_dung_sla: 20,
+    ty_le_dung_sla: 83.3, gio_xu_ly_trung_vi: 5.6,
+    phai_thu: 59400000, da_thu: 55100000, tien_ve: 58300000 },
+  // Tháng nghỉ Tết: không yêu cầu nào ngã ngũ -> tỷ lệ null, đường đứt đoạn.
+  { thang: ky(-3), ticket_moi: 0, ticket_co_ket_luan: 0, ticket_dung_sla: 0,
+    ty_le_dung_sla: null, gio_xu_ly_trung_vi: null,
+    phai_thu: 59400000, da_thu: 51800000, tien_ve: 49200000 },
+  { thang: ky(-2), ticket_moi: 31, ticket_co_ket_luan: 29, ticket_dung_sla: 22,
+    ty_le_dung_sla: 75.9, gio_xu_ly_trung_vi: 7.8,
+    phai_thu: 60100000, da_thu: 58900000, tien_ve: 61400000 },
+  { thang: ky(-1), ticket_moi: 29, ticket_co_ket_luan: 28, ticket_dung_sla: 24,
+    ty_le_dung_sla: 85.7, gio_xu_ly_trung_vi: 5.9,
+    phai_thu: 60700000, da_thu: 59800000, tien_ve: 57600000 },
+  { thang: ky(0), ticket_moi: 34, ticket_co_ket_luan: 28, ticket_dung_sla: 23,
+    ty_le_dung_sla: 82.1, gio_xu_ly_trung_vi: 5.2,
+    phai_thu: 61200000, da_thu: 48350000, tien_ve: 52100000 },
+]
