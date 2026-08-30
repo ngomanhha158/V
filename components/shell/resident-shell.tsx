@@ -2,7 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { NavTab } from './nav-link'
 import { ThemeToggle } from './theme-toggle'
-import { IcChuong, IcHoaDon, IcNguoi, IcNha, IcYeuCau } from '@/components/icons'
+import { IcChuong, IcHoaDon, IcLoa, IcNha, IcSach, IcYeuCau } from '@/components/icons'
 
 /**
  * Vỏ màn cư dân. Điện thoại là thiết bị chính — người ta báo sự cố lúc đang
@@ -35,7 +35,8 @@ export function ResidentShell({
           </Link>
 
           <div className="ml-auto flex items-center gap-0.5">
-            <button
+            <Link
+              href={`${base}/thong-bao`}
               aria-label={`Thông báo${soThongBao ? ` (${soThongBao} chưa đọc)` : ''}`}
               className="relative inline-flex size-9 items-center justify-center rounded-ctl text-muted transition-colors hover:bg-sunken hover:text-ink"
             >
@@ -45,7 +46,7 @@ export function ResidentShell({
                   {soThongBao > 9 ? '9+' : soThongBao}
                 </span>
               )}
-            </button>
+            </Link>
             <ThemeToggle />
           </div>
         </div>
@@ -60,10 +61,14 @@ export function ResidentShell({
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/90 backdrop-blur-md sm:hidden">
         {/* pb an toàn cho vạch home của iPhone. */}
         <div className="mx-auto flex max-w-2xl pb-[env(safe-area-inset-bottom)]">
+          {/* Duyệt thành viên KHÔNG nằm ở đây: phần lớn cư dân không bao giờ duyệt
+              ai, để nó chiếm một ô trong năm ô quý giá là lãng phí. Nó nằm ở
+              link trên trang chủ, chỗ chủ hộ tìm khi cần. */}
           <NavTab href={base || '/'} icon={<IcNha />} chinhXac>Trang chủ</NavTab>
+          <NavTab href={`${base}/bang-tin`} icon={<IcLoa />}>Bảng tin</NavTab>
           <NavTab href={`${base}/invoices`} icon={<IcHoaDon />}>Hóa đơn</NavTab>
           <NavTab href={`${base}/tickets`} icon={<IcYeuCau />}>Yêu cầu</NavTab>
-          <NavTab href={`${base}/approvals`} icon={<IcNguoi />}>Thành viên</NavTab>
+          <NavTab href={`${base}/so-tay`} icon={<IcSach />}>Sổ tay</NavTab>
         </div>
       </nav>
     </div>

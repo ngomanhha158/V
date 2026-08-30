@@ -951,6 +951,10 @@ export type Database = {
         }[]
       }
       building_project: { Args: { p_building: string }; Returns: string }
+      mark_notifications_read: {
+        Args: { p_ids?: number[] }
+        Returns: number
+      }
       can_see_profile: { Args: { p_user: string }; Returns: boolean }
       create_ticket: {
         Args: {

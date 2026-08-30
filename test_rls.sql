@@ -24,6 +24,7 @@ declare
   u_thu_hoi  uuid := '44444444-4444-4444-4444-444444444440';
   u_cho_duyet uuid := '44444444-4444-4444-4444-444444444441';
   v_unit2 uuid; v_bld2 uuid; n_ann int;
+  n_doc int;
   p_khac uuid; b_khac uuid; u_khac uuid;
   u_bql      uuid := '55555555-5555-5555-5555-555555555550';
   n int;
@@ -96,6 +97,7 @@ begin
   -- Thông báo của người lạ: dùng làm mồi, chủ hộ KHÔNG được thấy dòng này.
   insert into notifications (user_id, kind, title) values
     (u_owner,    'invoice', 'Hoa don thang nay'),
+    (u_owner,    'ticket',  'Yeu cau da xu ly xong'),
     (u_stranger, 'invoice', 'Hoa don cua nguoi khac');
 
   -- ── bật RLS thật ──
@@ -116,6 +118,7 @@ begin
   execute 'grant select on announcements to vb_rls_test';
   execute 'grant select on payments to vb_rls_test';
   execute 'grant execute on function announcement_targets_me(uuid, uuid, int, uuid) to vb_rls_test';
+  execute 'grant execute on function mark_notifications_read(bigint[]) to vb_rls_test';
   execute 'grant select on profiles to vb_rls_test';
   execute 'grant select, insert on units to vb_rls_test';
   execute 'grant select, insert, delete on unit_vehicles to vb_rls_test';
@@ -177,6 +180,24 @@ begin
   select count(*) into n from payments;
   if n <> 0 then raise exception 'FAIL 3g: chu ho doc duoc % dong payments', n; end if;
 
+  -- 3h. mark_notifications_read chỉ đụng thông báo CỦA CHÍNH MÌNH.
+  --     Hàm là definer nên nó bỏ qua RLS — phải tự khóa vào auth.uid(), và đây
+  --     là chỗ kiểm điều đó. Sai thì một người bấm "đọc hết" là xóa dấu chưa
+  --     đọc của cả khu.
+  perform set_config('test.uid', u_owner::text, true);
+  select mark_notifications_read() into n;
+  if n <> 2 then raise exception 'FAIL 3h: danh dau % thong bao, chu ho co dung 2', n; end if;
+
+  execute 'reset role';
+  select count(*) into n from notifications where user_id = u_stranger and read_at is null;
+  if n <> 1 then raise exception 'FAIL 3i: thong bao cua nguoi khac bi danh dau da doc'; end if;
+  execute 'set local role vb_rls_test';
+
+  -- Chạy lại: không còn gì chưa đọc nên trả về 0, không phải lỗi.
+  perform set_config('test.uid', u_owner::text, true);
+  select mark_notifications_read() into n;
+  if n <> 0 then raise exception 'FAIL 3j: chay lai danh dau them % dong', n; end if;
+
   -- 4. Người lạ không thấy gì
   perform set_config('test.uid', u_stranger::text, true);
   select count(*) into n from invoices where unit_id = v_unit;
@@ -210,7 +231,7 @@ begin
   --    cũng đọc được thông báo của toàn khu.
   perform set_config('test.uid', u_owner::text, true);
   select count(*) into n from notifications;
-  if n <> 1 then raise exception 'FAIL 8: chu ho thay % thong bao, phai thay dung 1 cua minh', n; end if;
+  if n <> 2 then raise exception 'FAIL 8: chu ho thay % thong bao, phai thay dung 2 cua minh', n; end if;
 
   -- 9. invoice_lines thừa hưởng quyền của invoices. Không có RLS ở đây thì đọc
   --    thẳng invoice_lines là vòng qua được RLS của invoices (xem FAIL 2).

@@ -70,6 +70,18 @@ export const IcBieuDo = (p: SVGProps<SVGSVGElement>) => (
 export const IcMenu = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><path d="M4 7h16M4 12h16M4 17h16" /></I>
 )
+export const IcLoa = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}><path d="M4 9v6h3.5L14 20V4L7.5 9H4Z" /><path d="M17.5 9.5a4 4 0 0 1 0 5" /><path d="M20 7a8 8 0 0 1 0 10" /></I>
+)
+export const IcSach = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v14H6.5A2.5 2.5 0 0 0 4 19.5Z" /><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H19v4H6.5A2.5 2.5 0 0 1 4 19.5Z" /><path d="M8 7h7M8 10.5h7" /></I>
+)
+export const IcTim = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></I>
+)
+export const IcGui = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}><path d="M21 3 10.5 13.5" /><path d="M21 3 14.5 21l-4-7.5L3 9.5 21 3Z" /></I>
+)
 export const IcSang = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></I>
 )

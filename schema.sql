@@ -846,6 +846,31 @@ begin
      order by sum(i.total_amount - i.paid_amount) desc, u.code;
 end $fn$;
 
+-- N24 — đánh dấu thông báo đã đọc.
+-- Vì sao là RPC chứ không phải cấp update thẳng lên bảng: `authenticated` là
+-- một role dùng chung, mà quyền theo CỘT thì không phân biệt được ai. Cấp
+-- update cả dòng nghĩa là người ta sửa được luôn title/body thông báo của
+-- chính mình — tưởng vô hại, cho tới lúc BQL chụp màn hình đối chất "tôi có
+-- nhắc anh rồi" và cư dân chìa ra bản đã sửa. Hàm này chỉ đụng đúng read_at.
+--
+-- p_ids để null = đánh dấu tất cả. Khóa cứng vào auth.uid() nên truyền id của
+-- người khác cũng không ăn thua.
+create or replace function mark_notifications_read(p_ids bigint[] default null)
+returns int language plpgsql security definer set search_path = public as $fn$
+declare v_count int;
+begin
+  if auth.uid() is null then
+    raise exception 'Chua dang nhap' using errcode = '42501';
+  end if;
+  update notifications
+     set read_at = now()
+   where user_id = auth.uid()
+     and read_at is null
+     and (p_ids is null or id = any(p_ids));
+  get diagnostics v_count = row_count;
+  return v_count;
+end $fn$;
+
 create or replace function escalate_overdue_tickets() returns void
 language plpgsql set search_path = public as $fn$
 begin

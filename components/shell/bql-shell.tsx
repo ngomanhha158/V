@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { NavDoc } from './nav-link'
 import { ThemeToggle } from './theme-toggle'
 import {
-  IcBieuDo, IcHoaDon, IcNha, IcNhap, IcTien, IcToaNha, IcYeuCau,
+  IcBieuDo, IcHoaDon, IcLoa, IcNha, IcNhap, IcSach, IcTien, IcToaNha, IcYeuCau,
 } from '@/components/icons'
 
 /** Nhãn nhóm. Ẩn trên điện thoại: hàng ngang không diễn đạt được phân cấp,
@@ -32,6 +32,10 @@ export function BqlShell({
       <Muc nhan="Vận hành" />
       <NavDoc href={`${base}/bql`} icon={<IcBieuDo />} chinhXac>Tổng quan</NavDoc>
       <NavDoc href={`${base}/bql/tickets`} icon={<IcYeuCau />}>Điều phối yêu cầu</NavDoc>
+
+      <Muc nhan="Truyền thông" />
+      <NavDoc href={`${base}/bql/bang-tin`} icon={<IcLoa />}>Bảng tin</NavDoc>
+      <NavDoc href={`${base}/bql/so-tay`} icon={<IcSach />}>Sổ tay cư dân</NavDoc>
 
       <Muc nhan="Tài chính" />
       <NavDoc href={`${base}/bql/billing`} icon={<IcHoaDon />}>Hóa đơn</NavDoc>

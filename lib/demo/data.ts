@@ -245,3 +245,126 @@ export const NGAN_HANG_DEMO = {
   soTaiKhoan: '0000000000',
   ten: 'BAN QUAN LY SUNRISE RIVERSIDE (DEMO)',
 }
+
+// ── Thông báo cá nhân (bảng notifications) ──
+export type ThongBao = {
+  id: number
+  kind: 'invoice' | 'ticket' | 'announcement' | 'approval'
+  ref_id: string | null
+  title: string
+  body: string | null
+  read_at: string | null
+  created_at: string
+}
+
+const gio = (h: number) => new Date(Date.now() - h * 3600_000).toISOString()
+
+export const THONG_BAO: ThongBao[] = [
+  {
+    id: 5, kind: 'invoice', ref_id: 'i1',
+    title: 'Hoa don 08/2026 sap den han',
+    body: 'Con lai 2.983.500d, han 01/09/2026',
+    read_at: null, created_at: gio(3),
+  },
+  {
+    id: 4, kind: 'ticket', ref_id: 't1',
+    title: 'Yêu cầu của bạn đang được xử lý',
+    body: 'Trần Văn Kỹ đã lên kiểm tra căn tầng trên.',
+    read_at: null, created_at: gio(9),
+  },
+  {
+    id: 3, kind: 'announcement', ref_id: null,
+    title: 'Thông báo mới: Cắt nước bảo trì bể ngầm',
+    body: 'Toàn tòa Park 1, thứ Bảy 8h–11h.',
+    read_at: null, created_at: gio(26),
+  },
+  {
+    id: 2, kind: 'ticket', ref_id: 't2',
+    title: 'Yêu cầu đã hoàn thành',
+    body: 'Thang máy số 2 — đã thay ray dẫn hướng, chạy thử 20 lượt.',
+    read_at: gio(100), created_at: gio(120),
+  },
+  {
+    id: 1, kind: 'invoice', ref_id: 'i3',
+    title: 'Hoa don 06/2026 da thanh toan',
+    body: 'Cảm ơn anh/chị đã thanh toán đúng hạn.',
+    read_at: gio(700), created_at: gio(720),
+  },
+]
+
+// ── Sổ tay cư dân (bảng documents) ──
+export type MucSoTay = {
+  id: string; section: string; title: string; body: string; version: number
+}
+
+export const SO_TAY: MucSoTay[] = [
+  {
+    id: 'd1', section: 'Thú cưng', version: 2,
+    title: 'Quy định nuôi thú cưng trong căn hộ',
+    body: 'Mỗi căn hộ được nuôi tối đa 2 thú cưng, phải đăng ký với ban quản lý và tiêm phòng đầy đủ.\n\nKhi ra khu vực chung, chó phải có dây dắt và rọ mõm nếu thuộc giống lớn. Chủ nuôi tự dọn vệ sinh cho thú cưng của mình.\n\nThang máy: ưu tiên dùng thang hàng. Nếu dùng thang khách, bế thú cưng hoặc nhường lượt khi có người e ngại.',
+  },
+  {
+    id: 'd2', section: 'Rác thải', version: 1,
+    title: 'Giờ đổ rác và phân loại',
+    body: 'Phòng rác mỗi tầng mở cả ngày. Rác sinh hoạt buộc kín túi trước khi bỏ vào thùng.\n\nRác cồng kềnh (đồ gỗ, nệm, thiết bị điện) không để ở phòng rác tầng — báo ban quản lý để bố trí đưa xuống khu tập kết.\n\nPin, bóng đèn và thiết bị điện tử bỏ vào thùng riêng ở sảnh tầng 1.',
+  },
+  {
+    id: 'd3', section: 'Sửa chữa', version: 1,
+    title: 'Giờ được thi công trong căn hộ',
+    body: 'Thi công gây tiếng ồn chỉ được thực hiện từ 8h00 đến 17h00 các ngày trong tuần, và 8h00 đến 12h00 thứ Bảy. Chủ nhật và ngày lễ không thi công.\n\nTrước khi sửa chữa lớn, đăng ký với ban quản lý ít nhất 3 ngày để thông báo cho các căn lân cận.\n\nKhông đục phá kết cấu chịu lực trong mọi trường hợp.',
+  },
+  {
+    id: 'd4', section: 'Gửi xe', version: 1,
+    title: 'Đăng ký xe và thẻ ra vào',
+    body: 'Mỗi căn hộ được đăng ký tối đa 1 ô tô và 2 xe máy theo giá niêm yết. Xe thứ hai trở đi tính giá dịch vụ.\n\nThẻ xe gắn với biển số cụ thể, không dùng chung. Mất thẻ báo ngay để khóa và cấp lại.\n\nKhông đỗ xe chắn lối thoát hiểm và họng cứu hỏa — vi phạm sẽ bị cẩu xe.',
+  },
+  {
+    id: 'd5', section: 'An ninh', version: 1,
+    title: 'Khách tới thăm và người giúp việc',
+    body: 'Khách vào tòa cần đăng ký tại quầy lễ tân và được cư dân xác nhận.\n\nNgười giúp việc làm thường xuyên: chủ hộ đăng ký làm thẻ tạm, khai báo họ tên và số căn cước.\n\nCư dân chịu trách nhiệm về hành vi của khách và người giúp việc do mình bảo lãnh.',
+  },
+]
+
+// ── Bảng tin (bảng announcements) ──
+export type TinBangTin = {
+  id: string
+  title: string
+  body: string
+  is_urgent: boolean
+  published_at: string | null
+  building_id: string | null
+  floor_no: number | null
+  unit_id: string | null
+  documents: { id: string; title: string; section: string } | null
+}
+
+export const BANG_TIN: TinBangTin[] = [
+  {
+    id: 'a1', is_urgent: true, published_at: gio(26),
+    building_id: 'b1', floor_no: null, unit_id: null,
+    title: 'Cắt nước bảo trì bể ngầm — thứ Bảy 8h–11h',
+    body: 'Ban quản lý tiến hành súc rửa bể nước ngầm tòa Park 1.\n\nNước sẽ ngừng cấp từ 8h00 đến khoảng 11h00 thứ Bảy ngày 05/09. Đề nghị các hộ tích trữ nước dùng trước 8h.\n\nNếu quá 11h30 chưa có nước, gọi trực ban 0901 234 567.',
+    documents: null,
+  },
+  {
+    id: 'a2', is_urgent: false, published_at: gio(50),
+    building_id: null, floor_no: null, unit_id: null,
+    title: 'Nhắc lại quy định nuôi thú cưng',
+    body: 'Gần đây ban quản lý nhận nhiều phản ánh về chó thả rông ở khu vực sảnh và công viên nội khu.\n\nĐề nghị các hộ nuôi chó tuân thủ quy định dây dắt và dọn vệ sinh. Ban quản lý sẽ nhắc trực tiếp các trường hợp tái diễn.',
+    documents: { id: 'd1', title: 'Quy định nuôi thú cưng trong căn hộ', section: 'Thú cưng' },
+  },
+  {
+    id: 'a3', is_urgent: false, published_at: gio(74),
+    building_id: 'b1', floor_no: 10, unit_id: null,
+    title: 'Sơn lại hành lang tầng 10',
+    body: 'Đội thi công sẽ sơn lại hành lang tầng 10 tòa Park 1 trong hai ngày thứ Ba và thứ Tư.\n\nCó mùi sơn nhẹ trong giờ làm việc. Các hộ nên đóng cửa chính và bật thông gió.',
+    documents: { id: 'd3', title: 'Giờ được thi công trong căn hộ', section: 'Sửa chữa' },
+  },
+  {
+    id: 'a4', is_urgent: false, published_at: gio(200),
+    building_id: null, floor_no: null, unit_id: 'u1',
+    title: 'Thẻ xe của căn hộ sắp hết hạn',
+    body: 'Thẻ gửi ô tô biển 51K-123.45 của căn P1-10.01 hết hạn ngày 15/09.\n\nMời anh/chị qua văn phòng ban quản lý gia hạn trong giờ hành chính.',
+    documents: { id: 'd4', title: 'Đăng ký xe và thẻ ra vào', section: 'Gửi xe' },
+  },
+]

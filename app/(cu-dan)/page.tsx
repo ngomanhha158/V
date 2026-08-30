@@ -95,9 +95,13 @@ export default async function Home() {
         </LinkButton>
       </div>
 
+      {/* Duyệt thành viên nằm ở đây chứ không ở thanh tab dưới: phần lớn cư
+          dân không bao giờ duyệt ai, chỉ chủ hộ mới cần và chỉ khi có người
+          xin vào. */}
       <nav className="flex flex-wrap gap-x-4 gap-y-2 text-[0.8125rem]">
         <Link href="/onboarding" className="font-medium text-muted hover:text-ink">Thêm căn hộ</Link>
         <Link href="/approvals" className="font-medium text-muted hover:text-ink">Duyệt thành viên</Link>
+        <Link href="/thong-bao" className="font-medium text-muted hover:text-ink">Thông báo</Link>
         {isStaff && (
           <Link href="/bql" className="font-medium text-brand hover:underline">
             Quản lý tòa nhà (BQL) →

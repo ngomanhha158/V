@@ -60,6 +60,11 @@ grant select, insert, update, delete on meter_readings to authenticated;
 -- Chỉ ĐỌC ticket_events: audit trail mà người bị audit ghi được thì vô nghĩa.
 grant select on ticket_events to authenticated;
 grant select on invoices, invoice_lines, announcements, notifications to authenticated;
+-- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
+-- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
+grant insert, update, delete on announcements, documents to authenticated;
+-- KHÔNG cấp update trên notifications: đánh dấu đã đọc đi qua RPC
+-- mark_notifications_read để không ai sửa được nội dung thông báo của mình.
 
 -- Không cấp gì trên profiles, staff_assignments, ticket_events, meter_readings,
 -- payments, unit_vehicles, unit_pets: đây là dữ liệu cá nhân / tài chính / audit,
@@ -88,6 +93,7 @@ grant execute on function rate_ticket(uuid, int, text) to authenticated;
 grant execute on function bql_generate_invoices(uuid, date) to authenticated;
 grant execute on function bql_issue_invoices(uuid, date)   to authenticated;
 grant execute on function bql_debt_report(uuid)            to authenticated;
+grant execute on function mark_notifications_read(bigint[]) to authenticated;
 
 
 -- Còn lại là trigger function và job nền: không phải RPC endpoint, để nguyên là
