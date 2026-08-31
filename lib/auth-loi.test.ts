@@ -28,6 +28,27 @@ test('mã hết hạn khác với mã nhập sai — hai việc phải làm khá
   assert.match(dichLoiAuth({ code: 'invalid_credentials' }), /Kiểm tra lại dãy số/)
 })
 
+test('sai mật khẩu không được nói thành "kiểm tra dãy số trong thư"', () => {
+  const mk = dichLoiAuth({ code: 'invalid_credentials' }, 'matkhau')
+  assert.match(mk, /mật khẩu/)
+  assert.doesNotMatch(mk, /dãy số|trong thư/)
+  // Người chưa từng đặt mật khẩu phải biết đường quay lại
+  assert.match(mk, /bằng mã/)
+  // Bối cảnh mặc định vẫn là OTP, không đổi hành vi của các chỗ gọi cũ
+  assert.equal(dichLoiAuth({ code: 'invalid_credentials' }),
+               dichLoiAuth({ code: 'invalid_credentials' }, 'otp'))
+})
+
+test('email chưa xác nhận: chỉ đúng chỗ tắc, không đổ cho mật khẩu', () => {
+  const a = dichLoiAuth({ code: 'email_not_confirmed' }, 'matkhau')
+  assert.match(a, /chưa xác nhận/)
+  assert.match(a, /bằng mã/)
+})
+
+test('hết lượt gửi thư thì chỉ luôn lối thoát bằng mật khẩu', () => {
+  assert.match(dichLoiAuth({ code: 'over_email_send_rate_limit' }), /mật khẩu/)
+})
+
 test('lỗi mạng của trình duyệt không đổ cho máy chủ', () => {
   assert.match(dichLoiAuth({ message: 'Failed to fetch' }), /Kiểm tra mạng/)
 })

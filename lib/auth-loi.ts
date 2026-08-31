@@ -13,13 +13,21 @@
 
 type LoiAuth = { code?: string; message?: string; status?: number }
 
+/**
+ * Cùng một mã lỗi, hai màn hình khác nhau thì câu trả lời khác nhau.
+ * `invalid_credentials` lúc nhập mã nghĩa là gõ sai dãy số; lúc nhập mật khẩu
+ * nghĩa là sai mật khẩu — bảo người ta "kiểm tra lại dãy số trong thư" khi họ
+ * đang gõ mật khẩu thì vừa sai vừa làm họ đi tìm một bức thư không tồn tại.
+ */
+export type BoiCanh = 'otp' | 'matkhau'
+
 /** "you can only request this after 47 seconds" -> 47 */
 function giaySauCho(msg: string): number | null {
   const m = msg.match(/after (\d+) seconds?/i)
   return m ? Number(m[1]) : null
 }
 
-export function dichLoiAuth(loi: LoiAuth | null | undefined): string {
+export function dichLoiAuth(loi: LoiAuth | null | undefined, boiCanh: BoiCanh = 'otp'): string {
   if (!loi) return 'Có lỗi không rõ. Thử lại giúp em.'
   const ma = (loi.code ?? '').toLowerCase()
   const msg = (loi.message ?? '').toLowerCase()
@@ -29,7 +37,8 @@ export function dichLoiAuth(loi: LoiAuth | null | undefined): string {
   // ký trong một giờ sẽ gặp — phải nói rõ là lỗi hệ thống, không phải lỗi họ.
   if (ma === 'over_email_send_rate_limit' || msg.includes('email rate limit')) {
     return 'Hệ thống đang tạm hết lượt gửi thư. Đây là giới hạn của hệ thống, '
-      + 'không phải do bạn nhập sai. Chờ khoảng một giờ rồi thử lại, hoặc báo ban quản lý.'
+      + 'không phải do bạn nhập sai. Chờ khoảng một giờ rồi thử lại, hoặc đăng '
+      + 'nhập bằng mật khẩu nếu ban quản lý đã đặt cho bạn.'
   }
 
   // Thời gian chờ giữa hai lần gửi cho cùng một địa chỉ.
@@ -46,7 +55,17 @@ export function dichLoiAuth(loi: LoiAuth | null | undefined): string {
 
   if (ma === 'invalid_credentials' || msg.includes('invalid login credentials')
       || msg.includes('token is invalid')) {
-    return 'Mã không đúng. Kiểm tra lại dãy số trong thư — mã mới nhất mới dùng được.'
+    return boiCanh === 'matkhau'
+      ? 'Sai tài khoản hoặc mật khẩu. Nếu bạn chưa từng đặt mật khẩu thì chuyển '
+        + 'sang đăng nhập bằng mã, hoặc nhờ ban quản lý đặt lại.'
+      : 'Mã không đúng. Kiểm tra lại dãy số trong thư — mã mới nhất mới dùng được.'
+  }
+
+  // Tài khoản có mật khẩu nhưng email chưa được xác nhận: đăng nhập bằng mật
+  // khẩu sẽ bị chặn cho tới khi xác nhận, nên phải nói đúng chỗ tắc.
+  if (ma === 'email_not_confirmed' || msg.includes('email not confirmed')) {
+    return 'Tài khoản chưa xác nhận email nên chưa dùng mật khẩu được. '
+      + 'Đăng nhập bằng mã một lần để xác nhận, hoặc báo ban quản lý.'
   }
 
   if (ma === 'validation_failed' || ma === 'email_address_invalid'

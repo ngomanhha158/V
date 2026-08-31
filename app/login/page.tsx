@@ -14,28 +14,44 @@ const LOI_URL: Record<string, string> = {
   het_han: 'Link đã hết hạn hoặc đã dùng rồi. Gửi lại mã mới.',
 }
 
+/**
+ * Hai lối vào, cùng một tài khoản.
+ *
+ * `ma` — mã một lần gửi qua email/SMS: mặc định cho cư dân vì không phải nhớ gì.
+ * `matkhau` — dành cho người dùng thường xuyên (ban quản lý) và cho lúc hạn gửi
+ * thư của dự án đã cạn. Mã một lần phụ thuộc vào việc thư đi được; mật khẩu thì
+ * không, nên đây cũng là đường vào lúc SMTP hỏng.
+ */
+type CheDo = 'ma' | 'matkhau'
+
 function LoginForm() {
   const cach = cachDangNhap()
   const laEmail = cach === 'email'
 
+  const [cheDo, setCheDo] = useState<CheDo>('ma')
   const [danhTinh, setDanhTinh] = useState('')
   const [code, setCode] = useState('')
+  const [matKhau, setMatKhau] = useState('')
   const [daGui, setDaGui] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const router = useRouter()
   const loiUrl = LOI_URL[useSearchParams().get('loi') ?? '']
 
+  const laMatKhau = cheDo === 'matkhau'
+  const tenDanhTinh = laEmail ? 'email' : 'số điện thoại'
+
   /** Chuẩn hóa trước khi gửi đi. Trả null nghĩa là người dùng gõ sai. */
   const chuanHoa = () => (laEmail ? normalizeEmail(danhTinh) : toE164VN(danhTinh))
 
+  const loiDanhTinh = () =>
+    setError(laEmail
+      ? 'Địa chỉ email không hợp lệ.'
+      : 'Số điện thoại không hợp lệ. Nhập số di động 10 chữ số, ví dụ 0901234567.')
+
   async function gui() {
     const v = chuanHoa()
-    if (!v) {
-      return setError(laEmail
-        ? 'Địa chỉ email không hợp lệ.'
-        : 'Số điện thoại không hợp lệ. Nhập số di động 10 chữ số, ví dụ 0901234567.')
-    }
+    if (!v) return loiDanhTinh()
     setBusy(true); setError(null)
     // Tạo client trong handler, không ở thân component: lúc prerender không có
     // biến môi trường nên createClient() ở render sẽ làm chết build.
@@ -64,6 +80,41 @@ function LoginForm() {
     router.replace('/')
   }
 
+  async function dangNhapMatKhau() {
+    const v = chuanHoa()
+    if (!v) return loiDanhTinh()
+    setBusy(true); setError(null)
+    const { error } = await createClient().auth.signInWithPassword(
+      laEmail ? { email: v, password: matKhau } : { phone: v, password: matKhau },
+    )
+    setBusy(false)
+    // 'matkhau': cùng mã invalid_credentials nhưng lời khuyên phải khác.
+    if (error) return setError(dichLoiAuth(error, 'matkhau'))
+    router.replace('/')
+  }
+
+  /** Đổi lối vào thì dọn sạch trạng thái của lối cũ, không để lẫn. */
+  function doiCheDo(sang: CheDo) {
+    setCheDo(sang)
+    setDaGui(false); setCode(''); setMatKhau(''); setError(null)
+  }
+
+  const guiDi = () => { laMatKhau ? dangNhapMatKhau() : daGui ? xacNhan() : gui() }
+
+  const khoaNut = busy || (laMatKhau
+    ? danhTinh.length < 5 || matKhau.length < 6
+    : daGui ? code.length < 4 : danhTinh.length < 5)
+
+  const nhan = busy ? 'Đang xử lý…'
+    : laMatKhau ? 'Đăng nhập'
+      : daGui ? 'Xác nhận' : 'Gửi mã đăng nhập'
+
+  const phuDe = laMatKhau
+    ? `Nhập ${tenDanhTinh} và mật khẩu ban quản lý đã đặt`
+    : daGui
+      ? `Đã gửi mã tới ${danhTinh}`
+      : `Nhập ${tenDanhTinh} đã đăng ký với ban quản lý`
+
   return (
     <div className="grid min-h-dvh place-items-center px-4 py-10">
       <div className="w-full max-w-sm">
@@ -72,20 +123,11 @@ function LoginForm() {
             VB
           </span>
           <h1 className="text-xl font-semibold text-ink">Đăng nhập VBuilding</h1>
-          <p className="mt-1.5 text-[0.8125rem] text-muted">
-            {daGui
-              ? `Đã gửi mã tới ${danhTinh}`
-              : laEmail
-                ? 'Nhập email đã đăng ký với ban quản lý'
-                : 'Nhập số điện thoại đã đăng ký với ban quản lý'}
-          </p>
+          <p className="mt-1.5 text-[0.8125rem] text-muted">{phuDe}</p>
         </div>
 
         <div className="rounded-card border border-line bg-surface p-5 shadow-card">
-          <form
-            className="space-y-4"
-            onSubmit={(e) => { e.preventDefault(); daGui ? xacNhan() : gui() }}
-          >
+          <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); guiDi() }}>
             <Field label={laEmail ? 'Địa chỉ email' : 'Số điện thoại'}>
               <Input
                 type={laEmail ? 'email' : 'tel'}
@@ -98,7 +140,16 @@ function LoginForm() {
               />
             </Field>
 
-            {daGui && (
+            {laMatKhau && (
+              <Field label="Mật khẩu">
+                <Input
+                  type="password" autoComplete="current-password" placeholder="••••••••"
+                  value={matKhau} onChange={(e) => setMatKhau(e.target.value)} disabled={busy}
+                />
+              </Field>
+            )}
+
+            {!laMatKhau && daGui && (
               <Field
                 label="Mã xác thực"
                 hint={laEmail
@@ -113,18 +164,15 @@ function LoginForm() {
               </Field>
             )}
 
-            {(error || (!daGui && loiUrl)) && (
+            {(error || (!daGui && !laMatKhau && loiUrl)) && (
               <Hop tone="xau" title="Không đăng nhập được">{error ?? loiUrl}</Hop>
             )}
 
-            <Button
-              type="submit" dang="chinh" className="w-full"
-              disabled={busy || (daGui ? code.length < 4 : danhTinh.length < 5)}
-            >
-              {busy ? 'Đang xử lý…' : daGui ? 'Xác nhận' : 'Gửi mã đăng nhập'}
+            <Button type="submit" dang="chinh" className="w-full" disabled={khoaNut}>
+              {nhan}
             </Button>
 
-            {daGui && !busy && (
+            {!laMatKhau && daGui && !busy && (
               <button
                 type="button"
                 onClick={() => { setDaGui(false); setCode(''); setError(null) }}
@@ -135,6 +183,20 @@ function LoginForm() {
               </button>
             )}
           </form>
+
+          {!busy && (
+            <div className="mt-4 border-t border-line pt-4">
+              <button
+                type="button"
+                onClick={() => doiCheDo(laMatKhau ? 'ma' : 'matkhau')}
+                className="w-full text-center text-[0.8125rem] font-medium text-brand hover:underline"
+              >
+                {laMatKhau
+                  ? `Quay lại nhận mã qua ${laEmail ? 'email' : 'tin nhắn'}`
+                  : 'Đăng nhập bằng mật khẩu'}
+              </button>
+            </div>
+          )}
         </div>
 
         <p className="mt-5 text-center text-[0.75rem] leading-relaxed text-faint">
