@@ -19,11 +19,14 @@ test('mỗi khóa đếm riêng', () => {
 
 test('hết cửa sổ thì đếm lại từ đầu', () => {
   _reset()
-  for (let i = 0; i < 3; i++) demLuot('a', 3, 1)
-  assert.equal(demLuot('a', 3, 1).chan, true)
-  const den = Date.now() + 5
-  while (Date.now() < den) { /* đợi cửa sổ 1ms trôi qua */ }
-  assert.equal(demLuot('a', 3, 1).chan, false)
+  // Đồng hồ bơm tay: đua với Date.now() thì bốn lời gọi dưới đây phải rơi
+  // trọn trong một mili giây, không thì test tự hỏng.
+  const t0 = 1_000_000
+  for (let i = 0; i < 3; i++) demLuot('a', 3, 1000, t0)
+  assert.equal(demLuot('a', 3, 1000, t0).chan, true)
+  // Đúng mốc hết hạn đã là cửa sổ mới (hetHan <= now), không phải sau đó
+  assert.equal(demLuot('a', 3, 1000, t0 + 999).chan, true, 'còn 1ms vẫn phải chặn')
+  assert.equal(demLuot('a', 3, 1000, t0 + 1000).chan, false)
 })
 
 test('xóa bộ đếm khi thành công', () => {

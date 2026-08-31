@@ -20,8 +20,15 @@ const TRAN_KHOA = 10_000
 
 export type KetQua = { chan: boolean; conLai: number; choMs: number }
 
-export function demLuot(khoa: string, gioiHan: number, cuaSoMs: number): KetQua {
-  const now = Date.now()
+/**
+ * `now` chỉ để test bơm đồng hồ vào. Không có nó thì test ranh giới cửa sổ
+ * phải đua với đồng hồ thật — bốn lời gọi phải rơi trọn trong cùng một mili
+ * giây, và cứ vài lần chạy lại hỏng một lần. Đường chạy thật không truyền
+ * tham số này.
+ */
+export function demLuot(
+  khoa: string, gioiHan: number, cuaSoMs: number, now: number = Date.now(),
+): KetQua {
 
   // Quét dọn ngay trong lời gọi, không dùng setInterval: route handler có thể
   // bị đóng băng giữa các request, timer không đáng tin ở đó.
