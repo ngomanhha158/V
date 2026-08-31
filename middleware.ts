@@ -11,7 +11,17 @@ export async function middleware(request: NextRequest) {
   //    giao diện mà không cần bất kỳ khóa nào.
   // An toàn vì app/demo chỉ đọc dữ liệu giả cứng trong lib/demo/data.ts,
   // không có đường nào ra database thật.
-  if (request.nextUrl.pathname.startsWith('/demo')) return NextResponse.next({ request })
+  //
+  // /api/webhook/* thoát ra ở ĐÚNG CHỖ NÀY vì cùng lý do (2), và vì một lý do
+  // nặng hơn: nó là đường tiền vào. Để nó đi qua supabase.auth.getUser() là
+  // buộc mỗi lần ngân hàng bắn giao dịch phải chờ một vòng gọi Supabase Auth —
+  // dịch vụ chẳng liên quan gì tới việc này. Auth trục trặc là webhook trả 5xx,
+  // nhà cung cấp retry vài lần rồi bỏ, và tiền của cư dân biến mất khỏi hệ
+  // thống. Chốt chặn của nó là bí mật dùng chung kiểm trong route handler.
+  const duong = request.nextUrl.pathname
+  if (duong.startsWith('/demo') || duong.startsWith('/api/webhook/')) {
+    return NextResponse.next({ request })
+  }
 
   const response = NextResponse.next({ request })
   const supabase = createServerClient<Database>(
@@ -35,7 +45,8 @@ export async function middleware(request: NextRequest) {
   // /api/health phải đi qua TRƯỚC vòng kiểm đăng nhập: Railway gọi nó không
   // kèm cookie, bị đá về /login thì health check trượt và deploy không bao giờ
   // xanh.
-  const congMo = path === '/login' || path.startsWith('/auth/') || path === '/api/health'
+  const congMo = path === '/login' || path.startsWith('/auth/')
+    || path === '/api/health'
   if (!user && !congMo) {
     return NextResponse.redirect(new URL('/login', request.url))
   }

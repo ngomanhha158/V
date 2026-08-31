@@ -105,6 +105,78 @@ export type Database = {
           },
         ]
       }
+      bank_transactions: {
+        Row: {
+          account_number: string | null
+          amount: number
+          bank_ref: string | null
+          cach_khop: string | null
+          con_du: number
+          content: string
+          ghi_chu: string | null
+          id: string
+          paid_at: string
+          project_id: string
+          provider: string
+          provider_ref: string
+          raw_payload: Json
+          received_at: string
+          trang_thai: string
+          unit_id: string | null
+        }
+        Insert: {
+          account_number?: string | null
+          amount: number
+          bank_ref?: string | null
+          cach_khop?: string | null
+          con_du?: number
+          content?: string
+          ghi_chu?: string | null
+          id?: string
+          paid_at: string
+          project_id: string
+          provider: string
+          provider_ref: string
+          raw_payload?: Json
+          received_at?: string
+          trang_thai?: string
+          unit_id?: string | null
+        }
+        Update: {
+          account_number?: string | null
+          amount?: number
+          bank_ref?: string | null
+          cach_khop?: string | null
+          con_du?: number
+          content?: string
+          ghi_chu?: string | null
+          id?: string
+          paid_at?: string
+          project_id?: string
+          provider?: string
+          provider_ref?: string
+          raw_payload?: Json
+          received_at?: string
+          trang_thai?: string
+          unit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_transactions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_transactions_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       buildings: {
         Row: {
           code: string
@@ -415,6 +487,7 @@ export type Database = {
         Row: {
           amount: number
           bank_ref: string | null
+          bank_txn_id: string | null
           id: string
           invoice_id: string | null
           matched_by: string
@@ -426,6 +499,7 @@ export type Database = {
         Insert: {
           amount: number
           bank_ref?: string | null
+          bank_txn_id?: string | null
           id?: string
           invoice_id?: string | null
           matched_by?: string
@@ -437,6 +511,7 @@ export type Database = {
         Update: {
           amount?: number
           bank_ref?: string | null
+          bank_txn_id?: string | null
           id?: string
           invoice_id?: string | null
           matched_by?: string
@@ -940,6 +1015,47 @@ export type Database = {
       bql_issue_invoices: {
         Args: { p_period: string; p_project: string }
         Returns: number
+      }
+      bql_bo_qua_giao_dich: {
+        Args: { p_ghi_chu: string; p_txn: string }
+        Returns: undefined
+      }
+      bql_doi_soat: {
+        Args: { p_project: string; p_trang_thai?: string }
+        Returns: {
+          amount: number
+          bank_ref: string | null
+          cach_khop: string | null
+          con_du: number
+          content: string
+          // Chỉ tính cho giao dịch chưa khớp -> null ở các dòng còn lại.
+          goi_y: string[] | null
+          ghi_chu: string | null
+          id: string
+          paid_at: string
+          provider: string
+          trang_thai: string
+          // null khi chưa gạch vào căn nào.
+          unit_code: string | null
+        }[]
+      }
+      bql_gan_giao_dich: {
+        Args: { p_txn: string; p_unit: string }
+        Returns: Json
+      }
+      ghi_nhan_tien_ve: {
+        Args: {
+          p_account?: string | null
+          p_amount: number
+          p_bank_ref?: string | null
+          p_content: string
+          p_paid_at: string
+          p_project: string
+          p_provider: string
+          p_provider_ref: string
+          p_raw?: Json
+        }
+        Returns: Json
       }
       bql_debt_report: {
         Args: { p_project: string }

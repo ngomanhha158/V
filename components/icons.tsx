@@ -34,6 +34,12 @@ export const IcToaNha = (p: SVGProps<SVGSVGElement>) => (
 export const IcTien = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v10M9.5 9.5h4a1.8 1.8 0 0 1 0 3.6h-4M9 12.5h6" /></I>
 )
+/** Hai mũi tên đối nhau: so hai sổ với nhau, đó là việc đối soát làm. */
+export const IcDoiSoat = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M4 8h13m-3-3 3 3-3 3" /><path d="M20 16H7m3-3-3 3 3 3" />
+  </I>
+)
 export const IcNguoi = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20a7.5 7.5 0 0 1 15 0" /></I>
 )

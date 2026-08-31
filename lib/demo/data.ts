@@ -409,3 +409,45 @@ export const DASHBOARD_THANG = [
     ty_le_dung_sla: 82.1, gio_xu_ly_trung_vi: 5.2,
     phai_thu: 61200000, da_thu: 48350000, tien_ve: 52100000 },
 ]
+
+// ── Đối soát tiền về (bank_transactions) ──
+// Cố ý gồm đủ các kiểu ghi sai mà BQL gặp thật: ghi mỗi tên mình, thiếu tiền
+// tố VB, gõ nhầm số căn, và một khoản của nhà thầu lọt vào tài khoản khu.
+export type GiaoDichDemo = {
+  id: string; provider: string; bank_ref: string | null; amount: number
+  content: string; paid_at: string; trang_thai: string; cach_khop: string | null
+  con_du: number; unit_code: string | null; ghi_chu: string | null
+  goi_y: string[] | null
+}
+
+/** n ngày trước, cố định lúc h giờ 30 (UTC) — để mốc thời gian trông thật. */
+const ngayGio = (n: number, h = 2) =>
+  new Date(Date.now() - n * 86400_000).toISOString().slice(0, 11)
+  + String(h).padStart(2, '0') + ':30:00.000Z'
+
+export const DOI_SOAT: GiaoDichDemo[] = [
+  { id: 'gd-1', provider: 'sepay', bank_ref: 'MBVCB.9921334', amount: 2540000,
+    content: 'NGUYEN VAN MINH chuyen tien thang 8', paid_at: ngayGio(1),
+    trang_thai: 'chua_khop', cach_khop: null, con_du: 0, unit_code: null,
+    ghi_chu: null, goi_y: [] },
+  { id: 'gd-2', provider: 'sepay', bank_ref: 'MBVCB.9921702', amount: 2660000,
+    content: 'CT DEN:0123 P1-07.02 phi quan ly', paid_at: ngayGio(1, 7),
+    trang_thai: 'chua_khop', cach_khop: null, con_du: 0, unit_code: null,
+    ghi_chu: null, goi_y: ['P1-07.02'] },
+  { id: 'gd-3', provider: 'sepay', bank_ref: 'MBVCB.9922110', amount: 1500000,
+    content: 'tra tien nuoc can 903', paid_at: ngayGio(2),
+    trang_thai: 'chua_khop', cach_khop: null, con_du: 0, unit_code: null,
+    ghi_chu: null, goi_y: [] },
+  { id: 'gd-4', provider: 'sepay', bank_ref: 'MBVCB.9920881', amount: 2983500,
+    content: 'CT DEN:VB P1-10.01 202608 FT24', paid_at: ngayGio(3),
+    trang_thai: 'da_khop', cach_khop: 'ma_can', con_du: 0, unit_code: 'P1-10.01',
+    ghi_chu: null, goi_y: null },
+  { id: 'gd-5', provider: 'sepay', bank_ref: 'MBVCB.9920902', amount: 3500000,
+    content: 'VB P2-11.04 202608', paid_at: ngayGio(4),
+    trang_thai: 'da_khop', cach_khop: 'ma_can', con_du: 540000, unit_code: 'P2-11.04',
+    ghi_chu: null, goi_y: null },
+  { id: 'gd-6', provider: 'sepay', bank_ref: 'MBVCB.9920415', amount: 12000000,
+    content: 'CTY TNHH THANG MAY AN PHAT hoan ung', paid_at: ngayGio(6),
+    trang_thai: 'bo_qua', cach_khop: null, con_du: 0, unit_code: null,
+    ghi_chu: 'Nhà thầu hoàn ứng, không phải tiền cư dân', goi_y: null },
+]

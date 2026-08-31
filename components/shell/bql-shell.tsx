@@ -3,7 +3,8 @@ import type { ReactNode } from 'react'
 import { NavDoc } from './nav-link'
 import { ThemeToggle } from './theme-toggle'
 import {
-  IcBieuDo, IcHoaDon, IcLoa, IcNha, IcNhap, IcSach, IcTien, IcToaNha, IcYeuCau,
+  IcBieuDo, IcDoiSoat, IcHoaDon, IcLoa, IcNha, IcNhap, IcSach, IcTien, IcToaNha,
+  IcYeuCau,
 } from '@/components/icons'
 
 /** Nhãn nhóm. Ẩn trên điện thoại: hàng ngang không diễn đạt được phân cấp,
@@ -40,6 +41,7 @@ export function BqlShell({
       <Muc nhan="Tài chính" />
       <NavDoc href={`${base}/bql/billing`} icon={<IcHoaDon />}>Hóa đơn</NavDoc>
       <NavDoc href={`${base}/bql/cong-no`} icon={<IcTien />}>Công nợ</NavDoc>
+      <NavDoc href={`${base}/bql/doi-soat`} icon={<IcDoiSoat />}>Đối soát tiền về</NavDoc>
 
       {/* Tòa nhà và import là việc DỰNG hệ thống, làm vài lần rồi thôi. Để
           chúng cạnh việc trực ban hằng ngày là bắt người trực lướt qua mỗi lần. */}

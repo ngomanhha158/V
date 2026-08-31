@@ -205,17 +205,55 @@ create table meter_readings (
 );
 
 -- Idempotent: bank_ref unique -> webhook bắn lại KHÔNG gạch nợ 2 lần
+-- N19–N20 — SỔ TIỀN VỀ. Đây là thứ NGÂN HÀNG nói, tách khỏi `payments` là thứ
+-- MÌNH đã gạch cho căn nào. Hai chuyện khác nhau, và đối soát chính là việc so
+-- hai cái đó với nhau — gộp làm một bảng thì không còn gì để so.
+--
+-- Mọi giao dịch tiền vào đều nằm ở đây, kể cả cái không khớp được căn nào.
+-- Chỉ lưu cái khớp được thì tiền của người ghi sai nội dung biến mất khỏi hệ
+-- thống, mà đó lại đúng là loại giao dịch cần người nhìn nhất.
+create table bank_transactions (
+  id             uuid primary key default gen_random_uuid(),
+  project_id     uuid not null references projects(id) on delete cascade,
+  provider       text not null,              -- 'sepay' | 'casso'
+  provider_ref   text not null,              -- id giao dịch phía nhà cung cấp
+  bank_ref       text,                       -- mã tham chiếu của ngân hàng
+  account_number text,
+  amount         bigint not null check (amount > 0),
+  content        text not null default '',   -- nội dung chuyển khoản, thô
+  paid_at        timestamptz not null,
+  raw_payload    jsonb not null default '{}'::jsonb,
+  trang_thai     text not null default 'chua_khop'
+                 check (trang_thai in ('chua_khop','da_khop','bo_qua')),
+  cach_khop      text,                       -- 'ma_can' (tự động) | 'thu_cong'
+  unit_id        uuid references units(id),  -- căn được gạch, null nếu chưa khớp
+  con_du         bigint not null default 0,  -- tiền chưa gạch vào hóa đơn nào
+  ghi_chu        text,
+  received_at    timestamptz not null default now(),
+  -- CHỐNG BẮN TRÙNG. Nhà cung cấp webhook nào cũng retry khi không nhận được
+  -- 200, nên cùng một giao dịch đến vài lần là chuyện thường ngày. Khóa ở đây
+  -- chứ không ở payments: một lần chuyển khoản có thể gạch cho NHIỀU hóa đơn,
+  -- tức nhiều dòng payments cùng một bank_ref.
+  unique (provider, provider_ref)
+);
+create index on bank_transactions (project_id, trang_thai, paid_at desc);
+
 create table payments (
   id          uuid primary key default gen_random_uuid(),
   invoice_id  uuid references invoices(id),
   unit_id     uuid not null references units(id),
   amount      bigint not null check (amount > 0),
   method      text not null default 'bank_transfer',
-  bank_ref    text unique,
+  -- KHÔNG unique: một lần chuyển khoản trả cho 2 hóa đơn thì sinh 2 dòng cùng
+  -- bank_ref. Chống bắn trùng nằm ở bank_transactions(provider, provider_ref).
+  bank_ref    text,
+  bank_txn_id uuid references bank_transactions(id) on delete set null,
   raw_payload jsonb,
   paid_at     timestamptz not null default now(),
   matched_by  text not null default 'auto'  -- 'auto' | 'manual'
 );
+create index on payments (bank_ref);
+create index on payments (bank_txn_id);
 
 -- ─────────────── 5. THÔNG BÁO & CẨM NANG SỐ ──────────────────────────
 -- ponytail: target bằng cột nullable thay vì bảng announcement_targets.
@@ -437,6 +475,14 @@ create policy unit_staff_write on units for all
 alter table payments enable row level security;
 create policy payment_staff_read on payments for select
   using (is_staff(unit_project(unit_id)));
+
+-- Sổ tiền về cũng chỉ BQL đọc, cùng lý do như payments: raw_payload giữ nguyên
+-- gói tin ngân hàng, trong đó có TÊN NGƯỜI CHUYỂN. Mở cho cư dân là ai cũng
+-- tra được hàng xóm chuyển tiền cho ai. Không có policy ghi cho bất kỳ ai —
+-- mọi đường ghi đều đi qua hàm definer ở dưới.
+alter table bank_transactions enable row level security;
+create policy bank_txn_staff_read on bank_transactions for select
+  using (is_staff(project_id));
 
 -- ── Dữ liệu dùng chung: ai đăng nhập cũng ĐỌC, chỉ BQL GHI ──
 -- Ba bảng này ai cũng đọc được là ĐÚNG ý đồ: cư dân phải xem được nội quy, biết
@@ -1139,6 +1185,257 @@ begin
      and (p_ids is null or id = any(p_ids));
   get diagnostics v_count = row_count;
   return v_count;
+end $fn$;
+
+-- ══════════════ N19–N20 — ĐỐI SOÁT TIỀN VỀ ══════════════════════════════
+--
+-- Ngân hàng bóp nội dung chuyển khoản đủ kiểu: mất dấu chấm, mất khoảng trắng,
+-- chèn "CT DEN:" phía trước, cắt đuôi. Nên mọi phép so đều làm trên bản đã bỏ
+-- hết ký tự không phải chữ-số, ở CẢ HAI phía.
+create or replace function chuan_hoa_ck(p_text text)
+returns text language sql immutable as $fn$
+  select regexp_replace(upper(coalesce(p_text, '')), '[^A-Z0-9]', '', 'g');
+$fn$;
+
+-- Tìm căn từ nội dung chuyển khoản, để TỰ ĐỘNG gạch nợ.
+--
+-- BẮT BUỘC có tiền tố VB và 6 chữ số kỳ ngay sau mã căn — đúng chuỗi mà
+-- lib/vietqr.ts in ra QR. Dò mã căn trần trong nội dung thì một mã tham chiếu
+-- ngân hàng ngẫu nhiên cũng khớp được, và tiền chạy sang nhà hàng xóm.
+-- Không khớp chặt thì THÀ ĐỂ NGƯỜI THẬT QUYẾT: kế hoạch đã nói trước là luôn
+-- có người ghi sai nội dung, nên màn đối soát thủ công là bắt buộc, không phải
+-- phương án dự phòng.
+create or replace function tach_ma_can(p_project uuid, p_content text)
+returns uuid language sql stable security definer set search_path = public as $fn$
+  select u.id
+    from units u
+    join buildings b on b.id = u.building_id
+   where b.project_id = p_project
+     and chuan_hoa_ck(p_content) ~ ('VB' || chuan_hoa_ck(u.code) || '[0-9]{6}')
+   -- Mã dài khớp trước: 'P1-10.1' không được cướp giao dịch của 'P1-10.12'.
+   order by length(chuan_hoa_ck(u.code)) desc
+   limit 1;
+$fn$;
+
+-- Dò LỎNG, chỉ để GỢI Ý cho người thật. Không có tiền tố VB, không cần kỳ.
+-- Tuyệt đối không dùng để tự gạch — dò lỏng mà tự gạch là tiền chạy nhầm căn.
+create or replace function goi_y_can(p_project uuid, p_content text)
+returns table (unit_id uuid, unit_code text)
+language sql stable security definer set search_path = public as $fn$
+  select u.id, u.code
+    from units u
+    join buildings b on b.id = u.building_id
+   where b.project_id = p_project
+     and length(chuan_hoa_ck(u.code)) >= 4   -- mã quá ngắn thì khớp bừa
+     and chuan_hoa_ck(p_content) like '%' || chuan_hoa_ck(u.code) || '%'
+   order by length(chuan_hoa_ck(u.code)) desc
+   limit 3;
+$fn$;
+
+-- Gạch một giao dịch vào công nợ của một căn. Dùng chung cho cả đường tự động
+-- lẫn đường BQL bấm tay — hai đường phải cho ra cùng một kết quả, tách hai bản
+-- cài đặt là sớm muộn chúng lệch nhau.
+create or replace function gach_no(p_txn uuid, p_unit uuid, p_cach text)
+returns jsonb language plpgsql security definer set search_path = public as $fn$
+declare
+  t       bank_transactions;
+  v_con   bigint;
+  v_hd    record;
+  v_tra   bigint;
+  v_so_hd int := 0;
+begin
+  -- for update: hai webhook cùng căn bắn song song thì đứa sau xếp hàng đợi,
+  -- không cùng đọc một paid_amount cũ rồi cùng cộng vào.
+  select * into t from bank_transactions where id = p_txn for update;
+  if not found then
+    raise exception 'Khong tim thay giao dich %', p_txn using errcode = '02000';
+  end if;
+  if t.trang_thai = 'da_khop' then
+    raise exception 'Giao dich nay da gach roi' using errcode = '23505';
+  end if;
+
+  v_con := t.amount;
+
+  -- Gạch hóa đơn CŨ NHẤT trước. Đây là thông lệ công nợ, và nó làm tuổi nợ
+  -- giảm đúng chỗ: trả vào hóa đơn mới nhất thì nợ cũ nằm đó mãi dù người ta
+  -- đã nộp đủ tiền, rồi báo cáo công nợ báo động nhầm.
+  for v_hd in
+    select id, total_amount - paid_amount as thieu
+      from invoices
+     where unit_id = p_unit
+       and status in ('issued','partial')
+       and total_amount > paid_amount
+     order by due_date, period
+     for update
+  loop
+    exit when v_con <= 0;
+    -- least(): không cho một hóa đơn thu quá số tiền của nó. Phần thừa chảy
+    -- sang hóa đơn kế tiếp trong vòng lặp.
+    v_tra := least(v_con, v_hd.thieu);
+
+    insert into payments (invoice_id, unit_id, amount, bank_ref, bank_txn_id,
+                          raw_payload, paid_at, matched_by)
+      values (v_hd.id, p_unit, v_tra, t.bank_ref, t.id, t.raw_payload, t.paid_at,
+              case when p_cach = 'thu_cong' then 'manual' else 'auto' end);
+
+    update invoices
+       set paid_amount = paid_amount + v_tra,
+           status = (case when paid_amount + v_tra >= total_amount then 'paid'
+                          else 'partial' end)::invoice_status
+     where id = v_hd.id;
+
+    v_con   := v_con - v_tra;
+    v_so_hd := v_so_hd + 1;
+  end loop;
+
+  -- Tiền dư KHÔNG sinh dòng payments treo lơ lửng: payments.invoice_id trỏ vào
+  -- đâu? Nó là tiền trả trước, ghi lại ở đây để BQL nhìn thấy và quyết định,
+  -- chứ hệ thống không tự nuốt.
+  update bank_transactions
+     set trang_thai = 'da_khop', unit_id = p_unit, cach_khop = p_cach,
+         con_du = v_con
+   where id = p_txn;
+
+  return jsonb_build_object(
+    'txn_id', p_txn, 'trang_thai', 'da_khop', 'so_hoa_don', v_so_hd,
+    'da_gach', t.amount - v_con, 'con_du', v_con);
+end $fn$;
+
+-- Cửa vào của webhook. CHỈ service_role gọi được (không cấp cho authenticated):
+-- ai gọi được hàm này là tự ghi tiền vào hệ thống mà không cần chuyển khoản.
+create or replace function ghi_nhan_tien_ve(
+  p_project      uuid,
+  p_provider     text,
+  p_provider_ref text,
+  p_amount       bigint,
+  p_content      text,
+  p_paid_at      timestamptz,
+  p_bank_ref     text  default null,
+  p_account      text  default null,
+  p_raw          jsonb default '{}'::jsonb
+) returns jsonb language plpgsql security definer set search_path = public as $fn$
+declare v_txn uuid; v_unit uuid; v_cu jsonb;
+begin
+  insert into bank_transactions (project_id, provider, provider_ref, bank_ref,
+                                 account_number, amount, content, paid_at, raw_payload)
+    values (p_project, p_provider, p_provider_ref, p_bank_ref, p_account,
+            p_amount, coalesce(p_content, ''), p_paid_at,
+            coalesce(p_raw, '{}'::jsonb))
+    on conflict (provider, provider_ref) do nothing
+    returning id into v_txn;
+
+  -- ĐÃ NHẬN RỒI -> dừng, trả về trạng thái đang có. Nhà cung cấp nào cũng bắn
+  -- lại khi chưa thấy 200, và gạch nợ hai lần là mất tiền thật của cư dân.
+  if v_txn is null then
+    select jsonb_build_object('trung', true, 'txn_id', id,
+                              'trang_thai', trang_thai, 'con_du', con_du)
+      into v_cu
+      from bank_transactions
+     where provider = p_provider and provider_ref = p_provider_ref;
+    return v_cu;
+  end if;
+
+  v_unit := tach_ma_can(p_project, p_content);
+  if v_unit is null then
+    return jsonb_build_object('trung', false, 'txn_id', v_txn,
+                              'trang_thai', 'chua_khop', 'so_hoa_don', 0,
+                              'da_gach', 0, 'con_du', 0);
+  end if;
+
+  return jsonb_build_object('trung', false) || gach_no(v_txn, v_unit, 'ma_can');
+end $fn$;
+
+-- BQL gạch tay giao dịch mà máy không khớp được.
+create or replace function bql_gan_giao_dich(p_txn uuid, p_unit uuid)
+returns jsonb language plpgsql security definer set search_path = public as $fn$
+declare v_du_an_gd uuid; v_du_an_can uuid;
+begin
+  select project_id into v_du_an_gd from bank_transactions where id = p_txn;
+  if v_du_an_gd is null then
+    raise exception 'Khong co giao dich nay' using errcode = '02000';
+  end if;
+  if not is_staff(v_du_an_gd) then
+    raise exception 'Chi BQL cua du an nay moi doi soat duoc' using errcode = '42501';
+  end if;
+
+  -- Căn phải thuộc CHÍNH dự án của giao dịch. Thiếu chốt này là BQL khu A gạch
+  -- được tiền của khu A vào căn của khu B.
+  select b.project_id into v_du_an_can
+    from units u join buildings b on b.id = u.building_id
+   where u.id = p_unit;
+  if v_du_an_can is null or v_du_an_can <> v_du_an_gd then
+    raise exception 'Can ho khong thuoc du an cua giao dich' using errcode = '42501';
+  end if;
+
+  return gach_no(p_txn, p_unit, 'thu_cong');
+end $fn$;
+
+-- Đánh dấu giao dịch không phải tiền cư dân (hoàn tiền, nhà thầu, chuyển nhầm).
+-- Bắt buộc có ghi chú: một giao dịch biến mất khỏi danh sách mà không ai biết
+-- vì sao thì lần đối soát cuối năm không dựng lại được.
+create or replace function bql_bo_qua_giao_dich(p_txn uuid, p_ghi_chu text)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare v_du_an uuid; v_trang_thai text;
+begin
+  select project_id, trang_thai into v_du_an, v_trang_thai
+    from bank_transactions where id = p_txn;
+  if v_du_an is null then
+    raise exception 'Khong co giao dich nay' using errcode = '02000';
+  end if;
+  if not is_staff(v_du_an) then
+    raise exception 'Chi BQL cua du an nay moi doi soat duoc' using errcode = '42501';
+  end if;
+  if v_trang_thai = 'da_khop' then
+    raise exception 'Giao dich da gach vao hoa don, khong bo qua duoc' using errcode = '23505';
+  end if;
+  if coalesce(btrim(p_ghi_chu), '') = '' then
+    raise exception 'Phai ghi ly do bo qua' using errcode = '22023';
+  end if;
+
+  update bank_transactions
+     set trang_thai = 'bo_qua', ghi_chu = btrim(p_ghi_chu)
+   where id = p_txn;
+end $fn$;
+
+-- Danh sách cho màn đối soát. Kèm gợi ý căn để BQL không phải tự dò mã trong
+-- một chuỗi ngân hàng dài ngoằng.
+create or replace function bql_doi_soat(p_project uuid, p_trang_thai text default 'chua_khop')
+returns table (
+  id         uuid,
+  provider   text,
+  bank_ref   text,
+  amount     bigint,
+  content    text,
+  paid_at    timestamptz,
+  trang_thai text,
+  cach_khop  text,
+  con_du     bigint,
+  unit_code  text,
+  ghi_chu    text,
+  goi_y      text[]
+) language plpgsql stable security definer set search_path = public as $fn$
+begin
+  if not is_staff(p_project) then
+    raise exception 'Chi BQL cua du an nay moi doi soat duoc' using errcode = '42501';
+  end if;
+
+  return query
+    select t.id, t.provider, t.bank_ref, t.amount, t.content, t.paid_at,
+           t.trang_thai, t.cach_khop, t.con_du, u.code, t.ghi_chu,
+           -- Gợi ý chỉ tính cho giao dịch chưa khớp: đã gạch rồi thì gợi ý là
+           -- nhiễu, mà tính nó cho cả bảng là quét units cho từng dòng.
+           case when t.trang_thai = 'chua_khop'
+                then array(select g.unit_code from goi_y_can(p_project, t.content) g)
+           end
+      from bank_transactions t
+      left join units u on u.id = t.unit_id
+     where t.project_id = p_project
+       and case p_trang_thai
+             when 'con_du'  then t.trang_thai = 'da_khop' and t.con_du > 0
+             when 'tat_ca'  then true
+             else t.trang_thai = p_trang_thai
+           end
+     order by t.paid_at desc, t.received_at desc;
 end $fn$;
 
 create or replace function escalate_overdue_tickets() returns void

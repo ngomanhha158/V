@@ -59,6 +59,9 @@ grant select, insert, update, delete on meter_readings to authenticated;
 -- bql_issue_invoices) để cư dân không bao giờ có quyền ghi bảng tiền.
 -- Chỉ ĐỌC ticket_events: audit trail mà người bị audit ghi được thì vô nghĩa.
 grant select on ticket_events to authenticated;
+-- Sổ tiền về: RLS (bank_txn_staff_read) lọc xuống còn dự án của người đó.
+-- Không cấp insert/update/delete cho ai — ghi vào sổ tiền chỉ qua hàm definer.
+grant select on bank_transactions to authenticated;
 grant select on invoices, invoice_lines, announcements, notifications to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
@@ -96,6 +99,14 @@ grant execute on function bql_debt_report(uuid)            to authenticated;
 grant execute on function mark_notifications_read(bigint[]) to authenticated;
 grant execute on function bql_dashboard(uuid, date, date)  to authenticated;
 grant execute on function bql_dashboard_thang(uuid, int)   to authenticated;
+grant execute on function bql_doi_soat(uuid, text)         to authenticated;
+grant execute on function bql_gan_giao_dich(uuid, uuid)    to authenticated;
+grant execute on function bql_bo_qua_giao_dich(uuid, text) to authenticated;
+
+-- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
+-- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là
+-- tự ghi tiền vào hệ thống mà chẳng cần chuyển khoản đồng nào. Route handler
+-- gọi bằng service_role, không qua phiên người dùng.
 
 
 -- Còn lại là trigger function và job nền: không phải RPC endpoint, để nguyên là
@@ -121,3 +132,7 @@ alter table buildings        force row level security;
 alter table units            force row level security;
 alter table fee_types        force row level security;
 alter table payments         force row level security;
+-- bank_transactions KHÔNG force: hàm definer (gach_no, ghi_nhan_tien_ve) chạy
+-- dưới quyền owner và phải ghi được vào bảng này, mà bảng cố ý không có policy
+-- ghi nào. Chốt chặn ở đây là GRANT — authenticated chỉ có select — cộng với
+-- policy đọc theo dự án.
