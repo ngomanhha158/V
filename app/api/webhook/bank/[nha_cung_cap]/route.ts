@@ -2,6 +2,13 @@ import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { docWebhook, laNhaCungCap, type NhaCungCap } from '@/lib/bank/adapter'
+import { demLuot, ipClient, xoaLuot } from '@/lib/rate-limit'
+
+// Chỉ đếm lượt SAI. Nhà cung cấp gửi đúng khóa thì bắn bao nhiêu cũng được —
+// ngày cuối tháng cả trăm giao dịch về một lúc là chuyện bình thường, chặn
+// nhầm ở đó là mất tiền. Còn dò khóa thì mỗi lần dò là một lần sai.
+const SO_LAN_SAI = 10
+const CUA_SO_MS = 10 * 60_000
 
 // node runtime: cần timingSafeEqual. force-dynamic: đây là webhook, không cache.
 export const runtime = 'nodejs'
@@ -49,10 +56,21 @@ export async function POST(
     return NextResponse.json({ success: false, message: 'Nha cung cap la' }, { status: 404 })
   }
 
+  const khoaDem = `wh:${nha_cung_cap}:${ipClient(req)}`
   const loiKhoa = kiemTraBiMat(nha_cung_cap, req)
   if (loiKhoa) {
+    const { chan, choMs } = demLuot(khoaDem, SO_LAN_SAI, CUA_SO_MS)
+    if (chan) {
+      return NextResponse.json(
+        { success: false, message: 'Qua nhieu lan sai khoa' },
+        { status: 429, headers: { 'retry-after': String(Math.ceil(choMs / 1000)) } },
+      )
+    }
     return NextResponse.json({ success: false, message: loiKhoa }, { status: 401 })
   }
+  // Khóa đúng -> xóa bộ đếm. Nhà cung cấp đổi khóa giữa chừng (xoay khóa định
+  // kỳ) không bị treo 10 phút vì mấy lượt sai trước đó.
+  xoaLuot(khoaDem)
 
   let body: unknown
   try {
@@ -99,11 +117,21 @@ export async function POST(
       p_raw: g.raw as never,
     })
     if (error) {
+      // Ghi log để còn dò được, nhưng CHỈ mã lỗi + provider_ref. Không ghi
+      // error.details: chỗ đó chứa nguyên giá trị của dòng dữ liệu, mà dòng
+      // này có nội dung chuyển khoản kèm tên người gửi.
+      console.error('[webhook] ghi_nhan_tien_ve loi', {
+        nhaCungCap: nha_cung_cap, providerRef: g.providerRef, code: error.code,
+        message: error.message,
+      })
+      // Trả về thông điệp CHUNG. Dội nguyên lỗi Postgres về phía nhà cung cấp
+      // là biếu không tên bảng, tên ràng buộc và đôi khi cả dữ liệu dòng.
+      //
       // 500 để nhà cung cấp bắn lại: lỗi ở đây thường là DB tạm không với tới
       // được, mà bỏ qua một giao dịch tiền là mất tiền của cư dân. Bắn lại an
       // toàn vì khóa (provider, provider_ref) chặn ghi trùng.
       return NextResponse.json(
-        { success: false, message: error.message, da_xu_ly: ketQua.length },
+        { success: false, message: 'Loi noi bo, vui long gui lai', da_xu_ly: ketQua.length },
         { status: 500 },
       )
     }

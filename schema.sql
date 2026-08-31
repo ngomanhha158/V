@@ -1193,7 +1193,7 @@ end $fn$;
 -- chèn "CT DEN:" phía trước, cắt đuôi. Nên mọi phép so đều làm trên bản đã bỏ
 -- hết ký tự không phải chữ-số, ở CẢ HAI phía.
 create or replace function chuan_hoa_ck(p_text text)
-returns text language sql immutable as $fn$
+returns text language sql immutable set search_path = public as $fn$
   select regexp_replace(upper(coalesce(p_text, '')), '[^A-Z0-9]', '', 'g');
 $fn$;
 
