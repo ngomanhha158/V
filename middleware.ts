@@ -1,9 +1,30 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import type { Database } from '@/lib/supabase/database.types'
 
 export async function middleware(request: NextRequest) {
+  // Bản demo thoát ra TRƯỚC khi dựng client Supabase — hai lý do:
+  // 1. /demo cố ý bỏ qua đăng nhập, không đá về /login.
+  // 2. Quan trọng hơn: createServerClient bên dưới đọc biến môi trường bằng
+  //    dấu `!`. Máy chưa cấu hình Supabase thì middleware ném lỗi và CẢ APP
+  //    trắng màn, kể cả trang demo. Thoát sớm ở đây để `npm run dev` xem được
+  //    giao diện mà không cần bất kỳ khóa nào.
+  // An toàn vì app/demo chỉ đọc dữ liệu giả cứng trong lib/demo/data.ts,
+  // không có đường nào ra database thật.
+  //
+  // /api/webhook/* thoát ra ở ĐÚNG CHỖ NÀY vì cùng lý do (2), và vì một lý do
+  // nặng hơn: nó là đường tiền vào. Để nó đi qua supabase.auth.getUser() là
+  // buộc mỗi lần ngân hàng bắn giao dịch phải chờ một vòng gọi Supabase Auth —
+  // dịch vụ chẳng liên quan gì tới việc này. Auth trục trặc là webhook trả 5xx,
+  // nhà cung cấp retry vài lần rồi bỏ, và tiền của cư dân biến mất khỏi hệ
+  // thống. Chốt chặn của nó là bí mật dùng chung kiểm trong route handler.
+  const duong = request.nextUrl.pathname
+  if (duong.startsWith('/demo') || duong.startsWith('/api/webhook/')) {
+    return NextResponse.next({ request })
+  }
+
   const response = NextResponse.next({ request })
-  const supabase = createServerClient(
+  const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
@@ -18,12 +39,28 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   const path = request.nextUrl.pathname
-  if (!user && path !== '/login') {
+  // /auth/confirm là đích của link trong email đăng nhập. Nó đến lúc người dùng
+  // CHƯA có phiên — đó là cả mục đích của nó. Không mở đường ở đây thì link
+  // email bị đá về /login và không ai đăng nhập được bằng link bao giờ.
+  // /api/health phải đi qua TRƯỚC vòng kiểm đăng nhập: Railway gọi nó không
+  // kèm cookie, bị đá về /login thì health check trượt và deploy không bao giờ
+  // xanh.
+  const congMo = path === '/login' || path.startsWith('/auth/')
+    || path === '/api/health'
+  if (!user && !congMo) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
   return response
 }
 
+// manifest.webmanifest / sw.js / offline.html phải LOẠI KHỎI matcher, không
+// phải xử lý bên trong middleware: cư dân vừa quét poster thì CHƯA đăng nhập,
+// mà trình duyệt vẫn phải tải được manifest và service worker để hiện nút cài
+// app. Để chúng đi qua vòng kiểm phiên là bị đá về /login, trình duyệt nhận
+// một trang HTML thay cho JSON manifest, và nút "Thêm vào MH chính" không bao
+// giờ xuất hiện — hỏng đúng ở nhóm người mà cả PWA sinh ra để phục vụ.
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|webp)$).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw\.js|offline\.html|.*\.(?:svg|png|jpg|webp)$).*)',
+  ],
 }

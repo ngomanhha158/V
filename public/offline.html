@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mất kết nối · VBuilding</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100dvh; display: grid; place-items: center; padding: 24px;
+    font: 15px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #f7f8fa; color: #101828; text-align: center;
+  }
+  .o { max-width: 22rem; }
+  .bieu-tuong {
+    width: 56px; height: 56px; margin: 0 auto 20px; border-radius: 14px;
+    background: #2563eb; color: #fff; display: grid; place-items: center;
+    font-weight: 700; font-size: 20px;
+  }
+  h1 { font-size: 1.25rem; font-weight: 600; }
+  p { margin-top: 10px; color: #525f72; }
+  button {
+    margin-top: 22px; height: 40px; padding: 0 18px; border: 0; border-radius: 8px;
+    background: #2563eb; color: #fff; font: inherit; font-weight: 500; cursor: pointer;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0b0f17; color: #eceff4; }
+    p { color: #97a3b6; }
+  }
+</style>
+</head>
+<body>
+  <div class="o">
+    <div class="bieu-tuong">VB</div>
+    <h1>Mất kết nối</h1>
+    <p>
+      Điện thoại đang không vào được mạng. Số liệu hóa đơn và công nợ luôn lấy
+      trực tiếp từ máy chủ nên không hiển thị bản cũ — có mạng lại là xem được ngay.
+    </p>
+    <button onclick="location.reload()">Thử lại</button>
+  </div>
+</body>
+</html>
