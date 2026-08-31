@@ -5,6 +5,7 @@ import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { cachDangNhap } from '@/lib/auth-method'
 import { normalizeEmail, toE164VN } from '@/lib/phone'
+import { dichLoiAuth } from '@/lib/auth-loi'
 import { Button, Field, Hop, Input } from '@/components/ui'
 import { IcTrai } from '@/components/icons'
 
@@ -46,7 +47,7 @@ function LoginForm() {
         : { phone: v },
     )
     setBusy(false)
-    if (error) return setError(error.message)
+    if (error) return setError(dichLoiAuth(error))
     setDaGui(true)
   }
 
@@ -59,7 +60,7 @@ function LoginForm() {
               : { phone: v, token: code, type: 'sms' },
     )
     setBusy(false)
-    if (error) return setError(error.message)
+    if (error) return setError(dichLoiAuth(error))
     router.replace('/')
   }
 
