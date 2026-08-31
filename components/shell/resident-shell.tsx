@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { NavTab } from './nav-link'
 import { ThemeToggle } from './theme-toggle'
+import { GoiYCaiApp } from '@/components/pwa'
 import { IcChuong, IcHoaDon, IcLoa, IcNha, IcSach, IcYeuCau } from '@/components/icons'
 
 /**
@@ -55,6 +56,11 @@ export function ResidentShell({
       {/* pb-24: chừa chỗ cho thanh tab cố định, nếu không nội dung cuối trang
           bị thanh đè lên và không cuộn tới được. */}
       <main className="mx-auto w-full max-w-2xl grow px-4 py-5 pb-24 sm:pb-8">
+        {/* Gợi ý cài app chỉ ở màn CƯ DÂN, không ở màn BQL: BQL ngồi máy tính
+            cả ngày, thêm một biểu tượng vào màn hình chính chẳng giải quyết gì.
+            Đặt trên cùng vì đây là việc làm MỘT LẦN rồi biến mất, không phải
+            thứ cạnh tranh chỗ với nội dung hằng ngày. */}
+        <GoiYCaiApp className="mb-4" />
         {children}
       </main>
 

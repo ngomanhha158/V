@@ -53,6 +53,14 @@ export async function middleware(request: NextRequest) {
   return response
 }
 
+// manifest.webmanifest / sw.js / offline.html phải LOẠI KHỎI matcher, không
+// phải xử lý bên trong middleware: cư dân vừa quét poster thì CHƯA đăng nhập,
+// mà trình duyệt vẫn phải tải được manifest và service worker để hiện nút cài
+// app. Để chúng đi qua vòng kiểm phiên là bị đá về /login, trình duyệt nhận
+// một trang HTML thay cho JSON manifest, và nút "Thêm vào MH chính" không bao
+// giờ xuất hiện — hỏng đúng ở nhóm người mà cả PWA sinh ra để phục vụ.
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|webp)$).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw\.js|offline\.html|.*\.(?:svg|png|jpg|webp)$).*)',
+  ],
 }
