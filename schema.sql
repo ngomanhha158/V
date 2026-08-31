@@ -1596,3 +1596,139 @@ begin
   insert into ticket_events (ticket_id, event_type, note)
   select id, 'escalated', 'Quá hạn SLA - tự động leo thang' from overdue;
 end $fn$;
+
+-- ─────────────────────── Quản lý người dùng (BQL) ────────────────────────────
+-- Vì sao cần: cư dân không tự đăng ký được — email/số điện thoại phải do BQL
+-- ghi nhận trước. Trước đây việc đó chỉ làm được bằng tay trong dashboard
+-- Supabase, nghĩa là mỗi lần thêm một hộ là một lần mở console quản trị ra.
+-- Và nó phụ thuộc vào việc gửi được thư mời, mà hạn thư mặc định là 2/giờ cho
+-- CẢ dự án.
+
+-- Quản lý người dùng chỉ dành cho TRƯỞNG BQL, không phải mọi nhân sự.
+-- is_staff() gộp cả bảo vệ và kỹ thuật — những người cần xem yêu cầu sửa chữa
+-- chứ không cần tạo được tài khoản cho người khác. Ai tạo được tài khoản thì
+-- tạo được tài khoản có quyền BQL, tức là tự nhân bản quyền của mình.
+create or replace function is_bql_manager(p_project uuid)
+returns boolean language sql stable security definer set search_path = public as $fn$
+  select exists (select 1 from staff_assignments
+                  where user_id = auth.uid() and project_id = p_project
+                    and role = 'bql_manager' and is_active);
+$fn$;
+
+-- Danh sách người dùng của một dự án: nhân sự BQL và cư dân trong cùng một bảng.
+-- CỐ Ý không đọc auth.users. Trạng thái đăng nhập (đã vào lần nào chưa, có mật
+-- khẩu chưa) lấy qua Admin API ở tầng ứng dụng: mở một hàm definer đọc
+-- auth.users là mở một cửa mà sai một dòng grant là lộ dữ liệu xác thực của
+-- toàn hệ thống, để đổi lấy một tiện lợi không đáng.
+create or replace function bql_danh_sach_nguoi_dung(p_project uuid)
+returns table (
+  user_id     uuid,
+  ho_ten      text,
+  email       text,
+  phone       text,
+  vai_tro_bql text[],
+  can_ho      text[],
+  tao_luc     timestamptz
+) language plpgsql stable security definer set search_path = public as $fn$
+begin
+  if not is_staff(p_project) then
+    raise exception 'Chi BQL cua du an nay moi xem duoc' using errcode = '42501';
+  end if;
+
+  return query
+  with nhan_su as (
+    select sa.user_id, array_agg(sa.role::text order by sa.role::text) as roles
+      from staff_assignments sa
+     where sa.project_id = p_project and sa.is_active
+     group by sa.user_id
+  ),
+  cu_dan as (
+    select m.user_id,
+           array_agg(u.code || ' (' || m.role::text || ')' order by u.code) as cans
+      from unit_memberships m
+      join units u     on u.id = m.unit_id
+      join buildings b on b.id = u.building_id
+     where b.project_id = p_project
+       and m.status = 'active'
+       and (m.valid_to is null or m.valid_to >= current_date)
+     group by m.user_id
+  )
+  select p.id, p.full_name, p.email, p.phone,
+         ns.roles, cd.cans, p.created_at
+    from profiles p
+    left join nhan_su ns on ns.user_id = p.id
+    left join cu_dan  cd on cd.user_id = p.id
+   -- Chỉ người CÓ liên hệ với dự án này. Thiếu mệnh đề này thì màn quản lý
+   -- người dùng của khu A liệt kê luôn cư dân khu B.
+   where ns.user_id is not null or cd.user_id is not null
+   order by (ns.user_id is null), p.full_name;
+end $fn$;
+
+-- Gán / thu hồi vai trò nhân sự. Đi qua RPC chứ không phải ghi thẳng bảng:
+-- chốt is_bql_manager nằm ở đây, một chỗ, thay vì rải trong từng server action.
+create or replace function bql_gan_nhan_su(p_user uuid, p_project uuid, p_role staff_role)
+returns void language plpgsql security definer set search_path = public as $fn$
+begin
+  if not is_bql_manager(p_project) then
+    raise exception 'Chi truong ban quan ly moi gan duoc nhan su' using errcode = '42501';
+  end if;
+  insert into staff_assignments (user_id, project_id, role, is_active)
+  values (p_user, p_project, p_role, true)
+  on conflict (user_id, project_id, role) do update set is_active = true;
+end $fn$;
+
+create or replace function bql_ngung_nhan_su(p_user uuid, p_project uuid, p_role staff_role)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare v_con int;
+begin
+  if not is_bql_manager(p_project) then
+    raise exception 'Chi truong ban quan ly moi thu hoi duoc nhan su' using errcode = '42501';
+  end if;
+
+  -- Không cho gỡ trưởng BQL cuối cùng. Gỡ được là khu không còn ai tạo được
+  -- tài khoản, không còn ai gán lại được quyền — và cửa duy nhất mở lại là
+  -- SQL editor của Supabase. Rất dễ xảy ra: người sắp nghỉ tự gỡ mình ra.
+  if p_role = 'bql_manager' then
+    select count(*) into v_con from staff_assignments
+     where project_id = p_project and role = 'bql_manager' and is_active
+       and user_id <> p_user;
+    if v_con = 0 then
+      raise exception 'Day la truong ban quan ly duy nhat cua du an' using errcode = '42501';
+    end if;
+  end if;
+
+  update staff_assignments set is_active = false
+   where user_id = p_user and project_id = p_project and role = p_role;
+end $fn$;
+
+-- Gán chủ hộ đầu tiên cho một căn, ngay lúc tạo tài khoản.
+--
+-- GIỮ NGUYÊN bất biến của bql_duyet_chu_ho_dau_tien: BQL chỉ mở được cánh cửa
+-- ĐẦU TIÊN của mỗi căn, và chỉ với vai trò chủ hộ. Người thuê, thành viên gia
+-- đình, người được ủy quyền vẫn do chính chủ hộ duyệt. Nếu để BQL gán ai vào
+-- căn nào cũng được thì toàn bộ lý do tồn tại của hàng chờ duyệt biến mất, và
+-- BQL tự thêm mình vào căn của cư dân được.
+create or replace function bql_gan_chu_ho_dau_tien(p_user uuid, p_unit uuid)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare v_project uuid; v_da_co int;
+begin
+  v_project := unit_project(p_unit);
+  if v_project is null then
+    raise exception 'Khong tim thay can ho' using errcode = '22023';
+  end if;
+  if not is_bql_manager(v_project) then
+    raise exception 'Chi truong ban quan ly moi gan duoc chu ho' using errcode = '42501';
+  end if;
+
+  select count(*) into v_da_co from unit_memberships
+   where unit_id = p_unit and status = 'active'
+     and role in ('owner','authorized')
+     and (valid_to is null or valid_to >= current_date);
+  if v_da_co > 0 then
+    raise exception 'Can nay da co chu ho, nguoi sau do chu ho tu duyet'
+      using errcode = '42501';
+  end if;
+
+  insert into unit_memberships (unit_id, user_id, role, status, approved_by, approved_at)
+  values (p_unit, p_user, 'owner', 'active', auth.uid(), now());
+end $fn$;

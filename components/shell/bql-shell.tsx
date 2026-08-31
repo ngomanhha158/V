@@ -51,6 +51,7 @@ export function BqlShell({
       <NavDoc href={`${base}/bql/poster`} icon={<IcQR />}>Poster QR</NavDoc>
 
       <Muc nhan="Dữ liệu" />
+      <NavDoc href={`${base}/bql/nguoi-dung`} icon={<IcNguoi />}>Người dùng & phân quyền</NavDoc>
       <NavDoc href={`${base}/bql`} icon={<IcToaNha />} chinhXac>Tòa nhà & căn hộ</NavDoc>
       <NavDoc href={`${base}/bql/import`} icon={<IcNhap />}>Nhập từ Excel</NavDoc>
       <NavDoc href={base || '/'} icon={<IcNha />} chinhXac>Về màn cư dân</NavDoc>

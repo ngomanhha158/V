@@ -477,3 +477,37 @@ export const CHO_DUYET_CHU_HO: YeuCauChuHo[] = [
     ho_ten: 'Phạm Hoàng Nam', dien_thoai: null, email: 'nam.pham@example.vn',
     xin_luc: ngayGio(1, 8) },
 ]
+
+export type NguoiDungDemo = {
+  user_id: string
+  ho_ten: string
+  email: string | null
+  phone: string | null
+  vai_tro_bql: string[] | null
+  can_ho: string[] | null
+  tao_luc: string
+}
+
+// Nhân sự xếp trước, cư dân xếp sau — đúng thứ tự bql_danh_sach_nguoi_dung trả về.
+export const NGUOI_DUNG: NguoiDungDemo[] = [
+  { user_id: 'nd-1', ho_ten: 'Ngô Mạnh Hà', email: 'ha.ngo@example.vn', phone: '0901234567',
+    vai_tro_bql: ['bql_manager', 'bqt'], can_ho: null, tao_luc: ngayGio(96, 0) },
+  { user_id: 'nd-2', ho_ten: 'Đỗ Văn Thắng', email: null, phone: '0938776655',
+    vai_tro_bql: ['bql_staff'], can_ho: null, tao_luc: ngayGio(72, 0) },
+  { user_id: 'nd-3', ho_ten: 'Nguyễn Văn Cường', email: null, phone: '0977001122',
+    vai_tro_bql: ['security'], can_ho: null, tao_luc: ngayGio(60, 0) },
+  { user_id: 'nd-4', ho_ten: 'Vũ Đình Kỹ', email: 'ky.vu@example.vn', phone: '0966554433',
+    vai_tro_bql: ['technician'], can_ho: null, tao_luc: ngayGio(60, 0) },
+  { user_id: 'nd-5', ho_ten: 'Trần Thị Bích Ngọc', email: 'ngoc.tran@example.vn', phone: '0912004455',
+    vai_tro_bql: null, can_ho: ['P1-09.03 (owner)'], tao_luc: ngayGio(30, 0) },
+  { user_id: 'nd-6', ho_ten: 'Lê Quang Vinh', email: null, phone: '0987112233',
+    vai_tro_bql: null, can_ho: ['P2-06.06 (owner)'], tao_luc: ngayGio(24, 0) },
+  { user_id: 'nd-7', ho_ten: 'Phạm Hoàng Nam', email: 'nam.pham@example.vn', phone: null,
+    vai_tro_bql: null, can_ho: ['P2-08.05 (owner)', 'P3-02.01 (tenant)'], tao_luc: ngayGio(12, 0) },
+]
+
+export const CAN_CHUA_CO_CHU = [
+  { id: 'ct-1', nhan: 'P1-12.04' },
+  { id: 'ct-2', nhan: 'P2-03.07' },
+  { id: 'ct-3', nhan: 'P3-15.02' },
+]

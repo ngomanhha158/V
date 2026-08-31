@@ -1008,6 +1008,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bql_gan_nhan_su: {
+        Args: {
+          p_project: string
+          p_role: Database["public"]["Enums"]["staff_role"]
+          p_user: string
+        }
+        Returns: undefined
+      }
       bql_generate_invoices: {
         Args: { p_period: string; p_project: string }
         Returns: number
@@ -1038,6 +1046,10 @@ export type Database = {
           // null khi chưa gạch vào căn nào.
           unit_code: string | null
         }[]
+      }
+      bql_gan_chu_ho_dau_tien: {
+        Args: { p_unit: string; p_user: string }
+        Returns: undefined
       }
       bql_gan_giao_dich: {
         Args: { p_txn: string; p_unit: string }
@@ -1076,6 +1088,14 @@ export type Database = {
         Args: { p_membership: string }
         Returns: Json
       }
+      bql_ngung_nhan_su: {
+        Args: {
+          p_project: string
+          p_role: Database["public"]["Enums"]["staff_role"]
+          p_user: string
+        }
+        Returns: undefined
+      }
       bql_san_sang_go_live: {
         Args: { p_project: string }
         Returns: {
@@ -1103,6 +1123,18 @@ export type Database = {
           ten_lien_he: string | null
           unit_code: string
           unit_id: string
+        }[]
+      }
+      bql_danh_sach_nguoi_dung: {
+        Args: { p_project: string }
+        Returns: {
+          can_ho: string[]
+          email: string
+          ho_ten: string
+          phone: string
+          tao_luc: string
+          user_id: string
+          vai_tro_bql: string[]
         }[]
       }
       bql_dashboard: {
@@ -1173,6 +1205,7 @@ export type Database = {
         Args: { p_period: string; p_project: string }
         Returns: number
       }
+      is_bql_manager: { Args: { p_project: string }; Returns: boolean }
       is_staff: { Args: { p_project: string }; Returns: boolean }
       is_unit_manager: { Args: { p_unit: string }; Returns: boolean }
       rate_ticket: {

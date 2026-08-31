@@ -105,6 +105,13 @@ grant execute on function bql_bo_qua_giao_dich(uuid, text) to authenticated;
 grant execute on function bql_cho_duyet_chu_ho(uuid)         to authenticated;
 grant execute on function bql_duyet_chu_ho_dau_tien(uuid)    to authenticated;
 grant execute on function bql_san_sang_go_live(uuid)          to authenticated;
+-- Quản lý người dùng. is_bql_manager là helper của các hàm dưới nhưng trang
+-- /bql/nguoi-dung cũng gọi thẳng để quyết định có hiện form tạo tài khoản không.
+grant execute on function is_bql_manager(uuid)                to authenticated;
+grant execute on function bql_danh_sach_nguoi_dung(uuid)      to authenticated;
+grant execute on function bql_gan_nhan_su(uuid, uuid, staff_role)   to authenticated;
+grant execute on function bql_ngung_nhan_su(uuid, uuid, staff_role) to authenticated;
+grant execute on function bql_gan_chu_ho_dau_tien(uuid, uuid)       to authenticated;
 
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là
