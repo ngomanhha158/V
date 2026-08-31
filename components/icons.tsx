@@ -40,6 +40,17 @@ export const IcDoiSoat = (p: SVGProps<SVGSVGElement>) => (
     <path d="M4 8h13m-3-3 3 3-3 3" /><path d="M20 16H7m3-3-3 3 3 3" />
   </I>
 )
+export const IcCheck = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}><path d="M20 6 9 17l-5-5" /></I>
+)
+export const IcQR = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <rect x="3" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="3" width="7" height="7" rx="1" />
+    <rect x="3" y="14" width="7" height="7" rx="1" />
+    <path d="M14 14h3v3h-3zM20 14v3M14 20h3M20 20h1" />
+  </I>
+)
 export const IcNguoi = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20a7.5 7.5 0 0 1 15 0" /></I>
 )

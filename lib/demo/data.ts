@@ -451,3 +451,29 @@ export const DOI_SOAT: GiaoDichDemo[] = [
     trang_thai: 'bo_qua', cach_khop: null, con_du: 0, unit_code: null,
     ghi_chu: 'Nhà thầu hoàn ứng, không phải tiền cư dân', goi_y: null },
 ]
+
+// ── Go-live (N29) ──
+// Cố ý CHƯA đủ điều kiện: thiếu tài khoản ngân hàng, còn 3 người chờ duyệt.
+// Demo mà mọi thứ xanh hết thì không cho người xem thấy màn này để làm gì.
+export const SAN_SANG = {
+  so_toa: 2, so_can: 24, so_can_co_chu: 5, so_cho_duyet: 3,
+  so_bieu_phi: 5, so_sla: 8, so_nhan_su: 2, so_noi_quy: 6,
+  so_hoa_don_ky_nay: 24, so_hoa_don_da_phat: 18,
+}
+
+export type YeuCauChuHo = {
+  membership_id: string; unit_code: string; building_code: string
+  ho_ten: string; dien_thoai: string | null; email: string | null; xin_luc: string
+}
+
+export const CHO_DUYET_CHU_HO: YeuCauChuHo[] = [
+  { membership_id: 'mb-1', unit_code: 'P1-09.03', building_code: 'P1',
+    ho_ten: 'Trần Thị Bích Ngọc', dien_thoai: '0912004455', email: 'ngoc.tran@example.vn',
+    xin_luc: ngayGio(0, 1) },
+  { membership_id: 'mb-2', unit_code: 'P2-06.06', building_code: 'P2',
+    ho_ten: 'Lê Quang Vinh', dien_thoai: '0987112233', email: null,
+    xin_luc: ngayGio(0, 3) },
+  { membership_id: 'mb-3', unit_code: 'P2-08.05', building_code: 'P2',
+    ho_ten: 'Phạm Hoàng Nam', dien_thoai: null, email: 'nam.pham@example.vn',
+    xin_luc: ngayGio(1, 8) },
+]

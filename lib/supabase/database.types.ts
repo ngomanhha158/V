@@ -1057,6 +1057,40 @@ export type Database = {
         }
         Returns: Json
       }
+      bql_cho_duyet_chu_ho: {
+        Args: { p_project: string }
+        Returns: {
+          building_code: string
+          // profiles.phone/email null được: cư dân đăng nhập bằng email thì
+          // chưa chắc đã có SĐT, và ngược lại.
+          dien_thoai: string | null
+          email: string | null
+          ho_ten: string
+          membership_id: string
+          unit_code: string
+          unit_id: string
+          xin_luc: string
+        }[]
+      }
+      bql_duyet_chu_ho_dau_tien: {
+        Args: { p_membership: string }
+        Returns: Json
+      }
+      bql_san_sang_go_live: {
+        Args: { p_project: string }
+        Returns: {
+          so_bieu_phi: number
+          so_can: number
+          so_can_co_chu: number
+          so_cho_duyet: number
+          so_hoa_don_da_phat: number
+          so_hoa_don_ky_nay: number
+          so_nhan_su: number
+          so_noi_quy: number
+          so_sla: number
+          so_toa: number
+        }[]
+      }
       bql_debt_report: {
         Args: { p_project: string }
         Returns: {

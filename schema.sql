@@ -1438,6 +1438,152 @@ begin
      order by t.paid_at desc, t.received_at desc;
 end $fn$;
 
+-- ══════════════ N29 — MỞ KHÓA CHỦ HỘ ĐẦU TIÊN ═══════════════════════════
+--
+-- Vòng luẩn quẩn của ngày đầu: duyệt thành viên cần is_unit_manager, mà
+-- is_unit_manager cần đã có một chủ hộ 'active' — thứ chỉ sinh ra được bằng
+-- một lần duyệt. Căn hộ vừa import thì KHÔNG AI duyệt được ai. Dán poster QR
+-- lên sảnh là cả tòa đăng ký rồi kẹt ở 'pending' hết.
+--
+-- Lối ra hẹp nhất có thể, cố ý KHÔNG cho BQL quyền duyệt chung:
+--   - chỉ duyệt được vai CHỦ HỘ (người thuê / thành viên vẫn do chủ hộ duyệt),
+--   - và chỉ khi căn CHƯA có chủ hộ hoạt động nào.
+-- Duyệt xong là cửa này đóng lại với chính căn đó, quyền trả về cho chủ hộ.
+-- Mở rộng hơn thì BQL tự thêm mình vào căn bất kỳ và đọc được dữ liệu của nó,
+-- đúng thứ mà cả tầng RLS dựng ra để chặn.
+--
+-- BQL có hợp đồng mua bán / biên bản bàn giao trong tay nên đối chiếu được
+-- danh tính — đó là lý do việc này giao cho họ chứ không tự động duyệt.
+create or replace function bql_duyet_chu_ho_dau_tien(p_membership uuid)
+returns jsonb language plpgsql security definer set search_path = public as $fn$
+declare m unit_memberships; v_du_an uuid; v_da_co int;
+begin
+  select * into m from unit_memberships where id = p_membership for update;
+  if not found then
+    raise exception 'Khong co yeu cau nay' using errcode = '02000';
+  end if;
+
+  v_du_an := unit_project(m.unit_id);
+  if not is_staff(v_du_an) then
+    raise exception 'Chi BQL cua du an nay moi duyet duoc' using errcode = '42501';
+  end if;
+
+  if m.status <> 'pending' then
+    raise exception 'Yeu cau nay khong con cho duyet' using errcode = '22023';
+  end if;
+
+  if m.role <> 'owner' then
+    raise exception 'BQL chi duyet duoc CHU HO dau tien. Nguoi thue va thanh vien gia dinh do chinh chu ho duyet'
+      using errcode = '42501';
+  end if;
+
+  -- Chốt hẹp: căn đã có người quản lý thì việc duyệt thuộc về người đó.
+  select count(*) into v_da_co
+    from unit_memberships
+   where unit_id = m.unit_id
+     and status = 'active'
+     and role in ('owner','authorized')
+     and (valid_to is null or valid_to >= current_date);
+  if v_da_co > 0 then
+    raise exception 'Can nay da co chu ho, viec duyet thuoc ve chu ho' using errcode = '42501';
+  end if;
+
+  update unit_memberships
+     set status = 'active', approved_by = auth.uid(), approved_at = now()
+   where id = p_membership;
+
+  return jsonb_build_object('unit_id', m.unit_id, 'user_id', m.user_id);
+end $fn$;
+
+-- Danh sách chờ. Definer vì BQL cố ý KHÔNG đọc được unit_memberships và
+-- profiles của người lạ — nhưng để đối chiếu với hợp đồng thì phải thấy tên
+-- và số điện thoại. Khóa cứng vào p_project, và chỉ trả về đúng những yêu cầu
+-- mà BQL thật sự có quyền duyệt.
+create or replace function bql_cho_duyet_chu_ho(p_project uuid)
+returns table (
+  membership_id uuid,
+  unit_id       uuid,
+  unit_code     text,
+  building_code text,
+  ho_ten        text,
+  dien_thoai    text,
+  email         text,
+  xin_luc       timestamptz
+) language plpgsql stable security definer set search_path = public as $fn$
+begin
+  if not is_staff(p_project) then
+    raise exception 'Chi BQL cua du an nay moi xem duoc' using errcode = '42501';
+  end if;
+
+  return query
+    select m.id, u.id, u.code, b.code, p.full_name, p.phone, p.email, m.created_at
+      from unit_memberships m
+      join units u     on u.id = m.unit_id
+      join buildings b on b.id = u.building_id
+      join profiles p  on p.id = m.user_id
+     where b.project_id = p_project
+       and m.status = 'pending'
+       and m.role = 'owner'
+       -- Cùng điều kiện với hàm duyệt. Hiện ra một yêu cầu mà bấm vào lại báo
+       -- lỗi là cách nhanh nhất để người trực mất niềm tin vào màn hình.
+       and not exists (
+         select 1 from unit_memberships x
+          where x.unit_id = m.unit_id and x.status = 'active'
+            and x.role in ('owner','authorized')
+            and (x.valid_to is null or x.valid_to >= current_date))
+     order by b.code, u.code, m.created_at;
+end $fn$;
+
+-- Một truy vấn cho cả màn tiền kiểm go-live. Gộp lại thay vì mười câu đếm rời
+-- vì đây là màn người ta mở đúng vài lần, và mười vòng gọi PostgREST cho một
+-- màn hình tĩnh là lãng phí không đổi lại được gì.
+--
+-- Definer: BQL cố ý không đọc được unit_memberships, mà "bao nhiêu căn đã có
+-- chủ hộ" lại chính là con số quyết định có mở cho cư dân hay chưa.
+create or replace function bql_san_sang_go_live(p_project uuid)
+returns table (
+  so_toa               int,
+  so_can                int,
+  so_can_co_chu         int,
+  so_cho_duyet          int,
+  so_bieu_phi           int,
+  so_sla                int,
+  so_nhan_su            int,
+  so_noi_quy            int,
+  so_hoa_don_ky_nay     int,
+  so_hoa_don_da_phat    int
+) language plpgsql stable security definer set search_path = public as $fn$
+declare v_ky date := date_trunc('month', (now() at time zone 'Asia/Ho_Chi_Minh'))::date;
+begin
+  if not is_staff(p_project) then
+    raise exception 'Chi BQL cua du an nay moi xem duoc' using errcode = '42501';
+  end if;
+
+  return query
+  select
+    (select count(*)::int from buildings where project_id = p_project),
+    (select count(*)::int from units u join buildings b on b.id = u.building_id
+      where b.project_id = p_project),
+    -- "Đã có chủ hộ" = có người quản lý ĐANG hiệu lực. Đếm theo membership sẽ
+    -- ra số lớn hơn số căn khi một căn có nhiều thành viên — mà câu hỏi ở đây
+    -- là bao nhiêu CĂN đã có người đứng tên.
+    (select count(distinct u.id)::int
+       from units u
+       join buildings b on b.id = u.building_id
+       join unit_memberships m on m.unit_id = u.id
+      where b.project_id = p_project
+        and m.status = 'active' and m.role in ('owner','authorized')
+        and (m.valid_to is null or m.valid_to >= current_date)),
+    (select count(*)::int from bql_cho_duyet_chu_ho(p_project)),
+    (select count(*)::int from fee_types    where project_id = p_project),
+    (select count(*)::int from sla_policies where project_id = p_project),
+    (select count(*)::int from staff_assignments where project_id = p_project and is_active),
+    (select count(*)::int from documents    where project_id = p_project),
+    (select count(*)::int from invoices where project_id = p_project and period = v_ky),
+    (select count(*)::int from invoices where project_id = p_project and period = v_ky
+       and status <> 'draft');
+end $fn$;
+
 create or replace function escalate_overdue_tickets() returns void
 language plpgsql set search_path = public as $fn$
 begin

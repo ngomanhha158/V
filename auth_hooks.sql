@@ -102,6 +102,9 @@ grant execute on function bql_dashboard_thang(uuid, int)   to authenticated;
 grant execute on function bql_doi_soat(uuid, text)         to authenticated;
 grant execute on function bql_gan_giao_dich(uuid, uuid)    to authenticated;
 grant execute on function bql_bo_qua_giao_dich(uuid, text) to authenticated;
+grant execute on function bql_cho_duyet_chu_ho(uuid)         to authenticated;
+grant execute on function bql_duyet_chu_ho_dau_tien(uuid)    to authenticated;
+grant execute on function bql_san_sang_go_live(uuid)          to authenticated;
 
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là
