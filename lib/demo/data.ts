@@ -529,3 +529,28 @@ export const BIEU_PHI: BieuPhiDemo[] = [
   { id: 'bp-4', code: 'OTO',  name: 'Gửi ô tô',           unit_price: 1200000,calc_method: 'fixed' },
   { id: 'bp-5', code: 'RAC',  name: 'Vệ sinh, thu gom rác', unit_price: 30000, calc_method: 'fixed' },
 ]
+
+export type SlaDemo = {
+  id: string
+  category: string
+  priority: string
+  respond_mins: number
+  resolve_mins: number
+  escalate_to: string
+}
+
+// Hạn lấy quanh mức các khu vận hành tốt hay cam kết. Vẫn là số của bản demo —
+// hạn thật phải BQL ngồi chốt, vì đây là lời hứa với cư dân.
+export const SLA: SlaDemo[] = [
+  { id: 'sla-1', category: 'Thang máy', priority: 'urgent', respond_mins: 5, resolve_mins: 30, escalate_to: 'bql_manager' },
+  { id: 'sla-2', category: 'Thang máy', priority: 'normal', respond_mins: 30, resolve_mins: 240, escalate_to: 'technician' },
+  { id: 'sla-3', category: 'Mất nước', priority: 'high', respond_mins: 15, resolve_mins: 120, escalate_to: 'bql_manager' },
+  { id: 'sla-4', category: 'Điện, chiếu sáng', priority: 'normal', respond_mins: 60, resolve_mins: 480, escalate_to: 'technician' },
+  { id: 'sla-5', category: 'Điện, chiếu sáng', priority: 'low', respond_mins: 240, resolve_mins: 4320, escalate_to: 'technician' },
+  { id: 'sla-6', category: 'Vệ sinh', priority: 'normal', respond_mins: 120, resolve_mins: 1440, escalate_to: 'bql_staff' },
+  { id: 'sla-7', category: 'An ninh', priority: 'urgent', respond_mins: 3, resolve_mins: 60, escalate_to: 'security' },
+]
+
+export const SO_TICKET_THEO_DANH_MUC: Record<string, number> = {
+  'Thang máy': 14, 'Mất nước': 6, 'Điện, chiếu sáng': 23, 'Vệ sinh': 9, 'An ninh': 2,
+}

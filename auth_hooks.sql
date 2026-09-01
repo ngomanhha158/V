@@ -53,6 +53,11 @@ grant select, insert, update on tickets to authenticated;
 grant select on staff_assignments to authenticated;
 -- Biểu phí và chỉ số công tơ: RLS quyết định ai ghi (chỉ BQL).
 grant insert, update, delete on fee_types to authenticated;
+-- SLA: policy sla_staff_write đã cho phép BQL ghi từ đầu, nhưng thiếu grant thì
+-- policy không bao giờ chạy tới — Postgres chặn ở tầng quyền bảng trước. Hệ quả
+-- không ai ngờ: danh mục sự cố ở màn báo hỏng của cư dân lấy từ chính bảng này,
+-- nên khu chưa có SLA là cư dân không gửi được yêu cầu nào.
+grant insert, update, delete on sla_policies to authenticated;
 grant select, insert, update, delete on meter_readings to authenticated;
 -- CỐ Ý không cấp update/insert trên invoices, invoice_lines, payments cho
 -- authenticated: đường tiền đi qua RPC definer (bql_generate_invoices,

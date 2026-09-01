@@ -33,6 +33,7 @@ export function BqlShell({
       <Muc nhan="Vận hành" />
       <NavDoc href={`${base}/bql/dashboard`} icon={<IcBieuDo />}>Sức khỏe vận hành</NavDoc>
       <NavDoc href={`${base}/bql/tickets`} icon={<IcYeuCau />}>Điều phối yêu cầu</NavDoc>
+      <NavDoc href={`${base}/bql/sla`} icon={<IcCheck />}>Cam kết thời gian</NavDoc>
 
       <Muc nhan="Truyền thông" />
       <NavDoc href={`${base}/bql/bang-tin`} icon={<IcLoa />}>Bảng tin</NavDoc>
