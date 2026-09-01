@@ -511,3 +511,21 @@ export const CAN_CHUA_CO_CHU = [
   { id: 'ct-2', nhan: 'P2-03.07' },
   { id: 'ct-3', nhan: 'P3-15.02' },
 ]
+
+export type BieuPhiDemo = {
+  id: string
+  code: string
+  name: string
+  unit_price: number | null
+  calc_method: string
+}
+
+// Giá lấy quanh mức thường gặp ở chung cư Hà Nội/TP.HCM 2026 — đủ thật để nhìn
+// ra thành tiền có hợp lý không, nhưng vẫn là số bịa của bản demo.
+export const BIEU_PHI: BieuPhiDemo[] = [
+  { id: 'bp-1', code: 'QL',   name: 'Phí quản lý',        unit_price: 16500,  calc_method: 'per_m2' },
+  { id: 'bp-2', code: 'NUOC', name: 'Nước sinh hoạt',     unit_price: 8500,   calc_method: 'metered' },
+  { id: 'bp-3', code: 'XEMAY',name: 'Gửi xe máy',         unit_price: 90000,  calc_method: 'fixed' },
+  { id: 'bp-4', code: 'OTO',  name: 'Gửi ô tô',           unit_price: 1200000,calc_method: 'fixed' },
+  { id: 'bp-5', code: 'RAC',  name: 'Vệ sinh, thu gom rác', unit_price: 30000, calc_method: 'fixed' },
+]

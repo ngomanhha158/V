@@ -39,6 +39,7 @@ export function BqlShell({
       <NavDoc href={`${base}/bql/so-tay`} icon={<IcSach />}>Sổ tay cư dân</NavDoc>
 
       <Muc nhan="Tài chính" />
+      <NavDoc href={`${base}/bql/bieu-phi`} icon={<IcTien />}>Biểu phí</NavDoc>
       <NavDoc href={`${base}/bql/billing`} icon={<IcHoaDon />}>Hóa đơn</NavDoc>
       <NavDoc href={`${base}/bql/cong-no`} icon={<IcTien />}>Công nợ</NavDoc>
       <NavDoc href={`${base}/bql/doi-soat`} icon={<IcDoiSoat />}>Đối soát tiền về</NavDoc>
