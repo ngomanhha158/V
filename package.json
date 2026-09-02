@@ -4,11 +4,12 @@
   "type": "module",
   "scripts": {
     "verify": "node scripts/verify-schema.mjs",
+    "verify:railway": "node scripts/verify-railway.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "test:js": "node --experimental-strip-types --test \"lib/**/*.test.ts\"",
-    "test": "npm run verify && npm run test:js"
+    "test": "npm run verify && npm run verify:railway && npm run test:js"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.16",

@@ -1,11 +1,12 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- Smoke test ĐƯỜNG THẬT của production: danh tính lấy từ GUC `app.user_id`,
--- truy vấn chạy dưới role `authenticated`.
+-- Smoke test ĐƯỜNG THẬT của production, chạy dưới role `authenticated`.
 --
 -- Bộ test_*.sql chứng minh policy đúng, nhưng chúng lấy danh tính từ `test.uid`.
--- File này chứng minh nốt mắt xích còn lại: cái app thật sẽ làm — SET LOCAL
--- app.user_id + SET LOCAL ROLE authenticated — có thật sự bị RLS chặn không.
--- Đây chính là chỗ hỏng âm thầm nếu app lỡ nối bằng role postgres.
+-- File này chứng minh nốt mắt xích còn lại: hai đường mà hệ thống thật dùng —
+--   • `request.jwt.claims`  (PostgREST đặt từ JWT — đường của app)
+--   • `app.user_id`         (SET LOCAL — đường của psql và job nền)
+-- — có thật sự bị RLS chặn không. Đây chính là chỗ hỏng âm thầm nếu app lỡ nối
+-- bằng role postgres, hoặc nếu `authenticator` lỡ để INHERIT.
 --
 -- Chạy:  psql -f railway/02_smoke_prod.sql
 -- File tự mở transaction và tự ROLLBACK ở cuối — xanh hay đỏ đều không để lại
@@ -59,8 +60,33 @@ begin
   select count(*) into n from invoices where unit_id = v_unit;
   if n <> 0 then raise exception 'FAIL 5: uuid bia van doc duoc % hoa don', n; end if;
 
+  -- ── Đường PostgREST: danh tính đến từ JWT, không từ app.user_id ──
+  -- Đây mới là đường mà app thật đi sau khi bỏ Supabase. Dọn sạch app.user_id
+  -- trước, nếu không thì case dưới có thể xanh nhờ GUC còn sót lại từ case 3 —
+  -- xanh vì lý do sai còn tệ hơn đỏ.
+  perform set_config('app.user_id', '', true);
+
+  -- 6. Chủ hộ, danh tính nằm trong claims của JWT.
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', u_owner::text, 'role', 'authenticated')::text, true);
+  select count(*) into n from invoices where unit_id = v_unit;
+  if n <> 1 then raise exception 'FAIL 6: chu ho qua JWT phai thay 1 hoa don, thay %', n; end if;
+
+  -- 7. Người lạ, cùng đường JWT.
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', u_la::text, 'role', 'authenticated')::text, true);
+  select count(*) into n from invoices where unit_id = v_unit;
+  if n <> 0 then raise exception 'FAIL 7: nguoi la qua JWT doc duoc % hoa don', n; end if;
+
+  -- 8. JWT không có claim `sub` (token hỏng, hoặc ký thiếu). Phải rơi về KHÔNG
+  --    thấy gì, chứ không phải rơi về "bỏ qua bộ lọc".
+  perform set_config('request.jwt.claims', '{"role":"authenticated"}', true);
+  select count(*) into n from invoices where unit_id = v_unit;
+  if n <> 0 then raise exception 'FAIL 8: JWT thieu sub van doc duoc % hoa don', n; end if;
+  perform set_config('request.jwt.claims', '', true);
+
   execute 'reset role';
-  raise notice 'SMOKE PRODUCTION PATH PASSED — app.user_id + role authenticated chan dung';
+  raise notice 'SMOKE PRODUCTION PATH PASSED — ca hai duong (JWT claims + app.user_id) deu bi RLS chan dung';
 end
 $smoke$;
 

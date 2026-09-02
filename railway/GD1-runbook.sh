@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# GĐ1 — bỏ Supabase, chạy trọn trên Railway.
+#
+# GĐ0 đã dựng Postgres. GĐ1 dựng nốt hai thứ Supabase còn đang làm hộ:
+#   • PostgREST  — chính cái server mà supabase.from(...) vẫn gọi tới. Chạy
+#                  bản gốc, không phải bản của Supabase, và KHÔNG mở ra internet.
+#   • Đăng nhập  — railway/03_auth.sql thay GoTrue: mật khẩu bcrypt, mã một
+#                  lần, đếm lượt dò. Ký JWT nằm ở Next.js.
+#
+# Phần A chạy trong Console của service Postgres. Phần B làm trên giao diện
+# Railway. Đọc hết một lượt trước khi bấm gì.
+# ─────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║ PHẦN A — dán vào Console của service Postgres                             ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+cd /tmp
+export PGHOST=localhost
+
+echo "── A1/4  Lấy file từ repo"
+command -v curl >/dev/null || { apt-get -qq update >/dev/null && apt-get -qq install -y curl >/dev/null; }
+BASE=https://raw.githubusercontent.com/ngomanhha158/v/main
+for f in railway/00_compat.sql railway/02_smoke_prod.sql railway/03_auth.sql railway/04_smoke_auth.sql; do
+  curl -sSL -o "$(basename "$f")" "$BASE/$f"
+done
+
+echo "── A2/4  Áp lại lớp tương thích + lớp đăng nhập"
+# 00_compat.sql chạy LẠI được: toàn bộ là create-if-not-exists và create-or-replace.
+# Lần này nó thêm hai thứ mà GĐ0 chưa có — role `authenticator` cho PostgREST,
+# và auth.uid() đọc được danh tính từ JWT.
+psql -v ON_ERROR_STOP=1 -q -f 00_compat.sql
+psql -v ON_ERROR_STOP=1 -q -f 03_auth.sql
+echo "   OK: compat + auth"
+
+echo "── A3/4  Mật khẩu cho role authenticator"
+# Em KHÔNG đặt hộ mật khẩu. Anh gõ dòng dưới, thay <mk> bằng chuỗi anh tự sinh:
+#     openssl rand -base64 24
+#
+#     psql -c "alter role authenticator password '<mk>'"
+#
+# Rồi giữ nguyên chuỗi đó cho PGRST_DB_URI ở phần B.
+# authenticator KHÔNG phải superuser và KHÔNG có bypassrls — đó là cả điểm của
+# nó. Đừng thay bằng role postgres cho nhanh: superuser bỏ qua RLS kể cả khi đã
+# FORCE, và hỏng theo kiểu không báo lỗi, không ai biết cho tới lúc một cư dân
+# đọc được hóa đơn của căn khác.
+
+echo "── A4/4  Hai bài smoke"
+psql -v ON_ERROR_STOP=1 -f 02_smoke_prod.sql 2>&1 | grep -E "SMOKE|ERROR"
+psql -v ON_ERROR_STOP=1 -f 04_smoke_auth.sql 2>&1 | grep -E "SMOKE|ERROR"
+# Cả hai tự ROLLBACK. Không xanh thì DỪNG, đừng làm tiếp phần B.
+
+cat <<'HUONGDAN'
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║ PHẦN B — trên giao diện Railway                                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+B1. Tạo service mới từ Docker image:  postgrest/postgrest:v12.2.3
+    Ghim đúng số hiệu, đừng dùng :latest — một bản PostgREST mới đổi cách đọc
+    JWT là cả tòa nhà không đăng nhập được vào sáng hôm sau, mà không ai vừa
+    deploy gì cả.
+
+B2. Biến môi trường của service PostgREST:
+
+      PGRST_DB_URI       = postgresql://authenticator:<mk A3>@postgres.railway.internal:5432/railway
+      PGRST_DB_SCHEMAS   = public
+      PGRST_DB_ANON_ROLE = anon
+      PGRST_JWT_SECRET   = <chuỗi ≥ 32 ký tự, tự sinh: openssl rand -base64 48>
+      PGRST_SERVER_HOST  = ::
+      PGRST_SERVER_PORT  = 3000
+      PGRST_DB_POOL      = 10
+      PGRST_OPENAPI_MODE = disabled
+
+    PGRST_SERVER_HOST = ::  là BẮT BUỘC, không phải tùy chọn. Mặc định PostgREST
+    chỉ nghe trên IPv4, mà mạng nội bộ của Railway là IPv6 — để mặc định thì
+    app gọi sang chỉ nhận "connection refused", và triệu chứng nhìn giống hệt
+    lỗi cấu hình mật khẩu.
+
+    PGRST_DB_ANON_ROLE = anon: request không kèm JWT chạy dưới quyền anon, mà
+    auth_hooks.sql không cấp cho anon một bảng nào. Tức là không token thì
+    không đọc được gì — không phải "đọc được ít", mà là không có gì.
+
+B3. KHÔNG bấm "Generate Domain" cho service PostgREST.
+    Nó chỉ cần nói chuyện với service `v` qua mạng nội bộ. Mở ra internet là
+    đưa thẳng tầng dữ liệu ra ngoài, và từ đó chốt duy nhất còn lại là chữ ký
+    JWT. Để nó kín thì kẻ tấn công phải qua Next.js trước.
+
+B4. Biến môi trường của service `v` (Next.js):
+
+      POSTGREST_URL      = http://postgrest.railway.internal:3000
+      AUTH_JWT_SECRET    = <ĐÚNG chuỗi PGRST_JWT_SECRET ở B2>
+      SMTP_URL           = smtps://<user>:<mk>@<host>:465     (thư đăng nhập)
+      SMTP_FROM          = "BQL Toà nhà <no-reply@ten-mien-cua-anh>"
+
+    AUTH_JWT_SECRET phải trùng khít PGRST_JWT_SECRET. Lệch một ký tự thì mọi
+    request đều 401 và log chỉ nói "JWT invalid" — không nói là do lệch khóa.
+
+B5. Xóa các biến của Supabase khỏi service `v` sau khi đã chạy xanh:
+      NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+      SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SECRET_KEY
+    Xóa SAU chứ không phải trước: còn biến thì còn đường lùi trong lúc đang dò.
+
+B6. Chuyển dữ liệu từ Supabase sang (nếu khu đã chạy thật):
+      pg_dump --data-only --schema=public "<chuỗi nối Supabase>" > data.sql
+      psql -f data.sql
+    Tài khoản đăng nhập KHÔNG chuyển được: mật khẩu bên Supabase băm bằng khóa
+    của họ. Mỗi người phải đặt lại mật khẩu một lần — BQL làm ở màn Người dùng,
+    hoặc cư dân tự đăng nhập bằng mã một lần rồi đặt mật khẩu mới.
+HUONGDAN

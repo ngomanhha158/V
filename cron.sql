@@ -1,6 +1,15 @@
--- Lịch job nền (pg_cron). CHỈ chạy trên Supabase — Postgres thuần không có
--- pg_cron, nên file này không nằm trong npm run verify. Bản thân các hàm được
--- test ở test_jobs.sql và test_tickets.sql.
+-- Lịch job nền (pg_cron). File này không nằm trong npm run verify vì Postgres
+-- thuần không có pg_cron. Bản thân các hàm được test ở test_jobs.sql và
+-- test_tickets.sql.
+--
+-- TRÊN RAILWAY: ảnh Postgres mặc định KHÔNG có pg_cron. Chạy file này ở đó sẽ
+-- đỏ ngay câu `create extension`, và đỏ như vậy còn may — cái đáng sợ là tưởng
+-- nó chạy rồi. Không có pg_cron thì: hóa đơn không được nhắc, ticket quá hạn
+-- không leo thang, tư cách thành viên hết hạn không bị thu hồi — tất cả đều
+-- hỏng LẶNG LẼ, không màn nào báo.
+-- Đường thay thế trên Railway là Cron Service gọi vào một endpoint của app.
+-- Chưa dựng: xem GĐ2 trong railway/GD1-runbook.sh. Tới lúc dựng xong thì mỗi
+-- job dưới đây phải có đúng một dòng tương ứng bên đó.
 --
 -- BẪY MÚI GIỜ: pg_cron trên Supabase chạy theo cron.timezone, mặc định GMT.
 -- Kiểm tra trước khi sửa lịch:  show cron.timezone;
@@ -42,6 +51,16 @@ select cron.schedule(
   'mo-ky-bao-tri',
   '0 0 * * *',
   $job$ select public.mo_ky_bao_tri() $job$
+);
+
+-- Dọn mã đăng nhập cũ — 1 lần/ngày lúc 03:00 giờ VN = 20:00 UTC hôm trước.
+-- Không có job này thì auth.ma_dang_nhap chỉ lớn dần chứ không sai gì; để đây
+-- vì một bảng chỉ-lớn-dần trên một hệ thống chạy nhiều năm cuối cùng vẫn thành
+-- việc của ai đó.
+select cron.schedule(
+  'don-ma-dang-nhap',
+  '0 20 * * *',
+  $job$ select public.auth_don_ma() $job$
 );
 
 -- Gỡ lịch:            select cron.unschedule('expire-memberships');
