@@ -68,15 +68,26 @@ grant select on ticket_events to authenticated;
 -- Không cấp insert/update/delete cho ai — ghi vào sổ tiền chỉ qua hàm definer.
 grant select on bank_transactions to authenticated;
 grant select on invoices, invoice_lines, announcements, notifications to authenticated;
+-- Sổ quỹ: policy payment_staff_read đã lọc xuống BQL của đúng dự án từ đầu,
+-- nhưng thiếu grant thì policy không bao giờ chạy tới — Postgres chặn ở tầng
+-- quyền bảng TRƯỚC. Đây là bảng thứ hai dính đúng cái bẫy đó sau sla_policies.
+--
+-- raw_payload giữ nguyên gói tin ngân hàng, có tên người chuyển; nhưng đó đúng
+-- là thứ BQL cần khi đối chiếu, và policy đã chặn cư dân. Cấp select ở đây là
+-- cùng một quyết định đã cấp cho bank_transactions ngay trên, không phải nới
+-- lỏng gì thêm. Vẫn KHÔNG cấp insert/update/delete: ghi vào bảng tiền chỉ đi
+-- qua hàm definer.
+grant select on payments to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
 grant insert, update, delete on announcements, documents to authenticated;
 -- KHÔNG cấp update trên notifications: đánh dấu đã đọc đi qua RPC
 -- mark_notifications_read để không ai sửa được nội dung thông báo của mình.
 
--- Không cấp gì trên profiles, staff_assignments, ticket_events, meter_readings,
+-- Không cấp GHI trên profiles, staff_assignments, ticket_events, meter_readings,
 -- payments, unit_vehicles, unit_pets: đây là dữ liệu cá nhân / tài chính / audit,
--- app đọc qua service_role ở phía server, client không đụng thẳng.
+-- sửa được là mất luôn ý nghĩa của việc lưu. Ghi vào chúng đi qua hàm definer
+-- hoặc service_role ở phía server, client không đụng thẳng.
 
 -- ──────────────────────────── EXECUTE trên function ──────────────────────────
 -- BẪY: Postgres mặc định cấp EXECUTE cho PUBLIC trên MỌI function mới (ACL hiện

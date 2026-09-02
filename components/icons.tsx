@@ -113,3 +113,8 @@ export const IcCanHo = (p: SVGProps<SVGSVGElement>) => (
     <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
   </I>
 )
+
+/** Mũi tên xuống khay: tải file về. IcNhap là mũi tên vào hệ thống, đây là chiều ngược lại. */
+export const IcTaiVe = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></I>
+)
