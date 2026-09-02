@@ -2,14 +2,23 @@
 -- thuần không có pg_cron. Bản thân các hàm được test ở test_jobs.sql và
 -- test_tickets.sql.
 --
--- TRÊN RAILWAY: ảnh Postgres mặc định KHÔNG có pg_cron. Chạy file này ở đó sẽ
--- đỏ ngay câu `create extension`, và đỏ như vậy còn may — cái đáng sợ là tưởng
--- nó chạy rồi. Không có pg_cron thì: hóa đơn không được nhắc, ticket quá hạn
--- không leo thang, tư cách thành viên hết hạn không bị thu hồi — tất cả đều
--- hỏng LẶNG LẼ, không màn nào báo.
--- Đường thay thế trên Railway là Cron Service gọi vào một endpoint của app.
--- Chưa dựng: xem GĐ2 trong railway/GD1-runbook.sh. Tới lúc dựng xong thì mỗi
--- job dưới đây phải có đúng một dòng tương ứng bên đó.
+-- TRÊN RAILWAY KHÔNG DÙNG FILE NÀY. Ảnh Postgres mặc định không có pg_cron;
+-- chạy file này ở đó sẽ đỏ ngay câu `create extension`. Đường đang dùng là
+-- Railway Cron Service gọi POST /api/cron/<việc> kèm header x-cron-key.
+--
+-- Giữ file lại vì nó là bản mô tả duy nhất của "job nào, mấy giờ, vì sao giờ
+-- đó" — và vì trên một Postgres CÓ pg_cron thì nó vẫn là cách gọn nhất. Hai
+-- bên phải khớp nhau; bảng đối chiếu:
+--
+--   expire-memberships        -> /api/cron/thu-hoi-thanh-vien   5 17 * * *
+--   escalate-overdue-tickets  -> /api/cron/leo-thang-ticket     */5 * * * *
+--   remind-unpaid-invoices    -> /api/cron/nhac-no              0 1 * * *
+--   mo-ky-bao-tri             -> /api/cron/mo-ky-bao-tri        0 0 * * *
+--   don-ma-dang-nhap          -> /api/cron/don-ma-dang-nhap     0 20 * * *
+--
+-- Thêm job ở đây mà quên thêm lịch bên Railway thì nó KHÔNG chạy, và không có
+-- gì báo — đó là lý do bảng đối chiếu nằm ngay đầu file chứ không nằm trong
+-- một trang tài liệu nào khác.
 --
 -- BẪY MÚI GIỜ: pg_cron trên Supabase chạy theo cron.timezone, mặc định GMT.
 -- Kiểm tra trước khi sửa lịch:  show cron.timezone;

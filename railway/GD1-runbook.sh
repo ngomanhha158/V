@@ -105,10 +105,30 @@ B5. Gắn Volume cho ảnh hỏng hóc, vào service `v`, mount tại:
     gắn volume thì app vẫn nhận ảnh bình thường — rồi mất sạch ở lần deploy kế
     tiếp, lặng lẽ, và chỉ lộ ra lúc có người mở lại một yêu cầu cũ để đối chất.
 
-B6. Job nền: ảnh Postgres của Railway KHÔNG có pg_cron, nên cron.sql chưa chạy
-    được ở đây. Nghĩa là hiện chưa có: nhắc nợ, leo thang ticket quá hạn, thu
-    hồi tư cách thành viên hết hạn, mở kỳ bảo trì. Tất cả hỏng LẶNG LẼ — không
-    màn nào báo. Đây là việc còn nợ của GĐ2, đừng coi là đã xong.
+B6. Job nền. Ảnh Postgres của Railway không có pg_cron, nên cron.sql KHÔNG
+    dùng ở đây. Thay bằng 5 Cron Service, mỗi cái chạy đúng một dòng curl.
+
+    Đặt biến CRON_SECRET cho service `v` trước (openssl rand -base64 32), rồi
+    tạo 5 service từ image `curlimages/curl:latest`, mỗi service một lịch:
+
+      Tên service            Lịch (UTC)      Đường
+      cron-nhac-no           0 1 * * *       /api/cron/nhac-no
+      cron-leo-thang         */5 * * * *     /api/cron/leo-thang-ticket
+      cron-thu-hoi           5 17 * * *      /api/cron/thu-hoi-thanh-vien
+      cron-bao-tri           0 0 * * *       /api/cron/mo-ky-bao-tri
+      cron-don-ma            0 20 * * *      /api/cron/don-ma-dang-nhap
+
+    Start command của mỗi service (thay <đường> và dùng tên miền công khai của
+    service `v`):
+
+      curl -fsS -X POST -H "x-cron-key: $CRON_SECRET" https://<domain>/api/cron/<đường>
+
+    Cờ -f là bắt buộc: thiếu nó thì curl trả về 0 kể cả khi máy chủ trả 500, và
+    lịch cron cứ xanh trong khi việc thì không chạy — đúng kiểu hỏng mà cả cái
+    endpoint này sinh ra để tránh.
+
+    Lịch ghi theo UTC, khớp với đầu file cron.sql. Thêm job trong SQL mà quên
+    thêm service ở đây thì nó không chạy, và không có gì báo.
 
 B7. Xóa các biến của Supabase khỏi service `v` sau khi đã chạy xanh:
       NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,

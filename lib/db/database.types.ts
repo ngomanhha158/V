@@ -1500,6 +1500,7 @@ export type Database = {
       }
       current_unit_ids: { Args: never; Returns: string[] }
       escalate_overdue_tickets: { Args: never; Returns: undefined }
+      remind_unpaid_invoices: { Args: never; Returns: number }
       expire_memberships: { Args: never; Returns: undefined }
       generate_invoices: {
         Args: { p_period: string; p_project: string }

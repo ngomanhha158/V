@@ -1,6 +1,6 @@
-import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/db/admin'
+import { bangNhau } from '@/lib/bi-mat'
 import { docWebhook, laNhaCungCap, type NhaCungCap } from '@/lib/bank/adapter'
 import { demLuot, ipClient, xoaLuot } from '@/lib/rate-limit'
 
@@ -10,26 +10,10 @@ import { demLuot, ipClient, xoaLuot } from '@/lib/rate-limit'
 const SO_LAN_SAI = 10
 const CUA_SO_MS = 10 * 60_000
 
-// node runtime: cần timingSafeEqual. force-dynamic: đây là webhook, không cache.
+// node runtime: cần timingSafeEqual trong lib/bi-mat. force-dynamic: đây là
+// webhook, không cache.
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-/**
- * So sánh bí mật theo kiểu hằng thời gian. So bằng `===` để lộ độ dài và vị trí
- * byte đầu tiên khác nhau qua thời gian trả lời — đủ để dò ra khóa từng byte
- * một nếu người ta chịu khó bắn vài triệu lần.
- */
-function bangNhau(a: string, b: string): boolean {
-  const x = Buffer.from(a)
-  const y = Buffer.from(b)
-  // timingSafeEqual ném lỗi khi khác độ dài, mà bản thân việc ném lỗi cũng là
-  // rò rỉ. Đệm về cùng độ dài rồi mới so, và kiểm tra độ dài như một điều kiện.
-  const n = Math.max(x.length, y.length, 1)
-  const px = Buffer.alloc(n)
-  const py = Buffer.alloc(n)
-  x.copy(px); y.copy(py)
-  return timingSafeEqual(px, py) && x.length === y.length
-}
 
 /** Bí mật của từng nhà cung cấp + cách nó gửi lên. */
 function kiemTraBiMat(nhaCungCap: NhaCungCap, req: Request): string | null {

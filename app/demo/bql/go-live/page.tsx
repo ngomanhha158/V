@@ -59,6 +59,7 @@ export default async function DemoGoLive() {
   const coServiceKey = true
   const coWebhook = true
   const coThu = true
+  const coCron = true
 
   const tyLe = d.so_can > 0 ? (d.so_can_co_chu / d.so_can) * 100 : 0
 
@@ -93,6 +94,14 @@ export default async function DemoGoLive() {
         ? 'Cư dân nhận được mã đăng nhập qua email.'
         : 'Chưa điền SMTP_URL. Cư dân bấm "Gửi mã" sẽ báo lỗi, và lối vào duy nhất '
           + 'còn lại là mật khẩu do ban quản lý đặt tay cho từng người.' },
+
+    { ten: 'Đã bật job nền', xong: coCron, batBuoc: true,
+      chiTiet: coCron
+        ? 'Khóa đã điền. Kiểm tiếp trên Railway: phải có đủ 5 Cron Service, danh sách '
+          + 'và lịch ở đầu file cron.sql. Màn này chỉ thấy được khóa, không thấy được lịch.'
+        : 'Chưa điền CRON_SECRET, nên chắc chắn chưa có job nền nào chạy: không nhắc nợ, '
+          + 'không leo thang yêu cầu quá hạn, không thu quyền hợp đồng đã hết hạn. '
+          + 'Không màn nào báo lỗi — chỉ là mọi thứ đứng yên.' },
 
     { ten: 'Đã cấu hình tài khoản nhận tiền', xong: !!bank, batBuoc: true,
       chiTiet: bank

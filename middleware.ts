@@ -13,12 +13,16 @@ export async function middleware(request: NextRequest) {
   // An toàn vì app/demo chỉ đọc dữ liệu giả cứng trong lib/demo/data.ts,
   // không có đường nào ra database thật.
   //
-  // /api/webhook/* thoát ra ở ĐÚNG CHỖ NÀY vì cùng lý do (2), và vì một lý do
-  // nặng hơn: nó là đường tiền vào. Chốt chặn của nó là bí mật dùng chung
-  // kiểm trong route handler, không phải phiên đăng nhập — ngân hàng bắn giao
-  // dịch sang thì làm gì có cookie nào.
+  // /api/webhook/* và /api/cron/* thoát ra ở ĐÚNG CHỖ NÀY vì cùng lý do (2),
+  // và vì một lý do nặng hơn: cả hai được gọi từ MÁY, không phải từ người —
+  // ngân hàng bắn giao dịch sang, Railway Cron Service gọi job nền, không bên
+  // nào có cookie. Chốt chặn của chúng là bí mật dùng chung kiểm trong route
+  // handler. Bắt chúng đi qua vòng kiểm phiên là mọi lần gọi đều bị đá về
+  // /login: tiền của cư dân biến mất khỏi hệ thống, và job nền im lặng không
+  // chạy suốt nhiều tháng.
   const duong = request.nextUrl.pathname
-  if (duong.startsWith('/demo') || duong.startsWith('/api/webhook/')) {
+  if (duong.startsWith('/demo') || duong.startsWith('/api/webhook/')
+      || duong.startsWith('/api/cron/')) {
     return NextResponse.next({ request })
   }
 
