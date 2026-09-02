@@ -225,3 +225,10 @@ grant select on announcement_votes to authenticated;
 -- bo_phieu() để một căn một phiếu và chốt "đã đóng" nằm ở một chỗ duy nhất.
 grant execute on function bo_phieu(uuid, uuid, int) to authenticated;
 grant execute on function ket_qua_tham_do(uuid) to authenticated;
+
+-- Thẻ cư dân. Hàm tự chốt is_staff BÊN TRONG, nên cấp cho authenticated ở đây
+-- không mở gì thêm: cư dân gọi được nhưng nhận về lỗi quyền. Cấp riêng cho
+-- role `security` thì không làm được — Postgres cấp quyền theo role đăng nhập,
+-- mà cả BQL lẫn bảo vệ đều đăng nhập dưới cùng một role `authenticated`; vai
+-- trò trong tòa nhà nằm ở staff_assignments, không nằm ở tầng Postgres.
+grant execute on function kiem_the(uuid, uuid) to authenticated;

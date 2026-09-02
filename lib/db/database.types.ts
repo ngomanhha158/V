@@ -1308,6 +1308,18 @@ export type Database = {
       auth_xoa_nguoi_dung: { Args: { p_uid: string }; Returns: boolean }
       auth_huy_ma: { Args: { p_danh_tinh: string }; Returns: boolean }
       auth_don_ma: { Args: never; Returns: number }
+      kiem_the: {
+        Args: { p_uid: string; p_unit: string }
+        Returns: {
+          ho_ten: string | null
+          anh: string | null
+          can: string
+          toa: string
+          vai_tro: Database["public"]["Enums"]["unit_role"] | null
+          con_hieu_luc: boolean
+          ly_do: string
+        }[]
+      }
 
       bql_gan_nhan_su: {
         Args: {

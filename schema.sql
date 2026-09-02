@@ -2158,3 +2158,77 @@ begin
     select v.chon, count(*)::bigint from announcement_votes v
      where v.poll_id = p_poll group by v.chon;
 end $fn$;
+
+-- ══════════════════════ 13. THẺ CƯ DÂN ĐIỆN TỬ ══════════════════════
+-- Thẻ từ mất là phải làm lại, mất phí và mất thời gian. Nặng hơn: người thuê
+-- trả nhà rồi vẫn còn thẻ vào được, vì thu hồi thẻ nhựa là một việc phải NHỚ
+-- LÀM, mà không ai nhớ.
+--
+-- Thẻ điện tử đảo ngược điều đó: mã QR trên máy cư dân chỉ nói "người này, căn
+-- này, còn hiệu lực 60 giây". Việc "có được vào không" hỏi lại đúng hàm dưới
+-- đây MỖI LẦN QUÉT. Hợp đồng thuê hết hạn thì valid_to đã qua, thẻ chết ngay
+-- lần quét kế tiếp — không phải chờ ai nhớ ra.
+--
+-- KHÔNG có bảng ghi lượt quét, cố ý. Sổ ra vào là tính năng riêng (QR khách
+-- thăm), và một bảng lần-lượt-ai-đi-qua-cửa-nào là dữ liệu theo dõi đường đi
+-- của cư dân: nó cần chính sách lưu trữ, cần RLS riêng, cần nói với cư dân là
+-- có. Dựng nó như một tác dụng phụ của tính năng thẻ là dựng lén.
+
+create or replace function kiem_the(p_uid uuid, p_unit uuid)
+returns table (
+  ho_ten text, anh text, can text, toa text,
+  vai_tro unit_role, con_hieu_luc boolean, ly_do text
+)
+language plpgsql stable security definer set search_path = public as $fn$
+declare
+  v_du_an uuid;
+  v_can   record;
+  v_tv    record;
+begin
+  select u.id, u.code, b.name as toa, b.project_id
+    into v_can
+    from units u join buildings b on b.id = u.building_id
+   where u.id = p_unit;
+  if not found then
+    raise exception 'khong co can ho nay' using errcode = 'P0002';
+  end if;
+  v_du_an := v_can.project_id;
+
+  -- Chỉ nhân sự của ĐÚNG dự án đó mới tra được thẻ. Thiếu chốt này thì bất kỳ
+  -- ai đăng nhập cũng dựng được một trang quét và tra ra họ tên cư dân của mọi
+  -- khu chỉ bằng cách đoán id căn hộ.
+  if not is_staff(v_du_an) then
+    raise exception 'chi nhan su cua du an moi tra duoc the' using errcode = '42501';
+  end if;
+
+  -- Ưu tiên dòng ĐANG hiệu lực. Một người có thể có nhiều dòng cho cùng một
+  -- căn: thuê một kỳ, nghỉ, rồi thuê lại. Lấy bừa dòng đầu tiên là có lúc đọc
+  -- trúng hợp đồng cũ và từ chối một người đang ở thật.
+  select m.role, m.status, m.valid_from, m.valid_to,
+         (m.status = 'active'
+          and m.valid_from <= current_date
+          and (m.valid_to is null or m.valid_to >= current_date)) as con
+    into v_tv
+    from unit_memberships m
+   where m.unit_id = p_unit and m.user_id = p_uid
+   order by (m.status = 'active'
+             and m.valid_from <= current_date
+             and (m.valid_to is null or m.valid_to >= current_date)) desc,
+            m.valid_from desc
+   limit 1;
+
+  return query
+  select p.full_name, p.avatar_url, v_can.code, v_can.toa,
+         v_tv.role,
+         coalesce(v_tv.con, false),
+         case
+           when v_tv is null                     then 'khong_thuoc'
+           when v_tv.con                         then 'ok'
+           when v_tv.status = 'revoked'          then 'da_thu_hoi'
+           when v_tv.status = 'pending'          then 'cho_duyet'
+           when v_tv.valid_to < current_date     then 'het_han'
+           when v_tv.valid_from > current_date   then 'chua_toi_han'
+           else 'ngung'
+         end
+    from profiles p where p.id = p_uid;
+end $fn$;
