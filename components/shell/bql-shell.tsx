@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { NavDoc } from './nav-link'
 import { ThemeToggle } from './theme-toggle'
 import {
-  IcBieuDo, IcCanHo, IcCheck, IcDoiSoat, IcHoaDon, IcLoa, IcNguoi, IcNha, IcNhap, IcQR,
+  IcBieuDo, IcCanHo, IcCheck, IcDoiSoat, IcHoaDon, IcLich, IcLoa, IcNguoi, IcNha, IcNhap, IcQR,
   IcSach, IcSo, IcTaiVe, IcTien, IcToaNha, IcYeuCau,
 } from '@/components/icons'
 
@@ -34,6 +34,7 @@ export function BqlShell({
       <NavDoc href={`${base}/bql/dashboard`} icon={<IcBieuDo />}>Sức khỏe vận hành</NavDoc>
       <NavDoc href={`${base}/bql/tickets`} icon={<IcYeuCau />}>Điều phối yêu cầu</NavDoc>
       <NavDoc href={`${base}/bql/sla`} icon={<IcCheck />}>Cam kết thời gian</NavDoc>
+      <NavDoc href={`${base}/bql/bao-tri`} icon={<IcLich />}>Bảo trì định kỳ</NavDoc>
 
       <Muc nhan="Truyền thông" />
       <NavDoc href={`${base}/bql/bang-tin`} icon={<IcLoa />}>Bảng tin</NavDoc>

@@ -654,3 +654,55 @@ export const TEN_NGUOI_GHI_SO: Record<string, string> = {
   'nd-2': 'Ngô Mạnh Hà',
   'nd-3': 'Lê Quang Huy',
 }
+
+export type KeHoachBaoTriDemo = {
+  id: string
+  ten: string
+  hang_muc: string
+  chu_ky_ngay: number
+  han_ke_tiep: string
+  nhac_truoc_ngay: number
+  bat_buoc_phap_ly: boolean
+  nha_thau: string | null
+  building_id: string | null
+  is_active: boolean
+}
+
+/** n ngày kể từ hôm nay, dạng YYYY-MM-DD. */
+const ngayThuong = (n: number) =>
+  new Date(Date.now() + n * 86400_000).toISOString().slice(0, 10)
+
+/**
+ * Lịch bảo trì của bản demo.
+ *
+ * Cố ý có đủ bốn tình trạng: quá hạn của hạng mục BẮT BUỘC THEO LUẬT (nặng
+ * nhất), sắp tới, còn xa nhưng vẫn theo luật nên không xuống xanh, và một cái
+ * đã tạm dừng. Nhìn một màn là thấy hết thang màu.
+ */
+export const BAO_TRI: KeHoachBaoTriDemo[] = [
+  { id: 'bt-1', ten: 'Kiểm định thang máy tháp P1', hang_muc: 'thang_may',
+    chu_ky_ngay: 365, han_ke_tiep: ngayThuong(-4), nhac_truoc_ngay: 30,
+    bat_buoc_phap_ly: true, nha_thau: 'Công ty Thang máy Thái Bình', building_id: null,
+    is_active: true },
+  { id: 'bt-2', ten: 'Bảo trì hệ PCCC quý', hang_muc: 'pccc',
+    chu_ky_ngay: 90, han_ke_tiep: ngayThuong(6), nhac_truoc_ngay: 14,
+    bat_buoc_phap_ly: true, nha_thau: 'PCCC Miền Bắc', building_id: null, is_active: true },
+  { id: 'bt-3', ten: 'Vệ sinh bể nước ngầm', hang_muc: 'bom_nuoc',
+    chu_ky_ngay: 180, han_ke_tiep: ngayThuong(41), nhac_truoc_ngay: 7,
+    bat_buoc_phap_ly: false, nha_thau: null, building_id: null, is_active: true },
+  { id: 'bt-4', ten: 'Chạy thử máy phát điện', hang_muc: 'dien',
+    chu_ky_ngay: 30, han_ke_tiep: ngayThuong(58), nhac_truoc_ngay: 5,
+    bat_buoc_phap_ly: true, nha_thau: null, building_id: null, is_active: true },
+  { id: 'bt-5', ten: 'Thay lọc bơm tăng áp', hang_muc: 'bom_nuoc',
+    chu_ky_ngay: 90, han_ke_tiep: ngayThuong(12), nhac_truoc_ngay: 7,
+    bat_buoc_phap_ly: false, nha_thau: null, building_id: null, is_active: true },
+  { id: 'bt-6', ten: 'Diệt côn trùng tầng hầm', hang_muc: 've_sinh',
+    chu_ky_ngay: 90, han_ke_tiep: ngayThuong(20), nhac_truoc_ngay: 7,
+    bat_buoc_phap_ly: false, nha_thau: null, building_id: null, is_active: false },
+]
+
+/** Việc đã mở, chờ đánh dấu làm xong. Khớp với hai kế hoạch gấp nhất bên trên. */
+export const VIEC_BAO_TRI = [
+  { id: 'vbt-1', plan_id: 'bt-1', han: ngayThuong(-4) },
+  { id: 'vbt-2', plan_id: 'bt-2', han: ngayThuong(6) },
+]

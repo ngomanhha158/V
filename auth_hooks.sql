@@ -168,3 +168,8 @@ alter table payments         force row level security;
 -- người bị ghi sổ sửa được thì vô nghĩa. Trigger ghi_nhat_ky() chạy security
 -- definer nên vẫn ghi được.
 grant select on audit_log to authenticated;
+
+-- Bảo trì định kỳ: RLS (mp_staff / mr_staff) đã chốt xuống BQL của đúng dự án.
+-- Cấp đủ quyền ghi vì đây là bảng BQL tự quản lý — khác payments hay audit_log.
+grant select, insert, update, delete on maintenance_plans, maintenance_runs to authenticated;
+grant execute on function xong_bao_tri(uuid, text) to authenticated;

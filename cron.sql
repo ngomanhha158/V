@@ -34,6 +34,16 @@ select cron.schedule(
   $job$ select public.remind_unpaid_invoices() $job$
 );
 
+-- Bảo trì định kỳ — mở lần bảo trì cho kế hoạch đã tới cửa sổ nhắc.
+-- 1 lần/ngày lúc 07:00 giờ VN = 00:00 UTC. Trước giờ làm việc để lúc kỹ thuật
+-- vào ca là danh sách đã sẵn trên màn.
+-- Hàm chống trùng bằng unique (plan_id, han) nên chạy lại không hại gì.
+select cron.schedule(
+  'mo-ky-bao-tri',
+  '0 0 * * *',
+  $job$ select public.mo_ky_bao_tri() $job$
+);
+
 -- Gỡ lịch:            select cron.unschedule('expire-memberships');
 -- Xem lịch hiện có:   select jobname, schedule, active from cron.job;
 -- Xem lần chạy gần đây: select * from cron.job_run_details order by start_time desc limit 20;

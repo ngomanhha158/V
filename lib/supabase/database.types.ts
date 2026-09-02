@@ -24,6 +24,107 @@ export type Database = {
   }
   public: {
     Tables: {
+      maintenance_plans: {
+        Row: {
+          bat_buoc_phap_ly: boolean
+          building_id: string | null
+          chu_ky_ngay: number
+          created_at: string
+          ghi_chu: string | null
+          han_ke_tiep: string
+          hang_muc: string
+          id: string
+          is_active: boolean
+          nha_thau: string | null
+          nhac_truoc_ngay: number
+          project_id: string
+          ten: string
+        }
+        Insert: {
+          bat_buoc_phap_ly?: boolean
+          building_id?: string | null
+          chu_ky_ngay: number
+          created_at?: string
+          ghi_chu?: string | null
+          han_ke_tiep: string
+          hang_muc: string
+          id?: string
+          is_active?: boolean
+          nha_thau?: string | null
+          nhac_truoc_ngay?: number
+          project_id: string
+          ten: string
+        }
+        Update: {
+          bat_buoc_phap_ly?: boolean
+          building_id?: string | null
+          chu_ky_ngay?: number
+          created_at?: string
+          ghi_chu?: string | null
+          han_ke_tiep?: string
+          hang_muc?: string
+          id?: string
+          is_active?: boolean
+          nha_thau?: string | null
+          nhac_truoc_ngay?: number
+          project_id?: string
+          ten?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_plans_building_id_fkey"
+            columns: ["building_id"]
+            isOneToOne: false
+            referencedRelation: "buildings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_plans_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maintenance_runs: {
+        Row: {
+          han: string
+          id: string
+          ket_qua: string | null
+          lam_luc: string | null
+          mo_luc: string
+          nguoi_lam: string | null
+          plan_id: string
+        }
+        Insert: {
+          han: string
+          id?: string
+          ket_qua?: string | null
+          lam_luc?: string | null
+          mo_luc?: string
+          nguoi_lam?: string | null
+          plan_id: string
+        }
+        Update: {
+          han?: string
+          id?: string
+          ket_qua?: string | null
+          lam_luc?: string | null
+          mo_luc?: string
+          nguoi_lam?: string | null
+          plan_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_runs_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "maintenance_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           actor_id: string | null
@@ -1250,6 +1351,14 @@ export type Database = {
       expire_memberships: { Args: never; Returns: undefined }
       generate_invoices: {
         Args: { p_period: string; p_project: string }
+        Returns: number
+      }
+      xong_bao_tri: {
+        Args: { p_ket_qua?: string; p_run: string }
+        Returns: string
+      }
+      mo_ky_bao_tri: {
+        Args: Record<PropertyKey, never>
         Returns: number
       }
       is_bql_manager: { Args: { p_project: string }; Returns: boolean }

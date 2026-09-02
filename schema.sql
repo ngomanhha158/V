@@ -1873,3 +1873,124 @@ create trigger trg_audit_bank_txn after insert or update or delete on bank_trans
 -- lên là trigger tự chặn chính nó và MỌI lệnh ghi vào chín bảng kia đều hỏng.
 alter table audit_log enable row level security;
 create policy audit_staff_read on audit_log for select using (is_staff(project_id));
+
+-- ═════════════════════ 11. BẢO TRÌ ĐỊNH KỲ ═════════════════════
+-- Thang máy, PCCC, bơm nước có hạn kiểm định theo luật. Quên hạn là bị phạt,
+-- và tệ hơn là mất an toàn. Đây là nhóm rủi ro có hậu quả nặng nhất trong
+-- vận hành, mà chi phí xây lại thấp vì hạ tầng cron đã có sẵn.
+--
+-- KHÔNG tự tạo ticket cho kỹ thuật, dù kế hoạch ban đầu định thế. tickets.unit_id
+-- là NOT NULL và tickets.reporter_id cũng vậy — mà "kiểm định thang máy tháp P1"
+-- không thuộc căn nào và không do ai báo. Nới hai ràng buộc đó là đụng vào RLS
+-- của luồng cư dân báo sự cố, thứ vừa mới thông lại. Nên lần bảo trì TỰ NÓ là
+-- việc: có người nhận, có trạng thái, hiện trên màn kỹ thuật. Sạch hơn là bẻ
+-- cong bảng ticket cho vừa.
+
+create table maintenance_plans (
+  id            uuid primary key default gen_random_uuid(),
+  project_id    uuid not null references projects(id) on delete cascade,
+  building_id   uuid references buildings(id) on delete cascade,   -- null = cả khu
+  ten           text not null,
+  hang_muc      text not null,            -- 'thang_may','pccc','bom_nuoc','dien','thang_bo','khac'
+  chu_ky_ngay   int  not null check (chu_ky_ngay between 1 and 3650),
+  han_ke_tiep   date not null,
+  nhac_truoc_ngay int not null default 7 check (nhac_truoc_ngay between 0 and 180),
+  -- Hạng mục bắt buộc theo luật thì quá hạn là bị phạt, không phải chỉ bất tiện.
+  -- Màn tô đỏ riêng nhóm này, và không cho tắt nhắc.
+  bat_buoc_phap_ly boolean not null default false,
+  nha_thau      text,
+  ghi_chu       text,
+  is_active     boolean not null default true,
+  created_at    timestamptz not null default now()
+);
+create index on maintenance_plans (project_id, is_active, han_ke_tiep);
+
+-- Mỗi hạn là một dòng. unique (plan_id, han) là chốt chống trùng: cron chạy
+-- lại (retry, hoặc hai bản sao cùng chạy) không đẻ ra hai lần bảo trì cho cùng
+-- một hạn. Cùng kiểu chốt như unique (unit_id, period) bên hóa đơn.
+create table maintenance_runs (
+  id          uuid primary key default gen_random_uuid(),
+  plan_id     uuid not null references maintenance_plans(id) on delete cascade,
+  han         date not null,
+  mo_luc      timestamptz not null default now(),
+  nguoi_lam   uuid references profiles(id),
+  lam_luc     timestamptz,               -- null = chưa làm xong
+  ket_qua     text,
+  unique (plan_id, han)
+);
+create index on maintenance_runs (plan_id, han desc);
+create index on maintenance_runs (lam_luc) where lam_luc is null;
+
+alter table maintenance_plans enable row level security;
+alter table maintenance_plans force row level security;
+create policy mp_staff on maintenance_plans for all
+  using (is_staff(project_id)) with check (is_staff(project_id));
+
+alter table maintenance_runs enable row level security;
+alter table maintenance_runs force row level security;
+create policy mr_staff on maintenance_runs for all
+  using (is_staff((select p.project_id from maintenance_plans p where p.id = plan_id)))
+  with check (is_staff((select p.project_id from maintenance_plans p where p.id = plan_id)));
+
+/*
+ * Mở lần bảo trì cho những kế hoạch đã tới cửa sổ nhắc. Chạy 1 lần/ngày.
+ *
+ * Chỉ mở, không đóng: đóng là việc của người làm. Trả về số lần vừa mở để
+ * job_run_details có con số đọc được thay vì chỉ "thành công".
+ */
+create or replace function mo_ky_bao_tri() returns int
+language plpgsql set search_path = public as $fn$
+declare v_n int;
+begin
+  with can_mo as (
+    select p.id, p.han_ke_tiep
+      from maintenance_plans p
+     where p.is_active
+       and p.han_ke_tiep - p.nhac_truoc_ngay <= current_date
+  )
+  insert into maintenance_runs (plan_id, han)
+  select id, han_ke_tiep from can_mo
+  -- Chốt chống trùng nằm ở unique (plan_id, han); on conflict để cron chạy lại
+  -- được mà không nổ. Bỏ dòng này thì một lần retry là cả job hỏng.
+  on conflict (plan_id, han) do nothing;
+  get diagnostics v_n = row_count;
+  return v_n;
+end $fn$;
+
+/*
+ * Đóng một lần bảo trì và dời hạn kế tiếp.
+ *
+ * Hạn mới = NGÀY LÀM THẬT + chu kỳ, không phải hạn cũ + chu kỳ.
+ *
+ * Với hạng mục kiểm định, giấy chứng nhận có hiệu lực tính từ ngày kiểm định
+ * chứ không từ ngày lẽ ra phải kiểm. Dời theo hạn cũ thì làm muộn 10 ngày là
+ * lần sau nhắc sớm hơn hạn giấy 10 ngày — nhắc thừa thì chỉ phiền, nhưng cùng
+ * công thức đó ở chiều ngược lại (giấy hết hạn trước khi nhắc) là bị phạt.
+ * Đổi lấy: đội làm muộn kinh niên sẽ thấy lịch trôi dần. Phiền, nhưng nhìn
+ * thấy được — khác với hết hạn giấy tờ mà không ai biết.
+ */
+create or replace function xong_bao_tri(p_run uuid, p_ket_qua text default null)
+returns date language plpgsql security definer set search_path = public as $fn$
+declare v_plan maintenance_plans; v_run maintenance_runs; v_han date;
+begin
+  select * into v_run from maintenance_runs where id = p_run;
+  if not found then
+    raise exception 'Khong co lan bao tri nay' using errcode = 'P0002';
+  end if;
+  select * into v_plan from maintenance_plans where id = v_run.plan_id;
+  if not is_staff(v_plan.project_id) then
+    raise exception 'Chi BQL cua du an nay moi dong duoc lan bao tri'
+      using errcode = '42501';
+  end if;
+  if v_run.lam_luc is not null then
+    raise exception 'Lan bao tri nay da dong roi' using errcode = '22023';
+  end if;
+
+  update maintenance_runs
+     set lam_luc = now(), nguoi_lam = auth.uid(), ket_qua = p_ket_qua
+   where id = p_run;
+
+  v_han := current_date + v_plan.chu_ky_ngay;
+  update maintenance_plans set han_ke_tiep = v_han where id = v_plan.id;
+  return v_han;
+end $fn$;

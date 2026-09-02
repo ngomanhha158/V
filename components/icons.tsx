@@ -126,3 +126,11 @@ export const IcSo = (p: SVGProps<SVGSVGElement>) => (
     <path d="m6.5 8.5 1 1 2-2" />
   </I>
 )
+
+/** Lịch có một ngày được khoanh: việc lặp theo chu kỳ, có hạn cụ thể. */
+export const IcLich = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" />
+    <circle cx="12" cy="15" r="2" />
+  </I>
+)
