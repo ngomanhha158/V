@@ -5,8 +5,8 @@ import { Button, Card, Field, Hop, PageHead, Select } from '@/components/ui'
 export const dynamic = 'force-dynamic'
 
 export default async function Onboarding() {
-  const supabase = await createClient()
-  const { data: units } = await supabase
+  const db = await createClient()
+  const { data: units } = await db
     .from('units')
     .select('id, code, floor_no, buildings(name)')
     .order('code')

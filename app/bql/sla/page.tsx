@@ -8,17 +8,17 @@ export const dynamic = 'force-dynamic'
 const THU_TU = { urgent: 0, high: 1, normal: 2, low: 3 } as Record<string, number>
 
 export default async function SlaPage() {
-  const supabase = await createClient()
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const db = await createClient()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
   const [{ data: rows, error }, { data: tickets }] = await Promise.all([
-    supabase.from('sla_policies')
+    db.from('sla_policies')
       .select('id, category, priority, respond_mins, resolve_mins, escalate_to')
       .eq('project_id', project.id),
-    supabase.from('tickets').select('category').eq('project_id', project.id),
+    db.from('tickets').select('category').eq('project_id', project.id),
   ])
 
   if (error) {

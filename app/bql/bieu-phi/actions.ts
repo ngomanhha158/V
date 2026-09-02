@@ -20,9 +20,9 @@ function docTien(s: string): number | null {
 }
 
 async function duAn() {
-  const supabase = await createClient()
-  const { data } = await supabase.from('projects').select('id').limit(1).maybeSingle()
-  return { supabase, project: data?.id ?? null }
+  const db = await createClient()
+  const { data } = await db.from('projects').select('id').limit(1).maybeSingle()
+  return { db, project: data?.id ?? null }
 }
 
 function dichLoi(code: string | undefined, msg: string): string {
@@ -36,7 +36,7 @@ function dichLoi(code: string | undefined, msg: string): string {
 export async function themBieuPhi(
   _prev: BieuPhiState, formData: FormData,
 ): Promise<BieuPhiState> {
-  const { supabase, project } = await duAn()
+  const { db, project } = await duAn()
   if (!project) return { error: 'Chưa có dự án nào trong hệ thống.' }
 
   const code = String(formData.get('code') ?? '').trim().toUpperCase()
@@ -49,7 +49,7 @@ export async function themBieuPhi(
   if (!laCachTinh(cach)) return { error: 'Cách tính không hợp lệ.' }
   if (gia === null) return { error: 'Đơn giá phải là số nguyên dương, đơn vị đồng.' }
 
-  const { error } = await supabase.from('fee_types')
+  const { error } = await db.from('fee_types')
     .insert({ project_id: project, code, name, calc_method: cach, unit_price: gia })
   if (error) return { error: dichLoi(error.code, `Không thêm được: ${error.message}`) }
 
@@ -62,7 +62,7 @@ export async function themBieuPhi(
 export async function suaBieuPhi(
   _prev: BieuPhiState, formData: FormData,
 ): Promise<BieuPhiState> {
-  const { supabase, project } = await duAn()
+  const { db, project } = await duAn()
   if (!project) return { error: 'Chưa có dự án nào trong hệ thống.' }
 
   const id = String(formData.get('id') ?? '')
@@ -76,7 +76,7 @@ export async function suaBieuPhi(
 
   // CỐ Ý không cho sửa `code`: mã phí đã nằm trong các dòng hóa đơn đã phát và
   // trong đối chiếu của kế toán. Đổi mã là mất dấu vết. Muốn đổi thì tạo mã mới.
-  const { error } = await supabase.from('fee_types')
+  const { error } = await db.from('fee_types')
     .update({ name, calc_method: cach, unit_price: gia })
     .eq('id', id).eq('project_id', project)
   if (error) return { error: dichLoi(error.code, `Không sửa được: ${error.message}`) }
@@ -89,14 +89,14 @@ export async function suaBieuPhi(
 export async function xoaBieuPhi(
   _prev: BieuPhiState, formData: FormData,
 ): Promise<BieuPhiState> {
-  const { supabase, project } = await duAn()
+  const { db, project } = await duAn()
   if (!project) return { error: 'Chưa có dự án nào trong hệ thống.' }
 
   const id = String(formData.get('id') ?? '')
   const ten = String(formData.get('ten') ?? '')
   if (!id) return { error: 'Thiếu biểu phí cần xóa.' }
 
-  const { error } = await supabase.from('fee_types')
+  const { error } = await db.from('fee_types')
     .delete().eq('id', id).eq('project_id', project)
   if (error) {
     // 23503 = còn dòng hóa đơn hoặc chỉ số công tơ trỏ vào phí này. Đây không

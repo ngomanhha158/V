@@ -17,9 +17,9 @@ function dichLoi(code: string | undefined, msg: string): string {
 }
 
 async function moiTruong() {
-  const supabase = await createClient()
-  const { data: project } = await supabase.from('projects').select('id').limit(1).maybeSingle()
-  return { supabase, project: project?.id ?? null }
+  const db = await createClient()
+  const { data: project } = await db.from('projects').select('id').limit(1).maybeSingle()
+  return { db, project: project?.id ?? null }
 }
 
 /**
@@ -37,8 +37,8 @@ export async function datDienTich(_prev: CanHoState, formData: FormData): Promis
   const dt = raw ? docDienTich(raw) : null
   if (raw && dt === null) return { error: `Căn ${ma}: ${LOI_SO}` }
 
-  const { supabase } = await moiTruong()
-  const { error, count } = await supabase
+  const { db } = await moiTruong()
+  const { error, count } = await db
     .from('units').update({ area_m2: dt }, { count: 'exact' }).eq('id', id)
   if (error) return { error: dichLoi(error.code, `Không lưu được: ${error.message}`) }
   // RLS chặn bằng cách lọc dòng ra khỏi lệnh UPDATE, không ném lỗi. Không đếm
@@ -70,10 +70,10 @@ export async function apHangLoat(_prev: CanHoState, formData: FormData): Promise
   const dt = docDienTich(raw)
   if (dt === null) return { error: LOI_SO }
 
-  const { supabase, project } = await moiTruong()
+  const { db, project } = await moiTruong()
   if (!project) return { error: 'Chưa có dự án nào trong hệ thống.' }
 
-  const { data: toaNha } = await supabase.from('buildings').select('id, code').eq('project_id', project)
+  const { data: toaNha } = await db.from('buildings').select('id, code').eq('project_id', project)
   const theoMa = new Map((toaNha ?? []).map((b) => [b.code.toUpperCase(), b.id]))
 
   const sp: ThamSo = {
@@ -84,7 +84,7 @@ export async function apHangLoat(_prev: CanHoState, formData: FormData): Promise
   }
   const loc = docLoc(sp, theoMa)
 
-  let q = supabase.from('units').update({ area_m2: dt }, { count: 'exact' })
+  let q = db.from('units').update({ area_m2: dt }, { count: 'exact' })
   for (const d of dieuKien(loc)) {
     if (d.kieu === 'trongDuAn') q = q.in('building_id', d.ids)
     else if (d.kieu === 'toa') q = q.eq('building_id', d.gt)

@@ -7,17 +7,17 @@ import { DanhSachPhi, FormThem, type BieuPhi } from './form'
 export const dynamic = 'force-dynamic'
 
 export default async function BieuPhiPage() {
-  const supabase = await createClient()
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const db = await createClient()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
   const [{ data: rows, error }, { data: units }] = await Promise.all([
-    supabase.from('fee_types')
+    db.from('fee_types')
       .select('id, code, name, unit_price, calc_method')
       .eq('project_id', project.id).order('code'),
-    supabase.from('units').select('area_m2'),
+    db.from('units').select('area_m2'),
   ])
 
   if (error) {

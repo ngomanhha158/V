@@ -10,12 +10,12 @@ export default async function Xuat({
   searchParams,
 }: { searchParams: Promise<{ ky?: string }> }) {
   const sp = await searchParams
-  const supabase = await createClient()
+  const db = await createClient()
 
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào trong hệ thống" />
 
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
   const ky = docKy(sp.ky) ?? kyHienTai()
@@ -23,11 +23,11 @@ export default async function Xuat({
   // Đếm sẵn xem kỳ này có gì: bấm tải rồi mới biết file rỗng thì mất công, mà
   // "file rỗng" với "hệ thống hỏng" nhìn từ ngoài giống hệt nhau.
   const [hoaDon, giaoDich, congNo] = await Promise.all([
-    supabase.from('invoices').select('id', { count: 'exact', head: true })
+    db.from('invoices').select('id', { count: 'exact', head: true })
       .eq('project_id', project.id).eq('period', `${ky}-01`),
-    supabase.from('bank_transactions').select('id', { count: 'exact', head: true })
+    db.from('bank_transactions').select('id', { count: 'exact', head: true })
       .eq('project_id', project.id),
-    supabase.rpc('bql_debt_report', { p_project: project.id }),
+    db.rpc('bql_debt_report', { p_project: project.id }),
   ])
 
   const soDong: Record<string, number | null> = {

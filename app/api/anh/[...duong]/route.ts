@@ -23,8 +23,8 @@ export async function GET(
   // Kiểm khuôn TRƯỚC khi chạm vào đĩa. Đây là chốt chặn leo thư mục.
   if (!hopLeDuong(duong)) return new NextResponse(null, { status: 404 })
 
-  const supabase = await createClient()
-  const { data } = await supabase
+  const db = await createClient()
+  const { data } = await db
     .from('tickets').select('id').contains('photo_urls', [duong]).limit(1).maybeSingle()
   // 404 chứ không phải 403: nói "cấm" là xác nhận file đó có thật.
   if (!data) return new NextResponse(null, { status: 404 })

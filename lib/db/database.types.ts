@@ -1,6 +1,6 @@
 // Kiểu của schema, khớp với schema.sql.
 //
-// Trước đây sinh tự động bằng `supabase gen types`. Hệ thống không còn chạy
+// Trước đây sinh tự động bằng `db gen types`. Hệ thống không còn chạy
 // trên Supabase nên không còn lệnh đó: sửa schema.sql thì sửa tay ở đây, rồi
 // chạy `npx tsc --noEmit`. Tẻ nhạt, nhưng cái mất là một lệnh tiện tay, còn
 // cái được là không còn phải trả tiền cho một nhà cung cấp để có kiểu dữ liệu.

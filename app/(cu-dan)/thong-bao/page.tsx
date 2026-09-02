@@ -26,9 +26,9 @@ function baoLau(iso: string) {
 }
 
 export default async function ThongBao() {
-  const supabase = await createClient()
+  const db = await createClient()
   // RLS (notification_own_read) lọc: chỉ thông báo của chính mình.
-  const { data: ds } = await supabase
+  const { data: ds } = await db
     .from('notifications')
     .select('id, kind, ref_id, title, body, read_at, created_at')
     .order('created_at', { ascending: false })

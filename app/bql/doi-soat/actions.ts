@@ -13,8 +13,8 @@ export async function ganGiaoDich(
   if (!txn) return { error: 'Thiếu giao dịch.' }
   if (!unit) return { error: 'Chưa chọn căn hộ để gạch.' }
 
-  const supabase = await createClient()
-  const { data, error } = await supabase.rpc('bql_gan_giao_dich', {
+  const db = await createClient()
+  const { data, error } = await db.rpc('bql_gan_giao_dich', {
     p_txn: txn, p_unit: unit,
   })
 
@@ -45,8 +45,8 @@ export async function boQuaGiaoDich(
   if (!txn) return { error: 'Thiếu giao dịch.' }
   if (!ghiChu) return { error: 'Phải ghi lý do bỏ qua.' }
 
-  const supabase = await createClient()
-  const { error } = await supabase.rpc('bql_bo_qua_giao_dich', {
+  const db = await createClient()
+  const { error } = await db.rpc('bql_bo_qua_giao_dich', {
     p_txn: txn, p_ghi_chu: ghiChu,
   })
   if (error) {

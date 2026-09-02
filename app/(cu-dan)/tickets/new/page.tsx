@@ -7,10 +7,10 @@ import { IcTrai } from '@/components/icons'
 export const dynamic = 'force-dynamic'
 
 export default async function NewTicket() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const db = await createClient()
+  const { data: { user } } = await db.auth.getUser()
 
-  const { data: memberships } = await supabase
+  const { data: memberships } = await db
     .from('unit_memberships')
     .select('units(id, code)')
     .eq('user_id', user?.id ?? '')
@@ -38,7 +38,7 @@ export default async function NewTicket() {
   // Danh mục lấy từ sla_policies: chỉ cho chọn thứ đã có hạn SLA, để không tạo
   // ra ticket không ai đo được. Danh mục lạ vẫn tạo được qua API (schema cho
   // phép, hạn để NULL) — chỉ là giao diện không mời.
-  const { data: policies } = await supabase.from('sla_policies').select('category')
+  const { data: policies } = await db.from('sla_policies').select('category')
   const categories = [...new Set((policies ?? []).map((p) => p.category))].sort()
 
   return (

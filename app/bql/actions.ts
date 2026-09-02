@@ -16,12 +16,12 @@ export async function addBuilding(_prev: BuildingState, formData: FormData): Pro
     return { error: `Số tầng phải là số nguyên dương, đang là "${floorsRaw}".` }
   }
 
-  const supabase = await createClient()
-  const { data: project } = await supabase.from('projects').select('id').limit(1).maybeSingle()
+  const db = await createClient()
+  const { data: project } = await db.from('projects').select('id').limit(1).maybeSingle()
   if (!project) return { error: 'Chưa có dự án nào.' }
 
   // RLS (building_staff_write) mới là chốt chặn: cư dân gọi thẳng API cũng bị chặn.
-  const { error } = await supabase
+  const { error } = await db
     .from('buildings')
     .insert({ project_id: project.id, code, name, floor_count: floors })
 

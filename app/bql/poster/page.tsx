@@ -14,10 +14,10 @@ export const dynamic = 'force-dynamic'
  * dùng đúng một lần mỗi khu là không đáng. Ctrl+P của trình duyệt ra PDF sẵn.
  */
 export default async function Poster() {
-  const supabase = await createClient()
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const db = await createClient()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
   const h = await headers()

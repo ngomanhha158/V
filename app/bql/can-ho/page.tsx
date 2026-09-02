@@ -17,16 +17,16 @@ export default async function CanHo({
   searchParams,
 }: { searchParams: Promise<ThamSo & { trang?: string }> }) {
   const sp = await searchParams
-  const supabase = await createClient()
+  const db = await createClient()
 
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào trong hệ thống" />
 
   // Guard hiển thị. Chốt chặn thật là RLS (policy unit_staff_write).
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
-  const { data: toaNha } = await supabase
+  const { data: toaNha } = await db
     .from('buildings').select('id, code, name').eq('project_id', project.id).order('code')
   const theoMa = new Map((toaNha ?? []).map((b) => [b.code.toUpperCase(), b.id]))
   const loc = docLoc(sp, theoMa)
@@ -38,10 +38,10 @@ export default async function CanHo({
   // Cùng một chuỗi điều kiện áp lên ba truy vấn khác nhau. Viết thành vòng lặp
   // thay vì chép ba lần: chép là sớm muộn cũng lệch, mà lệch ở đây nghĩa là con
   // số trên nút áp hàng loạt không còn đúng với tập bị sửa.
-  let qTrang = supabase
+  let qTrang = db
     .from('units')
     .select('id, code, floor_no, area_m2, kind, state, building_id', { count: 'exact' })
-  let qDaCo = supabase.from('units').select('id', { count: 'exact', head: true })
+  let qDaCo = db.from('units').select('id', { count: 'exact', head: true })
   for (const d of dk) {
     if (d.kieu === 'trongDuAn') { qTrang = qTrang.in('building_id', d.ids); qDaCo = qDaCo.in('building_id', d.ids) }
     else if (d.kieu === 'toa') { qTrang = qTrang.eq('building_id', d.gt); qDaCo = qDaCo.eq('building_id', d.gt) }
@@ -54,8 +54,8 @@ export default async function CanHo({
   const [khop, daCo, tong, thieu] = await Promise.all([
     qTrang.order('floor_no').order('code').order('id').range(tu, tu + MOI_TRANG - 1),
     qDaCo.not('area_m2', 'is', null),
-    supabase.from('units').select('id', { count: 'exact', head: true }).in('building_id', dsToa),
-    supabase.from('units').select('id', { count: 'exact', head: true })
+    db.from('units').select('id', { count: 'exact', head: true }).in('building_id', dsToa),
+    db.from('units').select('id', { count: 'exact', head: true })
       .in('building_id', dsToa).is('area_m2', null),
   ])
 

@@ -17,17 +17,17 @@ function khiNao(iso: string) {
 }
 
 export default async function BqlBangTin() {
-  const supabase = await createClient()
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const db = await createClient()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
   const [{ data: toaList }, { data: canList }, { data: docList }, { data: ds }] = await Promise.all([
-    supabase.from('buildings').select('id, code, name').order('code'),
-    supabase.from('units').select('id, code, building_id, floor_no').order('code'),
-    supabase.from('documents').select('id, section, title').order('section'),
-    supabase
+    db.from('buildings').select('id, code, name').order('code'),
+    db.from('units').select('id, code, building_id, floor_no').order('code'),
+    db.from('documents').select('id, section, title').order('section'),
+    db
       .from('announcements')
       .select('id, title, body, is_urgent, published_at, created_at, building_id, floor_no, unit_id, units(code), buildings(code)')
       .order('created_at', { ascending: false })
@@ -41,12 +41,12 @@ export default async function BqlBangTin() {
 
   const [thamDo, binhLuan, phieu] = ids.length
     ? await Promise.all([
-      supabase.from('announcement_polls')
+      db.from('announcement_polls')
         .select('announcement_id, cau_hoi, lua_chon, kin, dong_luc').in('announcement_id', ids),
-      supabase.from('announcement_comments')
+      db.from('announcement_comments')
         .select('id, announcement_id, body, created_at, an_luc, an_ly_do, units(code), profiles(full_name)')
         .in('announcement_id', ids).order('created_at'),
-      supabase.from('announcement_votes').select('poll_id, chon').in('poll_id', ids),
+      db.from('announcement_votes').select('poll_id, chon').in('poll_id', ids),
     ])
     : [{ data: [] }, { data: [] }, { data: [] }]
 

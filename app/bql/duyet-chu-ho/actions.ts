@@ -12,8 +12,8 @@ export async function duyetChuHo(
   const can = String(formData.get('can') ?? '')
   if (!id) return { error: 'Thiếu yêu cầu.' }
 
-  const supabase = await createClient()
-  const { error } = await supabase.rpc('bql_duyet_chu_ho_dau_tien', { p_membership: id })
+  const db = await createClient()
+  const { error } = await db.rpc('bql_duyet_chu_ho_dau_tien', { p_membership: id })
 
   if (error) {
     // Ba lỗi này người trực gây ra được bằng thao tác bình thường: mở hai tab,

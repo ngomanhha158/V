@@ -11,16 +11,16 @@ export const dynamic = 'force-dynamic'
 
 export default async function InvoiceDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const supabase = await createClient()
+  const db = await createClient()
 
-  const { data: inv } = await supabase
+  const { data: inv } = await db
     .from('invoices')
     .select('id, period, total_amount, paid_amount, status, due_date, units(code)')
     .eq('id', id)
     .maybeSingle()
   if (!inv) notFound()
 
-  const { data: lines } = await supabase
+  const { data: lines } = await db
     .from('invoice_lines')
     .select('id, description, quantity, unit_price, amount')
     .eq('invoice_id', id)

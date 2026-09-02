@@ -5,7 +5,7 @@ import { createClient } from '@/lib/db/server'
 import { ANH_TOI_DA, duongMoi, KIEU_CHO_PHEP, thuMuc } from '@/lib/anh'
 
 /**
- * Nhận ảnh hỏng hóc. Thay `supabase.storage.upload()`.
+ * Nhận ảnh hỏng hóc. Thay `db.storage.upload()`.
  *
  * Trước đây trình duyệt tải thẳng lên Supabase Storage và RLS của Storage là
  * chốt chặn. Giờ không còn tầng đó, nên MỌI chốt đều nằm ở đây — và ba cái
@@ -14,8 +14,8 @@ import { ANH_TOI_DA, duongMoi, KIEU_CHO_PHEP, thuMuc } from '@/lib/anh'
  * tồn tại bằng cách xem lỗi nào trả về.
  */
 export async function POST(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const db = await createClient()
+  const { data: { user } } = await db.auth.getUser()
   if (!user) return NextResponse.json({ loi: 'Chưa đăng nhập.' }, { status: 401 })
 
   const fd = await request.formData().catch(() => null)
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   // valid_from/valid_to và status. Tự viết lại điều kiện ở đây là mở ra khả
   // năng hai chỗ lệch nhau, và lệch nghĩa là người đã hết hợp đồng thuê vẫn
   // gắn được ảnh vào căn cũ.
-  const { data: cuaToi } = await supabase.rpc('current_unit_ids')
+  const { data: cuaToi } = await db.rpc('current_unit_ids')
   if (!(cuaToi ?? []).includes(unit)) {
     return NextResponse.json({ loi: 'Căn hộ này không phải của bạn.' }, { status: 403 })
   }

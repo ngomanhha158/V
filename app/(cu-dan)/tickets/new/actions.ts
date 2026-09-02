@@ -25,15 +25,15 @@ export async function createTicket(_prev: NewTicketState, formData: FormData): P
   if (!priority) return { error: 'Mức ưu tiên không hợp lệ.' }
   if (!title) return { error: 'Chưa nhập tiêu đề.' }
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const db = await createClient()
+  const { data: { user } } = await db.auth.getUser()
   if (!user) redirect('/login')
 
   // Gọi RPC thay vì insert thẳng: app KHÔNG được tự tính building_id/project_id
   // (gắn sai dự án = RLS lọc sai = rò dữ liệu sang khu khác), mà hai cột đó lại
   // NOT NULL nên type sinh từ DB bắt phải gửi. create_ticket() là security
   // invoker, RLS vẫn chặn nếu căn hộ không phải của người này.
-  const { data, error } = await supabase.rpc('create_ticket', {
+  const { data, error } = await db.rpc('create_ticket', {
     p_unit: unitId,
     p_category: category,
     p_priority: priority,

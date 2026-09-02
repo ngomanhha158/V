@@ -10,19 +10,19 @@ const VAI: Record<string, string> = {
 }
 
 export default async function Home() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const db = await createClient()
+  const { data: { user } } = await db.auth.getUser()
 
   // RLS lo phần lọc: chỉ trả về căn hộ user thực sự có quyền.
-  const { data: memberships } = await supabase
+  const { data: memberships } = await db
     .from('unit_memberships')
     .select('id, role, status, valid_to, units(id, code, floor_no, area_m2, buildings(name))')
     .eq('user_id', user?.id ?? '')
 
   // Chỉ để hiện/ẩn link. RLS mới là chốt chặn thật cho trang BQL.
-  const { data: project } = await supabase.from('projects').select('id').limit(1).maybeSingle()
+  const { data: project } = await db.from('projects').select('id').limit(1).maybeSingle()
   const { data: isStaff } = project
-    ? await supabase.rpc('is_staff', { p_project: project.id })
+    ? await db.rpc('is_staff', { p_project: project.id })
     : { data: false }
 
   const active = memberships?.filter((m) => m.status === 'active') ?? []

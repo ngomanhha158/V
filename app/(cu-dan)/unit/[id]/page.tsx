@@ -18,10 +18,10 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function UnitProfile({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const supabase = await createClient()
+  const db = await createClient()
 
   // RLS trên units cho đọc; không thấy = không tồn tại với người này.
-  const { data: unit } = await supabase
+  const { data: unit } = await db
     .from('units')
     .select('id, code, floor_no, area_m2, kind, state, buildings(name, code)')
     .eq('id', id)
@@ -29,14 +29,14 @@ export default async function UnitProfile({ params }: { params: Promise<{ id: st
   if (!unit) notFound()
 
   const [{ data: isManager }, { data: members }, { data: vehicles }, { data: pets }] = await Promise.all([
-    supabase.rpc('is_unit_manager', { p_unit: id }),
-    supabase
+    db.rpc('is_unit_manager', { p_unit: id }),
+    db
       .from('unit_memberships')
       .select('id, role, status, valid_from, valid_to, profiles!unit_memberships_user_id_fkey(full_name, phone)')
       .eq('unit_id', id)
       .order('role'),
-    supabase.from('unit_vehicles').select('id, plate, vehicle_type, card_no').eq('unit_id', id).order('plate'),
-    supabase.from('unit_pets').select('id, name, species, vaccinated_until').eq('unit_id', id).order('name'),
+    db.from('unit_vehicles').select('id, plate, vehicle_type, card_no').eq('unit_id', id).order('plate'),
+    db.from('unit_pets').select('id, name, species, vaccinated_until').eq('unit_id', id).order('name'),
   ])
 
   const TT: Record<string, 'trung' | 'tot' | 'canh' | 'xau'> = {

@@ -24,27 +24,27 @@ export async function GET(
   const bc = baoCao(loai)
   if (!bc) return loi(404, `Không có báo cáo "${loai}".`)
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const db = await createClient()
+  const { data: { user } } = await db.auth.getUser()
   if (!user) return loi(401, 'Chưa đăng nhập.')
 
-  const { data: project } = await supabase
+  const { data: project } = await db
     .from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return loi(404, 'Chưa có dự án nào trong hệ thống.')
 
   // Ai xuất file này. Phải hỏi profiles chứ không đọc từ phiên: phiên chỉ mang
   // id, còn dòng "Người xuất" trong file thì phải là thứ người đọc nhận ra.
   // policy profile_read cho mỗi người đọc chính mình nên câu này luôn có kết quả.
-  const { data: toi } = await supabase
+  const { data: toi } = await db
     .from('profiles').select('full_name, email, phone').eq('id', user.id).maybeSingle()
 
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) return loi(403, 'Chỉ ban quản lý mới xuất được báo cáo.')
 
   const ky = bc.theoKy ? docKy(req.nextUrl.searchParams.get('ky')) : null
   if (bc.theoKy && !ky) return loi(400, 'Kỳ không hợp lệ. Cần dạng YYYY-MM, ví dụ 2026-09.')
 
-  const kq = await layDong(supabase, bc.id, project.id, ky)
+  const kq = await layDong(db, bc.id, project.id, ky)
   if ('loi' in kq) return loi(400, kq.loi)
 
   // Chốt một lần rồi dùng cho cả nội dung file lẫn tên file: hai chỗ lệch nhau

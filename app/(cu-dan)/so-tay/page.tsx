@@ -8,10 +8,10 @@ export default async function SoTay({
   searchParams,
 }: { searchParams: Promise<{ q?: string; muc?: string; doc?: string }> }) {
   const sp = await searchParams
-  const supabase = await createClient()
+  const db = await createClient()
   const tuKhoa = (sp.q ?? '').trim()
 
-  let q = supabase
+  let q = db
     .from('documents')
     .select('id, section, title, body, version')
     .order('section')
@@ -28,7 +28,7 @@ export default async function SoTay({
 
   const [{ data: ds, error }, { data: tatCa }] = await Promise.all([
     q,
-    supabase.from('documents').select('section'),
+    db.from('documents').select('section'),
   ])
 
   const list = ds ?? []

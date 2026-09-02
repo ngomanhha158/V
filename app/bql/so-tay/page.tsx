@@ -7,13 +7,13 @@ import { Button, Card, CardHead, Hop, PageHead, Pill, Stat, Trong } from '@/comp
 export const dynamic = 'force-dynamic'
 
 export default async function BqlSoTay() {
-  const supabase = await createClient()
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const db = await createClient()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
-  const { data: ds } = await supabase
+  const { data: ds } = await db
     .from('documents')
     .select('id, section, title, body, version')
     .order('section')

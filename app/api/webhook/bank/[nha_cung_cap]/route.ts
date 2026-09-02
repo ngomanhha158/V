@@ -97,15 +97,15 @@ export async function POST(
     return NextResponse.json({ success: true, da_nhan: 0 })
   }
 
-  const supabase = await createAdminClient()
-  const { data: project } = await supabase.from('projects').select('id').limit(1).maybeSingle()
+  const db = await createAdminClient()
+  const { data: project } = await db.from('projects').select('id').limit(1).maybeSingle()
   if (!project) {
     return NextResponse.json({ success: false, message: 'Chua co du an' }, { status: 500 })
   }
 
   const ketQua = []
   for (const g of ds) {
-    const { data, error } = await supabase.rpc('ghi_nhan_tien_ve', {
+    const { data, error } = await db.rpc('ghi_nhan_tien_ve', {
       p_project: project.id,
       p_provider: nha_cung_cap,
       p_provider_ref: g.providerRef,

@@ -10,8 +10,8 @@ const VAI: Record<string, string> = {
 }
 
 export default async function Approvals() {
-  const supabase = await createClient()
-  const { data: pending } = await supabase
+  const db = await createClient()
+  const { data: pending } = await db
     .from('unit_memberships')
     // Phải chỉ đích danh FK: unit_memberships có 2 đường sang profiles
     // (user_id và approved_by). Để trống thì PostgREST không đoán được và query lỗi.

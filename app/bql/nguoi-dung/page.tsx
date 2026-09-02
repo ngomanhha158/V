@@ -6,21 +6,21 @@ import { DanhSach, FormTaoTaiKhoan, type CanTrong, type NguoiDung } from './form
 export const dynamic = 'force-dynamic'
 
 export default async function QuanLyNguoiDung() {
-  const supabase = await createClient()
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const db = await createClient()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào" />
 
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
   // Xem thì cả nhân sự đều xem được; TẠO thì chỉ trưởng BQL. Ẩn form đi cho
   // người không có quyền là để họ khỏi điền xong mới bị từ chối — chốt thật
   // vẫn nằm trong SQL, không phải ở đây.
-  const { data: laTruong } = await supabase.rpc('is_bql_manager', { p_project: project.id })
+  const { data: laTruong } = await db.rpc('is_bql_manager', { p_project: project.id })
 
   const [{ data: rows, error }, { data: units }, { data: memberships }] = await Promise.all([
-    supabase.rpc('bql_danh_sach_nguoi_dung', { p_project: project.id }),
-    supabase.from('units').select('id, code, building_id').order('code'),
-    supabase.from('unit_memberships').select('unit_id, status, role, valid_to'),
+    db.rpc('bql_danh_sach_nguoi_dung', { p_project: project.id }),
+    db.from('units').select('id, code, building_id').order('code'),
+    db.from('unit_memberships').select('unit_id, status, role, valid_to'),
   ])
 
   if (error) {

@@ -12,8 +12,8 @@ function firstOfMonth(v: string): string | null {
 }
 
 async function projectId() {
-  const supabase = await createClient()
-  const { data } = await supabase.from('projects').select('id').limit(1).maybeSingle()
+  const db = await createClient()
+  const { data } = await db.from('projects').select('id').limit(1).maybeSingle()
   return data?.id ?? null
 }
 
@@ -27,11 +27,11 @@ export async function generateInvoices(_prev: BillingState, formData: FormData):
   const period = firstOfMonth(String(formData.get('period') ?? ''))
   if (!period) return { error: 'Chưa chọn kỳ.' }
 
-  const supabase = await createClient()
+  const db = await createClient()
   const proj = await projectId()
   if (!proj) return { error: 'Chưa có dự án nào.' }
 
-  const { data, error } = await supabase.rpc('bql_generate_invoices', {
+  const { data, error } = await db.rpc('bql_generate_invoices', {
     p_project: proj, p_period: period,
   })
   if (error) return { error: humanError(error, 'Không sinh được hóa đơn') }
@@ -45,11 +45,11 @@ export async function issueInvoices(_prev: BillingState, formData: FormData): Pr
   const period = firstOfMonth(String(formData.get('period') ?? ''))
   if (!period) return { error: 'Chưa chọn kỳ.' }
 
-  const supabase = await createClient()
+  const db = await createClient()
   const proj = await projectId()
   if (!proj) return { error: 'Chưa có dự án nào.' }
 
-  const { data, error } = await supabase.rpc('bql_issue_invoices', {
+  const { data, error } = await db.rpc('bql_issue_invoices', {
     p_project: proj, p_period: period,
   })
   if (error) return { error: humanError(error, 'Không phát hành được') }
@@ -97,9 +97,9 @@ export async function saveReadings(_prev: BillingState, formData: FormData): Pro
   if (errors.length) return { error: `Chưa lưu gì cả. ${errors.length} dòng sai: ${errors.join('; ')}` }
   if (rows.length === 0) return { error: 'Chưa nhập chỉ số nào.' }
 
-  const supabase = await createClient()
+  const db = await createClient()
   // Một lệnh duy nhất, ghi đè nếu nhập lại cùng kỳ (BQL đọc nhầm rồi sửa).
-  const { error } = await supabase
+  const { error } = await db
     .from('meter_readings')
     .upsert(rows, { onConflict: 'unit_id,fee_type_id,period' })
 

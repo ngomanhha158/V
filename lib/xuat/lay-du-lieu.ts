@@ -1,7 +1,7 @@
 import type { createClient } from '@/lib/db/server'
 import { mocKy } from './bao-cao.ts'
 
-type Sb = Awaited<ReturnType<typeof createClient>>
+type Db = Awaited<ReturnType<typeof createClient>>
 
 export type KetQua =
   | { dong: Record<string, unknown>[] }
@@ -25,10 +25,10 @@ function dichLoi(bang: string, code: string | undefined, msg: string): string {
 }
 
 export async function layDong(
-  supabase: Sb, loai: string, project: string, ky: string | null,
+  db: Db, loai: string, project: string, ky: string | null,
 ): Promise<KetQua> {
   if (loai === 'cong-no') {
-    const { data, error } = await supabase.rpc('bql_debt_report', { p_project: project })
+    const { data, error } = await db.rpc('bql_debt_report', { p_project: project })
     if (error) return { loi: dichLoi('công nợ', error.code, error.message) }
     return { dong: (data ?? []) as unknown as Record<string, unknown>[] }
   }
@@ -39,7 +39,7 @@ export async function layDong(
   if (loai === 'so-quy') {
     // units!inner: lọc theo dự án nằm ở bảng lồng, không có !inner thì PostgREST
     // chỉ lọc phần embed và vẫn trả về mọi dòng payments của mọi khu.
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('payments')
       .select(`paid_at, amount, method, bank_ref, matched_by,
                units!inner(code, buildings!inner(code, project_id)), invoices(period)`)
@@ -65,7 +65,7 @@ export async function layDong(
   }
 
   if (loai === 'hoa-don') {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('invoices')
       .select(`period, status, due_date, total_amount, paid_amount,
                units!inner(code, buildings!inner(code)),
@@ -106,7 +106,7 @@ export async function layDong(
   }
 
   if (loai === 'doi-soat') {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('bank_transactions')
       .select(`paid_at, provider, provider_ref, amount, content, trang_thai,
                cach_khop, con_du, units(code)`)

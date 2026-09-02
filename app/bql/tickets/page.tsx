@@ -30,14 +30,14 @@ export default async function BqlTickets({
   searchParams,
 }: { searchParams: Promise<{ status?: string; building?: string }> }) {
   const sp = await searchParams
-  const supabase = await createClient()
+  const db = await createClient()
 
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <main><p>Chưa có dự án nào.</p></main>
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
-  let q = supabase
+  let q = db
     .from('tickets')
     .select('id, title, category, priority, status, created_at, sla_resolve_due, resolved_at, escalated_at, assignee_id, units(code, building_id, buildings(code, name)), profiles!tickets_reporter_id_fkey(full_name, phone)')
     .order('created_at', { ascending: false })
@@ -50,8 +50,8 @@ export default async function BqlTickets({
 
   const [{ data: tickets, error }, { data: buildings }, { data: staff }] = await Promise.all([
     q,
-    supabase.from('buildings').select('id, code, name').order('code'),
-    supabase
+    db.from('buildings').select('id, code, name').order('code'),
+    db
       .from('staff_assignments')
       .select('user_id, role, profiles(full_name)')
       .eq('is_active', true),

@@ -29,11 +29,11 @@ export default async function NhatKy({
   searchParams,
 }: { searchParams: Promise<ThamSo> }) {
   const sp = await searchParams
-  const supabase = await createClient()
+  const db = await createClient()
 
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào trong hệ thống" />
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
   const soNgay = NGAY.includes(Number(sp.ngay)) ? Number(sp.ngay) : 30
@@ -42,7 +42,7 @@ export default async function NhatKy({
   const trang = Math.max(1, Number(sp.trang) || 1)
   const tu = new Date(Date.now() - soNgay * 86400_000).toISOString()
 
-  let q = supabase
+  let q = db
     .from('audit_log')
     .select('id, at, actor_id, actor_role, bang, ban_ghi, thao_tac, truoc, sau', { count: 'exact' })
     .eq('project_id', project.id)
@@ -77,7 +77,7 @@ export default async function NhatKy({
   // xóa một hồ sơ không được phép kéo theo việc xóa dấu vết người đó đã làm gì.
   const ids = [...new Set(ds.map((r) => r.actor_id).filter((v): v is string => !!v))]
   const { data: hoSo } = ids.length
-    ? await supabase.from('profiles').select('id, full_name').in('id', ids)
+    ? await db.from('profiles').select('id, full_name').in('id', ids)
     : { data: [] }
   const ten = new Map((hoSo ?? []).map((p) => [p.id, p.full_name]))
 

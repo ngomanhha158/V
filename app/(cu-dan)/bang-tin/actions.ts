@@ -24,8 +24,8 @@ export async function boPhieu(_prev: GopYState, formData: FormData): Promise<Gop
   if (!poll || !unit) return { error: 'Thiếu thông tin bỏ phiếu.' }
   if (!Number.isInteger(chon) || chon < 0) return { error: 'Lựa chọn không hợp lệ.' }
 
-  const supabase = await createClient()
-  const { error } = await supabase.rpc('bo_phieu', {
+  const db = await createClient()
+  const { error } = await db.rpc('bo_phieu', {
     p_poll: poll, p_unit: unit, p_chon: chon,
   })
   if (error) return { error: dichLoi(error.code, `Không bỏ phiếu được: ${error.message}`) }
@@ -42,11 +42,11 @@ export async function vietBinhLuan(_prev: GopYState, formData: FormData): Promis
   if (!body) return { error: 'Chưa viết gì.' }
   if (body.length > 2000) return { error: `Dài ${body.length} ký tự, tối đa 2000.` }
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const db = await createClient()
+  const { data: { user } } = await db.auth.getUser()
   if (!user) return { error: 'Phiên đăng nhập đã hết. Đăng nhập lại rồi gửi.' }
 
-  const { error } = await supabase.from('announcement_comments').insert({
+  const { error } = await db.from('announcement_comments').insert({
     announcement_id: tb, author_id: user.id, unit_id: unit || null, body,
   })
   if (error) return { error: dichLoi(error.code, `Không gửi được: ${error.message}`) }

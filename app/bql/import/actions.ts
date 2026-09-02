@@ -12,8 +12,8 @@ export type PreviewState =
 
 /** Chỉ để ẩn/hiện giao diện. Chốt chặn thật là RLS (policy unit_staff_write). */
 async function currentProject() {
-  const supabase = await createClient()
-  const { data } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const db = await createClient()
+  const { data } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   return data
 }
 
@@ -33,10 +33,10 @@ export async function previewUnits(_prev: PreviewState, formData: FormData): Pro
     return { phase: 'error', message: 'Không đọc được file. Cần đúng định dạng .xlsx (không phải .xls hay .csv).' }
   }
 
-  const supabase = await createClient()
+  const db = await createClient()
   const [{ data: buildings }, { data: units }] = await Promise.all([
-    supabase.from('buildings').select('code'),
-    supabase.from('units').select('code'),
+    db.from('buildings').select('code'),
+    db.from('units').select('code'),
   ])
 
   const result = validateUnitRows(
@@ -59,11 +59,11 @@ export async function commitUnits(_prev: PreviewState, formData: FormData): Prom
   }
   if (parsed.length === 0) return { phase: 'error', message: 'Không có dòng hợp lệ nào.' }
 
-  const supabase = await createClient()
+  const db = await createClient()
   const project = await currentProject()
   if (!project) return { phase: 'error', message: 'Chưa có dự án nào.' }
 
-  const { data: buildings } = await supabase.from('buildings').select('id, code')
+  const { data: buildings } = await db.from('buildings').select('id, code')
   const byCode = new Map((buildings ?? []).map((b) => [b.code.toUpperCase(), b.id]))
 
   const rows = parsed.map((u) => ({
@@ -80,7 +80,7 @@ export async function commitUnits(_prev: PreviewState, formData: FormData): Prom
 
   // Một lệnh insert: hoặc vào hết, hoặc không dòng nào. Import nửa vời rồi bắt
   // BQL tự dò xem tới dòng nào là cách nhanh nhất để mất niềm tin.
-  const { error, count } = await supabase.from('units').insert(rows, { count: 'exact' })
+  const { error, count } = await db.from('units').insert(rows, { count: 'exact' })
   if (error) {
     // RLS chặn ở đây nếu người dùng không phải BQL — đúng ý đồ.
     return { phase: 'error', message: `Không import được: ${error.message}` }

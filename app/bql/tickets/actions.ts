@@ -27,7 +27,7 @@ export async function dispatchTicket(formData: FormData): Promise<void> {
 
   if (Object.keys(patch).length === 0) return
 
-  const supabase = await createClient()
-  await supabase.from('tickets').update(patch).eq('id', id)
+  const db = await createClient()
+  await db.from('tickets').update(patch).eq('id', id)
   revalidatePath('/bql/tickets')
 }

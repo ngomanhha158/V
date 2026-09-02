@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // DỮ LIỆU GIẢ CHO BẢN DEMO. Không phải dữ liệu thật, không đọc database.
 //
-// Toàn bộ thư mục app/demo chạy trên đúng file này — không import supabase,
-// không có service key, không có đường nào ra DB thật. Cố ý như vậy: bản demo
+// Toàn bộ thư mục app/demo chạy trên đúng file này — không import client
+// database, không có khóa ký nào, không có đường nào ra DB thật. Cố ý như vậy: bản demo
 // bỏ qua đăng nhập, nên nó tuyệt đối không được chạm vào dữ liệu thật.
 //
 // Đây là code VỨT ĐI sau khi chốt giao diện. Đừng dùng lại kiểu dữ liệu ở đây

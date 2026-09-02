@@ -15,11 +15,11 @@ function khiNao(iso: string) {
 }
 
 export default async function BangTin() {
-  const supabase = await createClient()
+  const db = await createClient()
   // Policy announcement_read lo toàn bộ phần lọc: chỉ bản ĐÃ phát hành và nhắm
   // đúng căn/tầng/tòa/dự án của người này. Trang không tự lọc lại — lọc hai nơi
   // là sớm muộn hai nơi lệch nhau.
-  const { data: ds } = await supabase
+  const { data: ds } = await db
     .from('announcements')
     .select('id, title, body, is_urgent, published_at, building_id, floor_no, unit_id, documents(id, title, section)')
     .order('published_at', { ascending: false })
@@ -32,7 +32,7 @@ export default async function BangTin() {
   // Căn của người đang xem, để bỏ phiếu và ký tên bình luận. Lấy căn ĐẦU TIÊN:
   // người có nhiều căn thì bỏ phiếu cho căn nào là câu hỏi thật, nhưng để đó
   // còn hơn đoán bừa — màn nói rõ đang bỏ cho căn nào.
-  const { data: canCuaToi } = await supabase
+  const { data: canCuaToi } = await db
     .from('unit_memberships')
     .select('unit_id, units(code)')
     .eq('status', 'active').limit(1).maybeSingle()
@@ -42,13 +42,13 @@ export default async function BangTin() {
 
   const [thamDo, binhLuan, phieu] = ids.length
     ? await Promise.all([
-      supabase.from('announcement_polls')
+      db.from('announcement_polls')
         .select('announcement_id, cau_hoi, lua_chon, kin, dong_luc').in('announcement_id', ids),
-      supabase.from('announcement_comments')
+      db.from('announcement_comments')
         .select('id, announcement_id, body, created_at, an_luc, unit_id, units(code), profiles(full_name)')
         .in('announcement_id', ids).order('created_at'),
       unitId
-        ? supabase.from('announcement_votes')
+        ? db.from('announcement_votes')
           .select('poll_id, chon').in('poll_id', ids).eq('unit_id', unitId)
         : Promise.resolve({ data: [] as { poll_id: string; chon: number }[] }),
     ])
@@ -61,7 +61,7 @@ export default async function BangTin() {
   // không cần biết luật đó — biết ở hai nơi là sớm muộn hai nơi lệch nhau.
   const ketQua = new Map<string, KetQua[]>()
   await Promise.all([...td.keys()].map(async (id) => {
-    const { data } = await supabase.rpc('ket_qua_tham_do', { p_poll: id })
+    const { data } = await db.rpc('ket_qua_tham_do', { p_poll: id })
     ketQua.set(id, (data ?? []) as KetQua[])
   }))
 

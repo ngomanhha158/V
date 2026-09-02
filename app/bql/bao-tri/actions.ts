@@ -16,9 +16,9 @@ function dichLoi(code: string | undefined, msg: string): string {
 }
 
 async function duAn() {
-  const supabase = await createClient()
-  const { data } = await supabase.from('projects').select('id').limit(1).maybeSingle()
-  return { supabase, project: data?.id ?? null }
+  const db = await createClient()
+  const { data } = await db.from('projects').select('id').limit(1).maybeSingle()
+  return { db, project: data?.id ?? null }
 }
 
 /** Đọc số nguyên trong khoảng, trả null nếu không đọc được. */
@@ -59,12 +59,12 @@ function doc(formData: FormData) {
 }
 
 export async function themKeHoach(_prev: BaoTriState, formData: FormData): Promise<BaoTriState> {
-  const { supabase, project } = await duAn()
+  const { db, project } = await duAn()
   if (!project) return { error: 'Chưa có dự án nào trong hệ thống.' }
   const v = doc(formData)
   if ('loi' in v) return { error: v.loi }
 
-  const { error } = await supabase.from('maintenance_plans')
+  const { error } = await db.from('maintenance_plans')
     .insert({ ...v.cot, project_id: project })
   if (error) return { error: dichLoi(error.code, `Không thêm được: ${error.message}`) }
 
@@ -73,14 +73,14 @@ export async function themKeHoach(_prev: BaoTriState, formData: FormData): Promi
 }
 
 export async function suaKeHoach(_prev: BaoTriState, formData: FormData): Promise<BaoTriState> {
-  const { supabase, project } = await duAn()
+  const { db, project } = await duAn()
   if (!project) return { error: 'Chưa có dự án nào trong hệ thống.' }
   const id = String(formData.get('id') ?? '')
   if (!id) return { error: 'Thiếu kế hoạch cần sửa.' }
   const v = doc(formData)
   if ('loi' in v) return { error: v.loi }
 
-  const { error } = await supabase.from('maintenance_plans')
+  const { error } = await db.from('maintenance_plans')
     .update(v.cot).eq('id', id).eq('project_id', project)
   if (error) return { error: dichLoi(error.code, `Không sửa được: ${error.message}`) }
 
@@ -90,14 +90,14 @@ export async function suaKeHoach(_prev: BaoTriState, formData: FormData): Promis
 
 /** Bật/tắt chứ không xóa: xóa kế hoạch là mất luôn lịch sử các lần đã làm. */
 export async function doiTrangThai(_prev: BaoTriState, formData: FormData): Promise<BaoTriState> {
-  const { supabase, project } = await duAn()
+  const { db, project } = await duAn()
   if (!project) return { error: 'Chưa có dự án nào trong hệ thống.' }
   const id = String(formData.get('id') ?? '')
   const bat = formData.get('bat') === '1'
   const ten = String(formData.get('ten') ?? '')
   if (!id) return { error: 'Thiếu kế hoạch.' }
 
-  const { error } = await supabase.from('maintenance_plans')
+  const { error } = await db.from('maintenance_plans')
     .update({ is_active: bat }).eq('id', id).eq('project_id', project)
   if (error) return { error: dichLoi(error.code, `Không đổi được: ${error.message}`) }
 
@@ -110,13 +110,13 @@ export async function doiTrangThai(_prev: BaoTriState, formData: FormData): Prom
 }
 
 export async function xongLan(_prev: BaoTriState, formData: FormData): Promise<BaoTriState> {
-  const supabase = await createClient()
+  const db = await createClient()
   const id = String(formData.get('id') ?? '')
   const ten = String(formData.get('ten') ?? '')
   const ketQua = String(formData.get('ket_qua') ?? '').trim()
   if (!id) return { error: 'Thiếu lần bảo trì.' }
 
-  const { data, error } = await supabase.rpc('xong_bao_tri', {
+  const { data, error } = await db.rpc('xong_bao_tri', {
     p_run: id, p_ket_qua: ketQua || undefined,
   })
   if (error) return { error: dichLoi(error.code, `Không đóng được: ${error.message}`) }

@@ -9,23 +9,23 @@ import { FormThem, FormXong, HangKeHoach, type KeHoach } from './form'
 export const dynamic = 'force-dynamic'
 
 export default async function BaoTri() {
-  const supabase = await createClient()
+  const db = await createClient()
 
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào trong hệ thống" />
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
   const [keHoach, dangMo, toaNha] = await Promise.all([
-    supabase.from('maintenance_plans')
+    db.from('maintenance_plans')
       .select('id, ten, hang_muc, chu_ky_ngay, han_ke_tiep, nhac_truoc_ngay, bat_buoc_phap_ly, nha_thau, building_id, is_active')
       .eq('project_id', project.id),
-    supabase.from('maintenance_runs')
+    db.from('maintenance_runs')
       .select('id, han, mo_luc, maintenance_plans!inner(id, ten, chu_ky_ngay, project_id, bat_buoc_phap_ly, nhac_truoc_ngay)')
       .is('lam_luc', null)
       .eq('maintenance_plans.project_id', project.id)
       .order('han'),
-    supabase.from('buildings').select('id, code, name').eq('project_id', project.id).order('code'),
+    db.from('buildings').select('id, code, name').eq('project_id', project.id).order('code'),
   ])
 
   if (keHoach.error) {

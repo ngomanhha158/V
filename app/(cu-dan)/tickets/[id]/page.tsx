@@ -23,9 +23,9 @@ function when(iso: string) {
 
 export default async function TicketDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const supabase = await createClient()
+  const db = await createClient()
 
-  const { data: ticket } = await supabase
+  const { data: ticket } = await db
     .from('tickets')
     .select('id, title, description, category, priority, status, created_at, sla_respond_due, sla_resolve_due, responded_at, resolved_at, rating, rating_note, unit_id, photo_urls, units(code, buildings(name))')
     .eq('id', id)
@@ -34,11 +34,11 @@ export default async function TicketDetail({ params }: { params: Promise<{ id: s
 
   // BQL cũng thấy ticket này (policy ticket_resident_read có nhánh is_staff),
   // nhưng chấm điểm là việc của cư dân — không hiện form cho BQL.
-  const { data: myUnits } = await supabase.rpc('current_unit_ids')
+  const { data: myUnits } = await db.rpc('current_unit_ids')
   const isMember = (myUnits ?? []).includes(ticket.unit_id)
 
   // ticket_events chỉ đọc được nếu đọc được chính ticket (policy ticket_event_read).
-  const { data: events } = await supabase
+  const { data: events } = await db
     .from('ticket_events')
     .select('id, event_type, from_value, to_value, note, created_at')
     .eq('ticket_id', id)

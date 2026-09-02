@@ -19,11 +19,11 @@ export default async function Billing({
   searchParams,
 }: { searchParams: Promise<{ period?: string }> }) {
   const sp = await searchParams
-  const supabase = await createClient()
+  const db = await createClient()
 
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
   // Kỳ mặc định = tháng này. Dạng YYYY-MM cho input type=month.
@@ -33,10 +33,10 @@ export default async function Billing({
   const periodDate = `${period}-01`
 
   const [{ data: feeTypes }, { data: units }, { data: readings }, { data: invoices }] = await Promise.all([
-    supabase.from('fee_types').select('id, code, name, calc_method').order('code'),
-    supabase.from('units').select('id, code').order('code'),
-    supabase.from('meter_readings').select('unit_id, fee_type_id, prev_index, curr_index').eq('period', periodDate),
-    supabase.from('invoices').select('id, status, total_amount, unit_id, units(code)').eq('period', periodDate).order('status'),
+    db.from('fee_types').select('id, code, name, calc_method').order('code'),
+    db.from('units').select('id, code').order('code'),
+    db.from('meter_readings').select('unit_id, fee_type_id, prev_index, curr_index').eq('period', periodDate),
+    db.from('invoices').select('id, status, total_amount, unit_id, units(code)').eq('period', periodDate).order('status'),
   ])
 
   const metered = (feeTypes ?? []).filter((f) => f.calc_method === 'metered')

@@ -26,9 +26,9 @@ function doiRaPhut(so: string, donVi: string): number | null {
 }
 
 async function duAn() {
-  const supabase = await createClient()
-  const { data } = await supabase.from('projects').select('id').limit(1).maybeSingle()
-  return { supabase, project: data?.id ?? null }
+  const db = await createClient()
+  const { data } = await db.from('projects').select('id').limit(1).maybeSingle()
+  return { db, project: data?.id ?? null }
 }
 
 function dichLoi(code: string | undefined, msg: string): string {
@@ -59,12 +59,12 @@ function doc(formData: FormData) {
 }
 
 export async function themSla(_prev: SlaState, formData: FormData): Promise<SlaState> {
-  const { supabase, project } = await duAn()
+  const { db, project } = await duAn()
   if (!project) return { error: 'Chưa có dự án nào trong hệ thống.' }
   const v = doc(formData)
   if ('loi' in v) return { error: v.loi }
 
-  const { error } = await supabase.from('sla_policies').insert({
+  const { error } = await db.from('sla_policies').insert({
     project_id: project, category: v.category, priority: v.priority,
     respond_mins: v.respond, resolve_mins: v.resolve, escalate_to: v.escalate,
   })
@@ -77,14 +77,14 @@ export async function themSla(_prev: SlaState, formData: FormData): Promise<SlaS
 }
 
 export async function suaSla(_prev: SlaState, formData: FormData): Promise<SlaState> {
-  const { supabase, project } = await duAn()
+  const { db, project } = await duAn()
   if (!project) return { error: 'Chưa có dự án nào trong hệ thống.' }
   const id = String(formData.get('id') ?? '')
   if (!id) return { error: 'Thiếu dòng cần sửa.' }
   const v = doc(formData)
   if ('loi' in v) return { error: v.loi }
 
-  const { error } = await supabase.from('sla_policies')
+  const { error } = await db.from('sla_policies')
     .update({
       category: v.category, priority: v.priority,
       respond_mins: v.respond, resolve_mins: v.resolve, escalate_to: v.escalate,
@@ -99,13 +99,13 @@ export async function suaSla(_prev: SlaState, formData: FormData): Promise<SlaSt
 }
 
 export async function xoaSla(_prev: SlaState, formData: FormData): Promise<SlaState> {
-  const { supabase, project } = await duAn()
+  const { db, project } = await duAn()
   if (!project) return { error: 'Chưa có dự án nào trong hệ thống.' }
   const id = String(formData.get('id') ?? '')
   const ten = String(formData.get('ten') ?? '')
   if (!id) return { error: 'Thiếu dòng cần xóa.' }
 
-  const { error } = await supabase.from('sla_policies')
+  const { error } = await db.from('sla_policies')
     .delete().eq('id', id).eq('project_id', project)
   if (error) return { error: dichLoi(error.code, `Không xóa được: ${error.message}`) }
 

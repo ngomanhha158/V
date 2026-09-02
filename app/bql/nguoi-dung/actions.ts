@@ -32,24 +32,24 @@ const DAI_TOI_THIEU = 8
  * Thứ tự cũng cố ý: kiểm quyền TRƯỚC khi chạm vào admin client, không phải sau.
  */
 async function guard(): Promise<
-  { loi: string } | { supabase: Awaited<ReturnType<typeof createClient>>; project: string }
+  { loi: string } | { db: Awaited<ReturnType<typeof createClient>>; project: string }
 > {
-  const supabase = await createClient()
-  const { data: project } = await supabase.from('projects')
+  const db = await createClient()
+  const { data: project } = await db.from('projects')
     .select('id').limit(1).maybeSingle()
   if (!project) return { loi: 'Chưa có dự án nào trong hệ thống.' }
 
-  const { data: laTruong } = await supabase.rpc('is_bql_manager', { p_project: project.id })
+  const { data: laTruong } = await db.rpc('is_bql_manager', { p_project: project.id })
   if (!laTruong) return { loi: 'Chỉ trưởng ban quản lý mới quản lý được tài khoản.' }
-  return { supabase, project: project.id }
+  return { db, project: project.id }
 }
 
 /** Người này có thuộc dự án đang mở không. Thiếu chốt này thì trưởng BQL khu A
  *  đổi được mật khẩu của bất kỳ ai trong hệ thống, chỉ cần đoán đúng id. */
 async function thuocDuAn(
-  supabase: Awaited<ReturnType<typeof createClient>>, project: string, userId: string,
+  db: Awaited<ReturnType<typeof createClient>>, project: string, userId: string,
 ): Promise<boolean> {
-  const { data } = await supabase.rpc('bql_danh_sach_nguoi_dung', { p_project: project })
+  const { data } = await db.rpc('bql_danh_sach_nguoi_dung', { p_project: project })
   return (data ?? []).some((r) => r.user_id === userId)
 }
 
@@ -80,7 +80,7 @@ export async function taoTaiKhoan(
 ): Promise<NguoiDungState> {
   const g = await guard()
   if ('loi' in g) return { error: g.loi }
-  const { supabase, project } = g
+  const { db, project } = g
 
   const hoTen = String(formData.get('ho_ten') ?? '').trim()
   const danhTinh = String(formData.get('danh_tinh') ?? '').trim()
@@ -122,9 +122,9 @@ export async function taoTaiKhoan(
   // Gán vai trò bằng client của NGƯỜI ĐANG ĐĂNG NHẬP, không phải admin client:
   // chốt is_bql_manager trong SQL vẫn phải áp cho thao tác này.
   const { error: loiGan } = loai === 'nhan_su'
-    ? await supabase.rpc('bql_gan_nhan_su',
+    ? await db.rpc('bql_gan_nhan_su',
         { p_user: uid, p_project: project, p_role: vaiTro as VaiTro })
-    : await supabase.rpc('bql_gan_chu_ho_dau_tien', { p_user: uid, p_unit: can })
+    : await db.rpc('bql_gan_chu_ho_dau_tien', { p_user: uid, p_unit: can })
 
   if (loiGan) {
     // Tài khoản đã tạo nhưng chưa gắn vào đâu -> xóa đi. Để lại là một tài
@@ -147,7 +147,7 @@ export async function datLaiMatKhau(
 ): Promise<NguoiDungState> {
   const g = await guard()
   if ('loi' in g) return { error: g.loi }
-  const { supabase, project } = g
+  const { db, project } = g
 
   const uid = String(formData.get('user_id') ?? '')
   const hoTen = String(formData.get('ho_ten') ?? '')
@@ -156,7 +156,7 @@ export async function datLaiMatKhau(
   if (matKhau.length < DAI_TOI_THIEU) {
     return { error: `Mật khẩu phải từ ${DAI_TOI_THIEU} ký tự trở lên.` }
   }
-  if (!(await thuocDuAn(supabase, project, uid))) {
+  if (!(await thuocDuAn(db, project, uid))) {
     return { error: 'Người này không thuộc dự án của bạn.' }
   }
 
@@ -181,7 +181,7 @@ export async function ngungNhanSu(
 ): Promise<NguoiDungState> {
   const g = await guard()
   if ('loi' in g) return { error: g.loi }
-  const { supabase, project } = g
+  const { db, project } = g
 
   const uid = String(formData.get('user_id') ?? '')
   const vaiTro = String(formData.get('vai_tro') ?? '')
@@ -189,7 +189,7 @@ export async function ngungNhanSu(
   if (!uid) return { error: 'Thiếu người cần thu hồi.' }
   if (!laVaiTro(vaiTro)) return { error: 'Vai trò không hợp lệ.' }
 
-  const { error } = await supabase.rpc('bql_ngung_nhan_su',
+  const { error } = await db.rpc('bql_ngung_nhan_su',
     { p_user: uid, p_project: project, p_role: vaiTro })
   if (error) {
     if (error.code === '42501') {

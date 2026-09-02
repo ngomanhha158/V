@@ -52,13 +52,13 @@ function Hang({ m }: { m: Muc }) {
 }
 
 export default async function GoLive() {
-  const supabase = await createClient()
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const db = await createClient()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
-  const { data: rows, error } = await supabase.rpc('bql_san_sang_go_live', {
+  const { data: rows, error } = await db.rpc('bql_san_sang_go_live', {
     p_project: project.id,
   })
   if (error || !rows?.[0]) {
