@@ -34,6 +34,37 @@ revoke all on all sequences in schema public from anon, authenticated;
 alter default privileges in schema public revoke all on tables    from anon, authenticated;
 alter default privileges in schema public revoke all on sequences from anon, authenticated;
 
+-- ───────────────────── service_role: cấp lại nền của nó ──────────────────────
+-- BẪY, và là bẫy chỉ lộ ra khi rời Supabase: bên đó `service_role` được cấp
+-- sẵn mọi thứ bằng default privileges của họ. Trên Postgres thuần thì KHÔNG có
+-- gì cấp cho nó cả, mà `bypassrls` chỉ bỏ qua RLS — nó không cho quyền bảng.
+--
+-- Hai đường chết ngay nếu thiếu đoạn này, và cả hai đều im lặng cho tới lúc
+-- có tiền thật hoặc có hạn thật:
+--   • Webhook ngân hàng — `.from('projects')` rồi `.rpc('ghi_nhan_tien_ve')`.
+--     Trả 5xx, nhà cung cấp retry vài lần rồi bỏ, tiền của cư dân biến mất
+--     khỏi hệ thống.
+--   • Cả năm job nền qua /api/cron — nhắc nợ, leo thang ticket, thu hồi tư
+--     cách hết hạn, mở kỳ bảo trì, dọn mã. Không cái nào chạy, không cái nào
+--     kêu.
+-- Câu `revoke execute ... from public` bên dưới càng làm nặng thêm: nó gỡ luôn
+-- cái quyền PUBLIC mà service_role đang vô tình sống nhờ.
+--
+-- Cấp RỘNG, đúng bằng những gì Supabase vẫn cấp, chứ không liệt kê từng bảng.
+-- Liệt kê nghe có vẻ chặt hơn nhưng không mua được gì: role này đã bypassrls,
+-- và ai ký được token của nó thì cũng ký được token vai bất kỳ. Đổi lại, danh
+-- sách liệt kê nghĩa là mỗi tính năng mới đi qua đường admin sẽ hỏng bằng một
+-- lỗi 403 khó hiểu, phát hiện ở production — đúng kiểu hỏng vừa xảy ra.
+--
+-- An toàn nằm ở chỗ khác, và nằm ở ba lớp: khóa ký không có tiền tố
+-- NEXT_PUBLIC_ nên không vào bundle; createAdminClient ném lỗi nếu thấy mình
+-- chạy trong trình duyệt; token nó ký ra chỉ sống 60 giây.
+grant usage on schema public to service_role;
+grant all on all tables    in schema public to service_role;
+grant all on all sequences in schema public to service_role;
+alter default privileges in schema public grant all on tables    to service_role;
+alter default privileges in schema public grant all on sequences to service_role;
+
 -- ─────────────────────────── Cấp lại đúng phần cần ───────────────────────────
 -- Role `authenticated` của Supabase cần quyền bảng; RLS mới là lớp lọc dòng.
 -- anon giữ usage trên schema nhưng không có bảng nào -> PostgREST không trả dữ liệu.
@@ -96,6 +127,13 @@ grant insert, update, delete on announcements, documents to authenticated;
 -- KHÔNG đủ — nó chỉ xóa dòng thừa, PUBLIC vẫn cho tất cả gọi được. Phải revoke
 -- từ PUBLIC rồi cấp lại đúng chỗ cần.
 revoke execute on all functions in schema public from public, anon, authenticated;
+
+-- Cấp lại cho service_role NGAY SAU câu revoke ở trên, không phải trước: câu
+-- đó gỡ quyền của PUBLIC, mà service_role vốn chỉ gọi được hàm nhờ đúng cái
+-- quyền PUBLIC ấy. Đây là chỗ ghi_nhan_tien_ve và cả năm hàm job nền mất
+-- quyền, và không có gì báo cho tới khi ngân hàng bắn giao dịch đầu tiên.
+grant execute on all functions in schema public to service_role;
+alter default privileges in schema public grant execute on functions to service_role;
 
 -- Helper của RLS: policy gọi chúng dưới quyền chính người đang truy vấn, mất
 -- execute là policy tự lỗi permission denied và cư dân không đọc được gì.

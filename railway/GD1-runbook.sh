@@ -130,12 +130,26 @@ B6. Job nền. Ảnh Postgres của Railway không có pg_cron, nên cron.sql KH
     Lịch ghi theo UTC, khớp với đầu file cron.sql. Thêm job trong SQL mà quên
     thêm service ở đây thì nó không chạy, và không có gì báo.
 
-B7. Xóa các biến của Supabase khỏi service `v` sau khi đã chạy xanh:
+B7. Kiểm ĐƯỜNG THẬT đầu-cuối. Từ máy anh, trỏ vào PostgREST đang chạy:
+
+      POSTGREST_URL=<url PostgREST> AUTH_JWT_SECRET=<khóa B2> npm run verify:http
+
+    Chỉ ĐỌC, không sửa gì, nên chạy thẳng trên database thật được. Nó trả lời
+    ba câu mà không bài test nào khác chạm tới: PostgREST có nhận chữ ký của
+    mình không, có SET ROLE đúng theo claim không, và auth.uid() có đọc ra
+    đúng người không. Sai một trong ba là RLS lọc theo nhầm người mà app vẫn
+    chạy, vẫn trả dữ liệu, không có lỗi nào.
+
+    CHẠY HAI LẦN: lần này, và lần nữa SAU KHI duyệt chủ hộ đầu tiên. Ca quan
+    trọng nhất — "cư dân thật chỉ thấy căn của mình" — cần có ít nhất một
+    unit_memberships đang hoạt động, nên lần đầu nó báo CHƯA chứ không báo OK.
+
+B8. Xóa các biến của Supabase khỏi service `v` sau khi đã chạy xanh:
       NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
       SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SECRET_KEY
     Xóa SAU chứ không phải trước: còn biến thì còn đường lùi trong lúc đang dò.
 
-B8. Chuyển dữ liệu từ Supabase sang (nếu khu đã chạy thật):
+B9. Chuyển dữ liệu từ Supabase sang (nếu khu đã chạy thật):
       pg_dump --data-only --schema=public "<chuỗi nối Supabase>" > data.sql
       psql -f data.sql
     Tài khoản đăng nhập KHÔNG chuyển được: mật khẩu bên Supabase băm bằng khóa

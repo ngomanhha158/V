@@ -75,6 +75,20 @@ const CANARY = [
                           '  -- canary: co y bo dong nay'),
   },
   {
+    ten: 'gỡ nền của service_role (webhook ngân hàng và job nền cùng chết)',
+    file: 'railway/02_smoke_prod.sql',
+    doi: (s) => `${s}\nrevoke all on all tables in schema public from service_role;\n`,
+    ap: 'auth_hooks.sql',
+  },
+  {
+    // Nửa còn lại của cùng một lỗi. Quyền BẢNG và quyền GỌI HÀM mất độc lập
+    // với nhau, nên một canary không thay được canary kia.
+    ten: 'gỡ EXECUTE của service_role (ghi_nhan_tien_ve và 5 hàm job nền)',
+    file: 'railway/02_smoke_prod.sql',
+    doi: (s) => `${s}\nrevoke execute on all functions in schema public from service_role;\n`,
+    ap: 'auth_hooks.sql',
+  },
+  {
     ten: 'cấp lại EXECUTE auth_dat_mat_khau cho authenticated',
     file: 'railway/04_smoke_auth.sql',
     doi: (s) => `${s}\ngrant execute on function public.auth_dat_mat_khau(uuid, text) to authenticated;\n`,

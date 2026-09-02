@@ -5,6 +5,7 @@
   "scripts": {
     "verify": "node scripts/verify-schema.mjs",
     "verify:railway": "node scripts/verify-railway.mjs",
+    "verify:http": "node --experimental-strip-types scripts/verify-http.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

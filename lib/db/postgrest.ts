@@ -1,6 +1,6 @@
 import { PostgrestClient } from '@supabase/postgrest-js'
-import type { Database } from './database.types'
-import { urlPostgrest } from './env'
+import type { Database } from './database.types.ts'
+import { urlPostgrest } from './env.ts'
 
 /**
  * Client nói chuyện với PostgREST.

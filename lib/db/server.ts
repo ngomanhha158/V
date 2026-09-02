@@ -1,8 +1,8 @@
 import { cookies } from 'next/headers'
-import { doc, type Claims } from './jwt'
-import { biMatJwt } from './env'
-import { TEN_COOKIE } from './phien'
-import { taoClient, type Client } from './postgrest'
+import { doc, type Claims } from './jwt.ts'
+import { biMatJwt } from './env.ts'
+import { TEN_COOKIE } from './phien.ts'
+import { taoClient, type Client } from './postgrest.ts'
 
 /** Claims của người đang đăng nhập, đã kiểm chữ ký. null nếu chưa đăng nhập. */
 export async function phienHienTai(): Promise<{ token: string; claims: Claims } | null> {

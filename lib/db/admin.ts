@@ -1,6 +1,6 @@
-import { ky } from './jwt'
-import { biMatJwt, SERVICE_SONG_GIAY } from './env'
-import { taoClient, type Client } from './postgrest'
+import { ky } from './jwt.ts'
+import { biMatJwt, SERVICE_SONG_GIAY } from './env.ts'
+import { taoClient, type Client } from './postgrest.ts'
 
 /**
  * Client dùng service_role — BỎ QUA toàn bộ RLS.

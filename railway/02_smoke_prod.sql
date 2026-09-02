@@ -85,8 +85,32 @@ begin
   if n <> 0 then raise exception 'FAIL 8: JWT thieu sub van doc duoc % hoa don', n; end if;
   perform set_config('request.jwt.claims', '', true);
 
+  -- ── Đường service_role: webhook ngân hàng và job nền ──
+  -- Ba câu dưới đây bịt một lỗ mà bộ test cũ không nhìn thấy, và nó đã hỏng
+  -- thật: trên Supabase, service_role được cấp sẵn mọi thứ bằng default
+  -- privileges của họ. Trên Postgres thuần thì KHÔNG — `bypassrls` chỉ bỏ qua
+  -- RLS, nó không cho quyền bảng, và `revoke execute ... from public` trong
+  -- auth_hooks.sql còn gỡ nốt quyền gọi hàm mà nó đang sống nhờ.
+  -- Hệ quả: webhook trả 5xx nên tiền của cư dân biến mất khỏi hệ thống, và cả
+  -- năm job nền im lặng không chạy. Không màn nào báo.
   execute 'reset role';
-  raise notice 'SMOKE PRODUCTION PATH PASSED — ca hai duong (JWT claims + app.user_id) deu bi RLS chan dung';
+  execute 'set local role service_role';
+
+  -- 9. Đọc bảng: đây là câu `.from('projects')` mở đầu mọi lần webhook chạy.
+  select count(*) into n from projects;
+  if n = 0 then raise exception 'FAIL 9: service_role khong doc duoc projects'; end if;
+
+  -- 10. Gọi hàm thường trong public. Phải chọn hàm KHÔNG được cấp riêng cho
+  --     service_role ở đâu cả — hàm có cấp riêng vẫn chạy kể cả khi nền đã mất,
+  --     nên nó không phát hiện ra gì.
+  perform unit_project(v_unit);
+
+  -- 11. Và service_role thấy HẾT, không bị RLS lọc — đó là cả lý do nó tồn tại.
+  select count(*) into n from invoices;
+  if n < 1 then raise exception 'FAIL 11: service_role chi thay % hoa don, phai thay tat ca', n; end if;
+
+  execute 'reset role';
+  raise notice 'SMOKE PRODUCTION PATH PASSED — RLS chan dung ca hai duong danh tinh, va service_role co du nen de chay webhook + job nen';
 end
 $smoke$;
 

@@ -1,9 +1,9 @@
 import { randomInt } from 'node:crypto'
 import { cookies } from 'next/headers'
-import { createAdminClient } from './admin'
-import { ky } from './jwt'
-import { biMatJwt, PHIEN_SONG_GIAY } from './env'
-import { TEN_COOKIE, tuyChonCookie } from './phien'
+import { createAdminClient } from './admin.ts'
+import { ky } from './jwt.ts'
+import { biMatJwt, PHIEN_SONG_GIAY } from './env.ts'
+import { TEN_COOKIE, tuyChonCookie } from './phien.ts'
 import { guiMaDangNhap } from '@/lib/mail'
 
 /**
