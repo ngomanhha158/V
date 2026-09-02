@@ -525,6 +525,7 @@ export type Database = {
       }
       fee_types: {
         Row: {
+          loai_xe: Database["public"]["Enums"]["loai_xe"] | null
           calc_method: string
           code: string
           id: string
@@ -533,6 +534,7 @@ export type Database = {
           unit_price: number | null
         }
         Insert: {
+          loai_xe?: Database["public"]["Enums"]["loai_xe"] | null
           calc_method?: string
           code: string
           id?: string
@@ -541,6 +543,7 @@ export type Database = {
           unit_price?: number | null
         }
         Update: {
+          loai_xe?: Database["public"]["Enums"]["loai_xe"] | null
           calc_method?: string
           code?: string
           id?: string
@@ -1206,18 +1209,48 @@ export type Database = {
           },
         ]
       }
+      bai_xe: {
+        Row: {
+          building_id: string
+          ghi_chu: string | null
+          loai: Database["public"]["Enums"]["loai_xe"]
+          moi_can: number
+          tong_cho: number
+        }
+        Insert: {
+          building_id: string
+          ghi_chu?: string | null
+          loai: Database["public"]["Enums"]["loai_xe"]
+          moi_can: number
+          tong_cho: number
+        }
+        Update: {
+          building_id?: string
+          ghi_chu?: string | null
+          loai?: Database["public"]["Enums"]["loai_xe"]
+          moi_can?: number
+          tong_cho?: number
+        }
+        Relationships: []
+      }
       unit_vehicles: {
         Row: {
           card_no: string | null
+          dang_ky_luc: string
           id: string
+          loai: Database["public"]["Enums"]["loai_xe"] | null
           plate: string
+          trang_thai: string
           unit_id: string
           vehicle_type: string | null
         }
         Insert: {
           card_no?: string | null
+          dang_ky_luc?: string
           id?: string
+          loai?: Database["public"]["Enums"]["loai_xe"] | null
           plate: string
+          trang_thai?: string
           unit_id: string
           vehicle_type?: string | null
         }
@@ -1308,6 +1341,58 @@ export type Database = {
       auth_xoa_nguoi_dung: { Args: { p_uid: string }; Returns: boolean }
       auth_huy_ma: { Args: { p_danh_tinh: string }; Returns: boolean }
       auth_don_ma: { Args: never; Returns: number }
+      dang_ky_xe: {
+        Args: {
+          p_bien_so: string
+          p_loai: Database["public"]["Enums"]["loai_xe"]
+          p_the?: string | null
+          p_unit: string
+        }
+        Returns: { trang_thai: string; vi_tri: number }[]
+      }
+      duyet_xe_tiep: {
+        Args: { p_building: string; p_loai: Database["public"]["Enums"]["loai_xe"] }
+        Returns: { bien_so: string; can: string }[]
+      }
+      dat_han_muc_bai_xe: {
+        Args: {
+          p_building: string
+          p_ghi_chu?: string | null
+          p_loai: Database["public"]["Enums"]["loai_xe"]
+          p_moi_can: number
+          p_tong_cho: number
+        }
+        Returns: number
+      }
+      cho_do_cua_can: {
+        Args: { p_unit: string }
+        Returns: {
+          loai: Database["public"]["Enums"]["loai_xe"]
+          da_dung: number
+          moi_can: number
+          co_han_muc: boolean
+          tong_cho: number
+          ca_toa_dang_dung: number
+          toi_dang_cho: number
+          vi_tri_dau: number
+          hang_cho_ca_toa: number
+          toi_qua_han_muc: number
+        }[]
+      }
+      bai_xe_tong_quan: {
+        Args: { p_project: string }
+        Returns: {
+          building_id: string
+          toa: string
+          loai: Database["public"]["Enums"]["loai_xe"]
+          co_han_muc: boolean
+          tong_cho: number
+          moi_can: number
+          dang_dung: number
+          hang_cho: number
+          qua_han_muc: number
+        }[]
+      }
       kiem_the: {
         Args: { p_uid: string; p_unit: string }
         Returns: {
@@ -1546,6 +1631,7 @@ export type Database = {
     }
     Enums: {
       invoice_status: "draft" | "issued" | "partial" | "paid" | "void"
+      loai_xe: "o_to" | "xe_may" | "xe_dap" | "khac"
       member_status: "pending" | "active" | "revoked" | "expired"
       staff_role:
         | "bql_manager"
@@ -1692,6 +1778,7 @@ export const Constants = {
   public: {
     Enums: {
       invoice_status: ["draft", "issued", "partial", "paid", "void"],
+      loai_xe: ["o_to", "xe_may", "xe_dap", "khac"],
       member_status: ["pending", "active", "revoked", "expired"],
       staff_role: ["bql_manager", "bql_staff", "technician", "security", "bqt"],
       ticket_priority: ["low", "normal", "high", "urgent"],

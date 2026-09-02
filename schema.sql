@@ -732,26 +732,35 @@ begin
      and i.period = p_period and i.status = 'draft';
 
   insert into invoice_lines (invoice_id, fee_type_id, description, quantity, unit_price, amount)
-  select i.id, f.id, f.name,
-         case f.calc_method
-           when 'per_m2'  then coalesce(u.area_m2, 0)
-           when 'metered' then coalesce(r.curr_index - r.prev_index, 0)
-           else 1
-         end as qty,
-         f.unit_price,
-         round(f.unit_price * case f.calc_method
-           when 'per_m2'  then coalesce(u.area_m2, 0)
-           when 'metered' then coalesce(r.curr_index - r.prev_index, 0)
-           else 1
-         end)::bigint
+  select i.id, f.id, f.name, q.so_luong, f.unit_price,
+         round(f.unit_price * q.so_luong)::bigint
     from invoices i
     join units u on u.id = i.unit_id
     join fee_types f on f.project_id = i.project_id
     left join meter_readings r
            on r.unit_id = u.id and r.fee_type_id = f.id and r.period = i.period
+    -- Số lượng tính MỘT lần rồi dùng cho cả cột quantity lẫn cột amount. Trước
+    -- đây cùng một biểu thức CASE viết hai lần, và hai bản sao của một công
+    -- thức TIỀN là chỗ chờ sẵn để sửa một bên rồi quên bên kia — hóa đơn ghi
+    -- 14 m³ mà tính tiền 12 m³ thì không có test nào của bảng này bắt được.
+    cross join lateral (
+      select case f.calc_method
+               when 'per_m2'  then coalesce(u.area_m2, 0)
+               when 'metered' then coalesce(r.curr_index - r.prev_index, 0)
+               -- Chỉ đếm xe ĐÃ DUYỆT. Thu tiền của một chiếc đang xếp hàng chờ
+               -- là thu tiền một chỗ đỗ chưa hề có.
+               when 'per_vehicle' then (
+                 select count(*) from unit_vehicles v
+                  where v.unit_id = u.id and v.trang_thai = 'da_duyet'
+                    and (f.loai_xe is null or v.loai = f.loai_xe))
+               else 1
+             end as so_luong
+    ) q
    where i.project_id = p_project and i.period = p_period and i.status = 'draft'
      -- không sinh dòng 0đ cho căn chưa có chỉ số công tơ
-     and (f.calc_method <> 'metered' or r.id is not null);
+     and (f.calc_method <> 'metered' or r.id is not null)
+     -- ...và không sinh dòng 0đ phí gửi xe cho căn không đăng ký chiếc nào
+     and (f.calc_method <> 'per_vehicle' or q.so_luong > 0);
 
   update invoices i set total_amount = coalesce(
       (select sum(l.amount) from invoice_lines l where l.invoice_id = i.id), 0)
@@ -2232,3 +2241,315 @@ begin
          end
     from profiles p where p.id = p_uid;
 end $fn$;
+
+-- ══════════════════════ 14. CHỖ ĐỖ XE VÀ HÀNG CHỜ ══════════════════════
+-- Hầm để xe luôn thiếu chỗ. Không có hạn mức theo căn thì hộ đăng ký trước
+-- chiếm hết, và người đến sau không có cách nào biết mình đang đứng thứ mấy —
+-- nên họ gọi điện hỏi BQL, mỗi tuần một lần.
+--
+-- Hai ràng buộc khác nhau, phải tách bạch:
+--   • moi_can  — CÔNG BẰNG. Một hộ không được ôm năm chỗ ô tô.
+--   • tong_cho — VẬT LÝ. Hầm có bấy nhiêu chỗ thì có bấy nhiêu.
+-- Gộp làm một là lúc BQL muốn nới cho một hộ thì phải sửa luôn sức chứa hầm.
+--
+-- Và vì thế có HAI kiểu chờ, không phải một:
+--   • hang_cho     — chờ hầm có chỗ. Xếp theo giờ đăng ký, gọi lần lượt.
+--   • qua_han_muc  — vượt hạn mức của chính căn mình. Chờ BQL nới, không phải
+--                    chờ hầm.
+-- Nhét chung một hàng thì chiếc xe thứ hai của một hộ đã kín hạn mức sẽ đứng
+-- đầu hàng vĩnh viễn: không bao giờ gọi lên được, mà cũng chặn luôn mọi người
+-- phía sau. Con số "bạn đứng thứ 14" khi đó là một lời nói dối.
+
+do $$ begin
+  create type loai_xe as enum ('o_to', 'xe_may', 'xe_dap', 'khac');
+exception when duplicate_object then null; end $$;
+
+create table if not exists bai_xe (
+  building_id uuid not null references buildings(id) on delete cascade,
+  loai        loai_xe not null,
+  tong_cho    int not null check (tong_cho >= 0),
+  moi_can     int not null check (moi_can >= 0),
+  ghi_chu     text,
+  primary key (building_id, loai)
+);
+
+-- Cột thêm cho bảng xe đã có. `add column if not exists` chứ không dựng lại
+-- bảng: khu đang chạy đã có dữ liệu xe thật trong đó.
+alter table unit_vehicles add column if not exists loai loai_xe;
+alter table unit_vehicles add column if not exists trang_thai text not null default 'da_duyet';
+-- clock_timestamp() chứ KHÔNG phải now(): now() trả về giờ MỞ TRANSACTION, nên
+-- hai lượt đăng ký trong cùng một transaction nhận đúng một mốc thời gian và
+-- hàng chờ mất thứ tự — lúc đó ai đứng trước chỉ còn phụ thuộc vào uuid ngẫu
+-- nhiên. Với một cái hàng mà cả tính năng dựng lên để giữ công bằng thì đó là
+-- hỏng ở đúng chỗ quan trọng nhất.
+alter table unit_vehicles add column if not exists dang_ky_luc timestamptz not null default clock_timestamp();
+alter table unit_vehicles alter column dang_ky_luc set default clock_timestamp();
+do $$ begin
+  alter table unit_vehicles add constraint xe_trang_thai
+    check (trang_thai in ('da_duyet', 'hang_cho', 'qua_han_muc'));
+exception when duplicate_object then null; end $$;
+
+-- Xếp hàng theo GIỜ ĐĂNG KÝ — đó là toàn bộ lời hứa công bằng của tính năng
+-- này. Chỉ số để câu "tôi đứng thứ mấy" trả lời được mà không quét cả bảng.
+create index if not exists xe_hang_cho on unit_vehicles (loai, dang_ky_luc)
+  where trang_thai = 'hang_cho';
+
+-- Chuyển dữ liệu cũ: `vehicle_type` là text tự do nên có đủ kiểu viết, mà đếm
+-- hạn mức thì không đếm được trên text tự do. Từ nay `loai` là nguồn sự thật
+-- duy nhất; cột cũ giữ lại vì nó chứa nguyên văn thứ người ta đã gõ, nhưng app
+-- không ghi vào nó nữa.
+update unit_vehicles set loai = case
+    when vehicle_type is null then 'khac'
+    when lower(vehicle_type) ~ 'ô ?tô|o ?to|oto|car|hơi|hoi' then 'o_to'
+    when lower(vehicle_type) ~ 'máy|may|moto|motor|scooter' then 'xe_may'
+    when lower(vehicle_type) ~ 'đạp|dap|bike|bicycle' then 'xe_dap'
+    else 'khac' end::loai_xe
+ where loai is null;
+
+alter table bai_xe enable row level security;
+-- Cư dân ĐỌC được hạn mức của tòa: không thấy con số thì "còn 3 chỗ" chỉ là
+-- lời nói miệng, và hàng chờ mất hết sức thuyết phục.
+create policy bai_xe_read on bai_xe for select
+  using (building_project(building_id) is not null);
+create policy bai_xe_staff on bai_xe for all
+  using (is_staff(building_project(building_id)))
+  with check (is_staff(building_project(building_id)));
+
+-- ─────────────────────────── ĐĂNG KÝ MỘT CHIẾC XE ───────────────────────────
+-- Trả ('da_duyet', 0) | ('hang_cho', <vị trí>) | ('qua_han_muc', 0).
+--
+-- SECURITY DEFINER vì nó phải ĐẾM xe của cả tòa để biết còn chỗ không, mà RLS
+-- chỉ cho cư dân thấy xe của căn mình. Không có nó thì mọi hộ đều tưởng hầm
+-- còn trống.
+create or replace function dang_ky_xe(
+  p_unit uuid, p_bien_so text, p_loai loai_xe, p_the text default null)
+returns table (trang_thai text, vi_tri int)
+language plpgsql volatile security definer set search_path = public as $fn$
+declare v_toa uuid; v_ch record; v_cua_can int; v_ca_toa int; v_id uuid; v_tt text;
+begin
+  if not is_unit_manager(p_unit) then
+    raise exception 'chi chu ho hoac nguoi duoc uy quyen moi dang ky xe' using errcode = '42501';
+  end if;
+  select u.building_id into v_toa from units u where u.id = p_unit;
+  if v_toa is null then raise exception 'khong co can ho nay' using errcode = 'P0002'; end if;
+  if coalesce(trim(p_bien_so), '') = '' then
+    raise exception 'thieu bien so' using errcode = '23514';
+  end if;
+
+  select * into v_ch from bai_xe b where b.building_id = v_toa and b.loai = p_loai;
+
+  if not found then
+    -- BQL chưa đặt hạn mức cho loại xe này. GHI NHẬN chứ không từ chối: một hệ
+    -- thống chặn hết vì thiếu một dòng cấu hình thì tệ hơn hẳn một hệ thống ghi
+    -- lại rồi để BQL dọn sau. Màn bãi xe của BQL nói rõ tòa nào chưa đặt.
+    v_tt := 'da_duyet';
+  else
+    select count(*) into v_cua_can from unit_vehicles v
+     where v.unit_id = p_unit and v.loai = p_loai and v.trang_thai = 'da_duyet';
+    select count(*) into v_ca_toa from unit_vehicles v join units u on u.id = v.unit_id
+     where u.building_id = v_toa and v.loai = p_loai and v.trang_thai = 'da_duyet';
+    v_tt := case
+      when v_cua_can >= v_ch.moi_can  then 'qua_han_muc'
+      when v_ca_toa  >= v_ch.tong_cho then 'hang_cho'
+      else 'da_duyet' end;
+  end if;
+
+  insert into unit_vehicles (unit_id, plate, loai, card_no, trang_thai)
+  values (p_unit, upper(trim(p_bien_so)), p_loai, nullif(trim(p_the), ''), v_tt)
+  returning id into v_id;
+
+  return query
+  select v_tt, case when v_tt <> 'hang_cho' then 0 else (
+    select count(*)::int from unit_vehicles v
+     join units u on u.id = v.unit_id
+     join unit_vehicles t on t.id = v_id
+     where u.building_id = v_toa and v.loai = p_loai and v.trang_thai = 'hang_cho'
+       and (v.dang_ky_luc, v.id) <= (t.dang_ky_luc, t.id)
+  ) end;
+end $fn$;
+
+-- ──────────────────── GỌI NGƯỜI ĐẦU HÀNG CHỜ KHI CÓ CHỖ ─────────────────────
+-- Nhận TÒA và LOẠI xe, không nhận id chiếc xe — cố ý. Nhận id thì BQL chọn được
+-- ai lên trước, và cái hàng chờ vốn sinh ra để công bằng trở thành danh sách
+-- xin-cho. Ai không cần nữa thì tự rút, người kế tiếp thành người đầu hàng.
+create or replace function duyet_xe_tiep(p_building uuid, p_loai loai_xe)
+returns table (bien_so text, can text)
+language plpgsql volatile security definer set search_path = public as $fn$
+declare v_du_an uuid; v_id uuid; v_unit uuid; v_ch record; v_ca_toa int; v_cua_can int;
+begin
+  v_du_an := building_project(p_building);
+  if v_du_an is null then raise exception 'khong co toa nay' using errcode = 'P0002'; end if;
+  if not is_staff(v_du_an) then
+    raise exception 'chi ban quan ly moi duyet hang cho' using errcode = '42501';
+  end if;
+
+  select * into v_ch from bai_xe b where b.building_id = p_building and b.loai = p_loai;
+  if not found then raise exception 'toa nay chua dat han muc cho loai xe do' using errcode = 'P0002'; end if;
+
+  select count(*) into v_ca_toa from unit_vehicles v join units u on u.id = v.unit_id
+   where u.building_id = p_building and v.loai = p_loai and v.trang_thai = 'da_duyet';
+  if v_ca_toa >= v_ch.tong_cho then
+    -- Duyệt khi chưa có chỗ là bán một chỗ không tồn tại, và người ta xuống hầm
+    -- rồi mới biết.
+    raise exception 'chua con cho trong' using errcode = '23514';
+  end if;
+
+  -- Đi từ đầu hàng xuống. Căn nào trong lúc chờ đã kín hạn mức (BQL siết
+  -- moi_can, hoặc căn đó vừa được duyệt một chiếc khác) thì ĐẨY SANG
+  -- qua_han_muc chứ không dừng cả hàng lại ở đó.
+  for v_id, v_unit in
+    select v.id, v.unit_id from unit_vehicles v join units u on u.id = v.unit_id
+     where u.building_id = p_building and v.loai = p_loai and v.trang_thai = 'hang_cho'
+     order by v.dang_ky_luc, v.id
+  loop
+    select count(*) into v_cua_can from unit_vehicles v
+     where v.unit_id = v_unit and v.loai = p_loai and v.trang_thai = 'da_duyet';
+    if v_cua_can >= v_ch.moi_can then
+      update unit_vehicles set trang_thai = 'qua_han_muc' where id = v_id;
+    else
+      update unit_vehicles set trang_thai = 'da_duyet' where id = v_id;
+      return query select v.plate, u.code from unit_vehicles v
+        join units u on u.id = v.unit_id where v.id = v_id;
+      return;
+    end if;
+  end loop;
+
+  raise exception 'hang cho dang trong' using errcode = 'P0002';
+end $fn$;
+
+-- ───────────────────── ĐẶT HẠN MỨC, VÀ XÉT LẠI HÀNG CHỜ ─────────────────────
+-- Nới moi_can mà không xét lại thì những chiếc đang `qua_han_muc` nằm đó mãi:
+-- chúng không nằm trong hàng chờ nên duyet_xe_tiep() không bao giờ nhìn tới, và
+-- chủ xe thì thấy trạng thái đứng yên sau khi BQL đã hứa nới. GIỮ NGUYÊN
+-- dang_ky_luc khi chuyển sang hàng chờ — họ đã đợi từ hôm đó, không phải hôm nay.
+create or replace function dat_han_muc_bai_xe(
+  p_building uuid, p_loai loai_xe, p_tong_cho int, p_moi_can int, p_ghi_chu text default null)
+returns int
+language plpgsql volatile security definer set search_path = public as $fn$
+declare v_du_an uuid; n int;
+begin
+  v_du_an := building_project(p_building);
+  if v_du_an is null then raise exception 'khong co toa nay' using errcode = 'P0002'; end if;
+  if not is_staff(v_du_an) then
+    raise exception 'chi ban quan ly moi dat han muc' using errcode = '42501';
+  end if;
+  if p_tong_cho < 0 or p_moi_can < 0 then
+    raise exception 'so cho khong the am' using errcode = '23514';
+  end if;
+
+  insert into bai_xe (building_id, loai, tong_cho, moi_can, ghi_chu)
+  values (p_building, p_loai, p_tong_cho, p_moi_can, nullif(trim(p_ghi_chu), ''))
+  on conflict (building_id, loai) do update
+    set tong_cho = excluded.tong_cho, moi_can = excluded.moi_can, ghi_chu = excluded.ghi_chu;
+
+  with dem as (
+    select v.id, row_number() over (partition by v.unit_id order by v.dang_ky_luc, v.id)
+           + (select count(*) from unit_vehicles w
+               where w.unit_id = v.unit_id and w.loai = p_loai and w.trang_thai = 'da_duyet') as thu
+      from unit_vehicles v join units u on u.id = v.unit_id
+     where u.building_id = p_building and v.loai = p_loai and v.trang_thai = 'qua_han_muc'
+  )
+  update unit_vehicles x set trang_thai = 'hang_cho'
+    from dem d where d.id = x.id and d.thu <= p_moi_can;
+  get diagnostics n = row_count;
+  return n;
+end $fn$;
+
+-- ─────────────────── TÌNH TRẠNG CHỖ ĐỖ CỦA MỘT CĂN (cư dân) ─────────────────
+-- Một dòng cho mỗi loại xe mà tòa có đặt hạn mức, HOẶC căn đang có xe loại đó.
+-- Không liệt kê cả bốn loại: dòng "xe đạp 0/0" ở một tòa không quản lý xe đạp
+-- chỉ làm người đọc tưởng mình bị cấm để xe đạp.
+--
+-- SECURITY DEFINER vì nó đếm xe của CẢ TÒA để trả lời "còn mấy chỗ" và "tôi
+-- đứng thứ mấy", mà RLS chỉ cho cư dân thấy xe của căn mình. Chốt quyền nằm
+-- ngay đầu hàm.
+create or replace function cho_do_cua_can(p_unit uuid)
+returns table (
+  loai loai_xe, da_dung int, moi_can int, co_han_muc boolean,
+  tong_cho int, ca_toa_dang_dung int,
+  toi_dang_cho int, vi_tri_dau int, hang_cho_ca_toa int, toi_qua_han_muc int
+)
+language plpgsql stable security definer set search_path = public as $fn$
+declare v_toa uuid;
+begin
+  select u.building_id into v_toa from units u where u.id = p_unit;
+  if v_toa is null then raise exception 'khong co can ho nay' using errcode = 'P0002'; end if;
+  if not (p_unit in (select current_unit_ids()) or is_staff(building_project(v_toa))) then
+    raise exception 'khong xem duoc cho do cua can khac' using errcode = '42501';
+  end if;
+
+  return query
+  with co as (
+    select b.loai from bai_xe b where b.building_id = v_toa
+    union
+    select v.loai from unit_vehicles v where v.unit_id = p_unit and v.loai is not null
+  )
+  select
+    c.loai,
+    (select count(*)::int from unit_vehicles v
+      where v.unit_id = p_unit and v.loai = c.loai and v.trang_thai = 'da_duyet'),
+    coalesce(b.moi_can, 0),
+    (b.building_id is not null),
+    coalesce(b.tong_cho, 0),
+    (select count(*)::int from unit_vehicles v join units u on u.id = v.unit_id
+      where u.building_id = v_toa and v.loai = c.loai and v.trang_thai = 'da_duyet'),
+    (select count(*)::int from unit_vehicles v
+      where v.unit_id = p_unit and v.loai = c.loai and v.trang_thai = 'hang_cho'),
+    -- Vị trí của chiếc SỚM NHẤT căn này đang chờ. Căn không chờ gì thì min() ra
+    -- null, phép so sánh thành null, kết quả 0 — đúng nghĩa "không đứng hàng nào".
+    (select count(*)::int from unit_vehicles v join units u on u.id = v.unit_id
+      where u.building_id = v_toa and v.loai = c.loai and v.trang_thai = 'hang_cho'
+        and v.dang_ky_luc <= (select min(x.dang_ky_luc) from unit_vehicles x
+                               where x.unit_id = p_unit and x.loai = c.loai
+                                 and x.trang_thai = 'hang_cho')),
+    (select count(*)::int from unit_vehicles v join units u on u.id = v.unit_id
+      where u.building_id = v_toa and v.loai = c.loai and v.trang_thai = 'hang_cho'),
+    (select count(*)::int from unit_vehicles v
+      where v.unit_id = p_unit and v.loai = c.loai and v.trang_thai = 'qua_han_muc')
+  from co c left join bai_xe b on b.building_id = v_toa and b.loai = c.loai
+  order by c.loai;
+end $fn$;
+
+-- ───────────────────── TOÀN CẢNH BÃI XE CỦA DỰ ÁN (BQL) ─────────────────────
+-- Liệt kê cả những loại xe ĐANG CÓ mà tòa chưa đặt hạn mức — đó chính là chỗ
+-- BQL cần nhìn thấy: dang_ky_xe() cho qua khi chưa có cấu hình, nên một tòa
+-- quên đặt hạn mức sẽ âm thầm nhận xe không giới hạn cho tới lúc hầm đầy thật.
+create or replace function bai_xe_tong_quan(p_project uuid)
+returns table (
+  building_id uuid, toa text, loai loai_xe, co_han_muc boolean,
+  tong_cho int, moi_can int, dang_dung int, hang_cho int, qua_han_muc int
+)
+language plpgsql stable security definer set search_path = public as $fn$
+begin
+  if not is_staff(p_project) then
+    raise exception 'chi ban quan ly moi xem duoc bai xe' using errcode = '42501';
+  end if;
+  return query
+  with co as (
+    select b.building_id, b.loai from bai_xe b
+     join buildings g on g.id = b.building_id where g.project_id = p_project
+    union
+    select u.building_id, v.loai from unit_vehicles v
+     join units u on u.id = v.unit_id
+     join buildings g on g.id = u.building_id
+     where g.project_id = p_project and v.loai is not null
+  )
+  select c.building_id, g.name, c.loai,
+         (b.building_id is not null), coalesce(b.tong_cho, 0), coalesce(b.moi_can, 0),
+         (select count(*)::int from unit_vehicles v join units u on u.id = v.unit_id
+           where u.building_id = c.building_id and v.loai = c.loai and v.trang_thai = 'da_duyet'),
+         (select count(*)::int from unit_vehicles v join units u on u.id = v.unit_id
+           where u.building_id = c.building_id and v.loai = c.loai and v.trang_thai = 'hang_cho'),
+         (select count(*)::int from unit_vehicles v join units u on u.id = v.unit_id
+           where u.building_id = c.building_id and v.loai = c.loai and v.trang_thai = 'qua_han_muc')
+    from co c
+    join buildings g on g.id = c.building_id
+    left join bai_xe b on b.building_id = c.building_id and b.loai = c.loai
+   order by g.code, c.loai;
+end $fn$;
+
+-- ──────────────────── PHÍ GỬI XE TÍNH THEO ĐẦU XE ĐÃ DUYỆT ──────────────────
+-- calc_method mới: 'per_vehicle' (xử lý trong generate_invoices ở §6).
+-- fee_types.loai_xe nói loại nào được đếm — để trống là đếm tất cả, thường
+-- không phải điều người ta muốn, nên màn biểu phí bắt chọn.
+alter table fee_types add column if not exists loai_xe loai_xe;

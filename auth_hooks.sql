@@ -232,3 +232,16 @@ grant execute on function ket_qua_tham_do(uuid) to authenticated;
 -- mà cả BQL lẫn bảo vệ đều đăng nhập dưới cùng một role `authenticated`; vai
 -- trò trong tòa nhà nằm ở staff_assignments, không nằm ở tầng Postgres.
 grant execute on function kiem_the(uuid, uuid) to authenticated;
+
+-- Chỗ đỗ xe. Cư dân ĐỌC được hạn mức của tòa mình — không thấy con số thì
+-- "còn 3 chỗ" chỉ là lời nói miệng và hàng chờ mất hết sức thuyết phục.
+-- KHÔNG cấp quyền ghi thẳng: mọi thay đổi đi qua hàm, vì thứ tự hàng chờ và
+-- phép đếm sức chứa là những thứ chỉ đúng khi làm trong một chỗ duy nhất.
+-- Policy bai_xe_staff vì thế không bao giờ chạy tới — giữ lại làm lớp chặn
+-- thứ hai cho ngày ai đó cấp thêm quyền ghi mà quên mất lý do ở đây.
+grant select on bai_xe to authenticated;
+grant execute on function dang_ky_xe(uuid, text, loai_xe, text) to authenticated;
+grant execute on function duyet_xe_tiep(uuid, loai_xe)          to authenticated;
+grant execute on function dat_han_muc_bai_xe(uuid, loai_xe, int, int, text) to authenticated;
+grant execute on function cho_do_cua_can(uuid)                  to authenticated;
+grant execute on function bai_xe_tong_quan(uuid)                to authenticated;
