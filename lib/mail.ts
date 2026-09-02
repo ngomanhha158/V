@@ -26,7 +26,16 @@ function vanChuyen(): Transporter | null {
   }
   // Giữ lại một transporter: nodemailer gộp kết nối, dựng mới mỗi lần gửi là
   // mở một phiên SMTP mới cho từng người bấm nút.
-  vc ??= nodemailer.createTransport(url)
+  //
+  // Ba hạn thời gian là BẮT BUỘC, không phải tinh chỉnh: mặc định của nodemailer
+  // là hai phút. Nhà cung cấp thư treo (không từ chối, chỉ im lặng) thì mỗi lần
+  // bấm "Gửi mã" giữ một socket hai phút, và vài chục cư dân bấm cùng lúc là
+  // đủ để trang đăng nhập ngừng phản hồi — một sự cố ở SMTP kéo cả app xuống.
+  vc ??= nodemailer.createTransport(url, {
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+  })
   return vc
 }
 

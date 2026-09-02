@@ -172,6 +172,45 @@ begin
 end
 $fn$;
 
+-- ─────────────────────── HỦY MÃ VỪA TẠO KHI THƯ KHÔNG ĐI ────────────────────
+-- auth_gui_ma LƯU mã trước, Node GỬI thư sau. Thư không đi được thì cái mã vừa
+-- lưu chiếm một trong ba suất còn sống VÀ đặt hạn 60 giây, dù chẳng ai nhận
+-- được gì.
+--
+-- Hậu quả không phải là không đăng nhập được — SMTP hỏng thì đằng nào cũng
+-- không — mà là hệ thống NÓI SAI về nguyên nhân: bấm lần nữa sẽ nhận "vừa gửi
+-- rồi, chờ 60 giây, nhớ xem cả hộp thư rác". Người trực ban đọc câu đó sẽ đi
+-- tìm lỗi ở giới hạn gửi thay vì đi kiểm SMTP, và một sự cố nửa giờ thành nửa
+-- buổi.
+--
+-- XÓA hẳn dòng, không phải đánh dấu đã dùng. Đánh dấu thì suất được trả lại
+-- nhưng hạn 60 giây vẫn tính theo tao_luc, nên câu trả lời sai vẫn còn nguyên.
+-- Xóa cũng đúng với sự thật: đây là mã chưa từng đến tay ai, nó không có giá
+-- trị điều tra nào để giữ lại.
+--
+-- Đổi lại, trong lúc SMTP hỏng thì hạn 60 giây không áp nữa. Chấp nhận được vì
+-- đường này CHỈ chạy khi lần gửi vừa rồi đã thất bại: gửi thành công thì dòng
+-- ở lại và hạn vẫn nguyên như cũ. Chi phí mỗi lần bấm bị chặn trên bởi
+-- connectionTimeout/socketTimeout đặt trong lib/mail.ts.
+create or replace function public.auth_huy_ma(p_danh_tinh text)
+returns boolean
+language plpgsql volatile security definer set search_path = auth, public as $fn$
+declare v_uid uuid; v_id bigint;
+begin
+  v_uid := public.auth_tim(p_danh_tinh);
+  if v_uid is null then return false; end if;
+  -- CHỈ mã mới nhất. Người ta có thể đang cầm một mã cũ vẫn còn hạn từ lần gửi
+  -- trước đó — thư đến chậm là chuyện thường — và hủy nhầm nó là lấy mất đúng
+  -- cái mã đang dùng được.
+  select m.id into v_id from auth.ma_dang_nhap m
+   where m.user_id = v_uid and m.dung_luc is null
+   order by m.tao_luc desc limit 1;
+  if v_id is null then return false; end if;
+  delete from auth.ma_dang_nhap where id = v_id;
+  return true;
+end
+$fn$;
+
 -- ──────────────────────────── QUẢN LÝ TÀI KHOẢN (BQL) ────────────────────────
 -- Thay admin.createUser / updateUserById / deleteUser của Supabase.
 --
@@ -240,13 +279,15 @@ $fn$;
 revoke execute on function
   public.auth_tim(text), public.auth_gui_ma(text, text), public.auth_kiem_ma(text, text),
   public.auth_kiem_mat_khau(text, text), public.auth_tao_nguoi_dung(text, text, text, text),
-  public.auth_dat_mat_khau(uuid, text), public.auth_xoa_nguoi_dung(uuid)
+  public.auth_dat_mat_khau(uuid, text), public.auth_xoa_nguoi_dung(uuid),
+  public.auth_huy_ma(text)
   from public, anon, authenticated;
 
 grant execute on function
   public.auth_tim(text), public.auth_gui_ma(text, text), public.auth_kiem_ma(text, text),
   public.auth_kiem_mat_khau(text, text), public.auth_tao_nguoi_dung(text, text, text, text),
-  public.auth_dat_mat_khau(uuid, text), public.auth_xoa_nguoi_dung(uuid)
+  public.auth_dat_mat_khau(uuid, text), public.auth_xoa_nguoi_dung(uuid),
+  public.auth_huy_ma(text)
   to service_role;
 
 grant usage, select on sequence auth.ma_dang_nhap_id_seq to service_role;

@@ -89,6 +89,24 @@ const CANARY = [
     ap: 'auth_hooks.sql',
   },
   {
+    ten: 'auth_huy_ma giết cả mã cũ người ta đang cầm',
+    file: 'railway/04_smoke_auth.sql',
+    doi: (s) => s.replace(
+      "   where m.user_id = v_uid and m.dung_luc is null\n   order by m.tao_luc desc limit 1;",
+      '   where m.user_id = v_uid and m.dung_luc is null;'),
+    ap: 'railway/03_auth.sql',
+  },
+  {
+    // Nếu chỉ đánh dấu "đã dùng" thay vì xóa, suất được trả lại nhưng hạn 60
+    // giây vẫn tính — tức là câu trả lời sai với người dùng vẫn còn nguyên.
+    ten: 'auth_huy_ma đánh dấu thay vì xóa (hạn 60 giây vẫn tính)',
+    file: 'railway/04_smoke_auth.sql',
+    doi: (s) => s.replace(
+      '  delete from auth.ma_dang_nhap where id = v_id;',
+      '  update auth.ma_dang_nhap set dung_luc = now() where id = v_id;'),
+    ap: 'railway/03_auth.sql',
+  },
+  {
     ten: 'cấp lại EXECUTE auth_dat_mat_khau cho authenticated',
     file: 'railway/04_smoke_auth.sql',
     doi: (s) => `${s}\ngrant execute on function public.auth_dat_mat_khau(uuid, text) to authenticated;\n`,

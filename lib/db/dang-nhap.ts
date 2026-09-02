@@ -49,6 +49,10 @@ export async function guiMa(
     // Thư không đi được là lỗi hệ thống, phải nói ra. Trả 'ok' ở đây là để cư
     // dân ngồi chờ một lá thư không bao giờ đến.
     console.error('gui thu dang nhap that bai:', e)
+    // Và trả lại cái suất mà mã vừa tạo đang chiếm. Không trả thì lần bấm sau
+    // nhận câu "vừa gửi rồi, chờ 8 phút" — một câu trả lời SAI về nguyên nhân,
+    // và nó dắt người đi sửa sang nhầm hướng đúng lúc đang có sự cố.
+    await admin.rpc('auth_huy_ma', { p_danh_tinh: danhTinh })
     return { tt: 'khong_gui_duoc' }
   }
   return { tt: 'ok' }

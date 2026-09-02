@@ -46,6 +46,14 @@ echo "── A3/4  Mật khẩu cho role authenticator"
 # FORCE, và hỏng theo kiểu không báo lỗi, không ai biết cho tới lúc một cư dân
 # đọc được hóa đơn của căn khác.
 
+echo "── A3b/4  Nạp lại schema cache của PostgREST"
+# PostgREST đọc danh mục bảng và hàm MỘT LẦN lúc khởi động rồi giữ trong bộ nhớ.
+# Thêm hàm hay bảng mới mà không bảo nó nạp lại thì nó trả 404 cho đúng thứ vừa
+# tạo — và 404 nhìn giống hệt "gõ sai tên hàm", nên rất dễ đi tìm nhầm chỗ.
+# Bước này CHỈ cần từ lần thứ hai trở đi; lần đầu thì PostgREST còn chưa dựng.
+# Áp bất kỳ file .sql nào sau này cũng phải chạy lại đúng câu dưới đây.
+psql -c "notify pgrst, 'reload schema'" 2>/dev/null || true
+
 echo "── A4/4  Hai bài smoke"
 psql -v ON_ERROR_STOP=1 -f 02_smoke_prod.sql 2>&1 | grep -E "SMOKE|ERROR"
 psql -v ON_ERROR_STOP=1 -f 04_smoke_auth.sql 2>&1 | grep -E "SMOKE|ERROR"

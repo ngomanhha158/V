@@ -1306,6 +1306,7 @@ export type Database = {
       }
       auth_dat_mat_khau: { Args: { p_mat_khau: string; p_uid: string }; Returns: boolean }
       auth_xoa_nguoi_dung: { Args: { p_uid: string }; Returns: boolean }
+      auth_huy_ma: { Args: { p_danh_tinh: string }; Returns: boolean }
       auth_don_ma: { Args: never; Returns: number }
 
       bql_gan_nhan_su: {

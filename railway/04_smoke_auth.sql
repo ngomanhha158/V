@@ -22,7 +22,8 @@ declare
   a_mail text := 'smoke.a@vbuilding.test';
   b_sdt  text := '+84900000199';
   c_mail text := 'smoke.c@vbuilding.test';
-  a_uid uuid; b_uid uuid; c_uid uuid; v_uid uuid;
+  d_mail text := 'smoke.d@vbuilding.test';
+  a_uid uuid; b_uid uuid; c_uid uuid; d_uid uuid; v_uid uuid;
   tt text; giay int; n int; i int;
 begin
   -- ── A. Tạo tài khoản ──────────────────────────────────────────────────────
@@ -181,7 +182,56 @@ begin
   b_uid := public.auth_tao_nguoi_dung('', b_sdt, 'Anh B smoke lan hai', 'matkhau-cua-b-2');
   if b_uid is null then raise exception 'FAIL I3: khong tao lai duoc bang so dien thoai cu'; end if;
 
-  raise notice 'SMOKE AUTH PASSED — mat khau, ma mot lan, chan do ma, quyen va don profiles deu dung';
+  -- ── J. Thư không gửi được thì TRẢ LẠI suất mã ────────────────────────────
+  -- auth_gui_ma lưu mã trước, Node gửi thư sau. Thư hỏng mà không trả lại suất
+  -- thì lần bấm kế tiếp nhận câu "vừa gửi rồi, chờ 8 phút" — một câu trả lời
+  -- SAI về nguyên nhân, dắt người đi sửa sang nhầm hướng đúng lúc đang có sự cố.
+  d_uid := public.auth_tao_nguoi_dung(d_mail, '', 'Anh D smoke', 'mk-cua-d-1');
+
+  -- Một mã CŨ, xin từ 5 phút trước, vẫn còn hạn. Có nó thì mới kiểm được điều
+  -- quan trọng nhất: hủy phải chỉ giết mã vừa tạo, không đụng mã người ta đang
+  -- cầm trong tay từ lá thư đến chậm.
+  insert into auth.ma_dang_nhap (user_id, ma_hash, het_han_luc, tao_luc)
+  values (d_uid, crypt('111111', gen_salt('bf', 10)),
+          now() + interval '5 minutes', now() - interval '5 minutes');
+
+  select g.trang_thai into tt from public.auth_gui_ma(d_mail, '222222') g;
+  if tt <> 'ok' then raise exception 'FAIL J1: khong gui duoc ma moi, tra %', tt; end if;
+
+  if not public.auth_huy_ma(d_mail) then
+    raise exception 'FAIL J2: khong huy duoc ma vua tao';
+  end if;
+
+  select count(*) into n from auth.ma_dang_nhap
+   where user_id = d_uid and dung_luc is null and het_han_luc > now();
+  if n <> 1 then raise exception 'FAIL J3: sau khi huy con % ma song, phai con dung 1 (ma cu)', n; end if;
+
+  -- XÓA hẳn, không phải đánh dấu đã dùng. Đánh dấu thì hạn 60 giây vẫn tính
+  -- theo tao_luc của nó, và câu trả lời sai ("vừa gửi rồi, chờ 60 giây") vẫn
+  -- còn nguyên — tức là chưa sửa được gì.
+  select count(*) into n from auth.ma_dang_nhap where user_id = d_uid;
+  if n <> 1 then raise exception 'FAIL J3b: con % dong, ma huy phai bi XOA chu khong phai danh dau', n; end if;
+
+  -- Và vì thế gửi lại được NGAY, không vướng hạn 60 giây của lần vừa hỏng.
+  select g.trang_thai into tt from public.auth_gui_ma(d_mail, '333333') g;
+  if tt <> 'ok' then
+    raise exception 'FAIL J3c: sau khi huy van bi chan boi han 60 giay, tra % — nguoi dung se nhan cau tra loi sai ve nguyen nhan', tt;
+  end if;
+  if not public.auth_huy_ma(d_mail) then raise exception 'FAIL J3d: khong don duoc ma vua tao them'; end if;
+
+  select k.trang_thai into tt from public.auth_kiem_ma(d_mail, '222222') k;
+  if tt = 'ok' then raise exception 'FAIL J4: ma da huy van dang nhap duoc'; end if;
+
+  select k.trang_thai into tt from public.auth_kiem_ma(d_mail, '111111') k;
+  if tt <> 'ok' then raise exception 'FAIL J5: huy nham ca ma CU, tra %', tt; end if;
+
+  -- Không còn mã nào để hủy, và địa chỉ không tồn tại: trả false chứ không văng.
+  if public.auth_huy_ma(d_mail) then raise exception 'FAIL J6: huy duoc trong khi khong con ma nao'; end if;
+  if public.auth_huy_ma('khong-ai@vbuilding.test') then
+    raise exception 'FAIL J7: huy duoc ma cua mot dia chi khong ton tai';
+  end if;
+
+  raise notice 'SMOKE AUTH PASSED — mat khau, ma mot lan, chan do ma, quyen, don profiles va tra lai suat khi thu hong deu dung';
 end
 $smoke$;
 

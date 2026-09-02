@@ -5,6 +5,13 @@ service: Postgres, PostgREST, và app Next.js. Dựng theo `railway/GD1-runbook.
 
 Không phải kế hoạch — là những gì đã kiểm và những gì còn thiếu.
 
+> **Áp bất kỳ file `.sql` nào, kể cả sau này, thì phải chạy tiếp một câu:**
+> `psql -c "notify pgrst, 'reload schema'"`
+>
+> PostgREST đọc danh mục bảng và hàm **một lần lúc khởi động** rồi giữ trong bộ
+> nhớ. Thêm hàm mới mà không bảo nó nạp lại thì nó trả **404 cho đúng thứ vừa
+> tạo** — và 404 nhìn giống hệt "gõ sai tên hàm", nên rất dễ đi tìm nhầm chỗ.
+
 ## Đã sẵn sàng
 
 | Hạng mục | Trạng thái |
