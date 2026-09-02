@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { GopYDemo } from './gop-y-demo'
 import { BANG_TIN } from '@/lib/demo/data'
 import { Card, PageHead, Pill, cx } from '@/components/ui'
 import { IcCanh, IcSach } from '@/components/icons'
@@ -25,7 +26,7 @@ export default function DemoBangTin() {
       )}
 
       <div className="space-y-3">
-        {BANG_TIN.map((a) => (
+        {BANG_TIN.map((a, i) => (
           <Card key={a.id} className={cx(a.is_urgent && 'border-bad-line')}>
             <div className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -52,6 +53,7 @@ export default function DemoBangTin() {
                   </span>
                 </Link>
               )}
+              {i === 0 && <GopYDemo />}
             </div>
           </Card>
         ))}

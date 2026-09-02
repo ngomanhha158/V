@@ -1,10 +1,11 @@
 /**
- * Chuẩn hóa số điện thoại Việt Nam về E.164 (+84…) cho Supabase Auth.
+ * Chuẩn hóa số điện thoại Việt Nam về E.164 (+84…) trước khi lưu vào auth.users.
  *
  * Người dùng gõ số điện thoại theo đủ kiểu: có dấu cách, có dấu chấm, có ngoặc
  * đơn mã vùng, có +84, có 84 mà thiếu dấu cộng, có số 0 đầu. Ném thẳng chuỗi
- * thô vào Supabase là nó từ chối, mà thông báo lỗi thì mù mờ — cư dân sẽ nghĩ
- * app hỏng chứ không nghĩ mình gõ thừa dấu cách.
+ * thô vào database là dính ràng buộc unique theo đúng chuỗi đã gõ: cùng một
+ * người, gõ hai kiểu, thành hai tài khoản. Chuẩn hóa ở một chỗ duy nhất thì
+ * không có chỗ nào để lệch.
  *
  * Trả về null nếu không ra được số hợp lệ, để nơi gọi tự quyết cách báo lỗi.
  */
@@ -29,8 +30,8 @@ export function toE164VN(input: string): string | null {
   }
 
   // Đầu số di động VN sau khi bỏ 0/84 dài đúng 9 chữ số và bắt đầu bằng 3,5,7,8,9.
-  // Số cố định (24, 28…) không nhận OTP nên cũng không cho qua — chặn ở đây tốt
-  // hơn là để Supabase gửi tin nhắn vào hư không rồi tính tiền.
+  // Số cố định (24, 28…) không nhận tin nhắn nên cũng không cho qua — chặn ở
+  // đây tốt hơn là gửi tin nhắn vào hư không rồi bị tính tiền.
   if (!/^[35789]\d{8}$/.test(than)) return null
   return '+84' + than
 }

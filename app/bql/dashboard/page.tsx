@@ -1,11 +1,11 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import {
   Card, CardHead, Chip, Hop, PageHead, Stat, Trong, cx, ngayVN, soVN, vnd, vndGon,
 } from '@/components/ui'
 import { BangThang, ChuThichThu, CotThu, DuongSLA, type ThangKPI } from '@/components/chart'
 import { KY, khoangNgay, laKy, type KyKey } from '@/lib/ky'
-import type { Database } from '@/lib/supabase/database.types'
+import type { Database } from '@/lib/db/database.types'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,16 +36,16 @@ export default async function Dashboard({
   const ky: KyKey = laKy(sp.ky) ? sp.ky : 'thang-nay'
   const { tu, den } = khoangNgay(ky)
 
-  const supabase = await createClient()
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const db = await createClient()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
   const [{ data: tongRows, error: loiTong }, { data: thangRows, error: loiThang }] =
     await Promise.all([
-      supabase.rpc('bql_dashboard', { p_project: project.id, p_tu: tu, p_den: den }),
-      supabase.rpc('bql_dashboard_thang', { p_project: project.id, p_so_thang: 6 }),
+      db.rpc('bql_dashboard', { p_project: project.id, p_tu: tu, p_den: den }),
+      db.rpc('bql_dashboard_thang', { p_project: project.id, p_so_thang: 6 }),
     ])
 
   // Không nuốt lỗi: dashboard toàn số 0 vì query hỏng trông y hệt một khu vận

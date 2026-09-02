@@ -1,28 +1,25 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { Card, CardHead, LinkButton, Pill, Trong } from '@/components/ui'
-import { IcHoaDon, IcPhai, IcThem, IcToaNha } from '@/components/icons'
+import { vaiCan } from '@/lib/vai-tro'
+import { IcHoaDon, IcPhai, IcThe, IcThem, IcToaNha } from '@/components/icons'
 
 export const dynamic = 'force-dynamic'
 
-const VAI: Record<string, string> = {
-  owner: 'Chủ hộ', authorized: 'Được ủy quyền', tenant: 'Người thuê', family: 'Thành viên',
-}
-
 export default async function Home() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const db = await createClient()
+  const { data: { user } } = await db.auth.getUser()
 
   // RLS lo phần lọc: chỉ trả về căn hộ user thực sự có quyền.
-  const { data: memberships } = await supabase
+  const { data: memberships } = await db
     .from('unit_memberships')
     .select('id, role, status, valid_to, units(id, code, floor_no, area_m2, buildings(name))')
     .eq('user_id', user?.id ?? '')
 
   // Chỉ để hiện/ẩn link. RLS mới là chốt chặn thật cho trang BQL.
-  const { data: project } = await supabase.from('projects').select('id').limit(1).maybeSingle()
+  const { data: project } = await db.from('projects').select('id').limit(1).maybeSingle()
   const { data: isStaff } = project
-    ? await supabase.rpc('is_staff', { p_project: project.id })
+    ? await db.rpc('is_staff', { p_project: project.id })
     : { data: false }
 
   const active = memberships?.filter((m) => m.status === 'active') ?? []
@@ -70,7 +67,7 @@ export default async function Home() {
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <Pill tone={m.role === 'owner' ? 'brand' : 'trung'} cham={false}>
-                      {VAI[m.role] ?? m.role}
+                      {vaiCan(m.role)}
                     </Pill>
                     <span className="text-faint"><IcPhai width={16} height={16} /></span>
                   </div>
@@ -94,6 +91,13 @@ export default async function Home() {
           <IcHoaDon width={16} height={16} /> Xem hóa đơn
         </LinkButton>
       </div>
+
+      {/* Thẻ cư dân ở đây chứ không thêm vào thanh tab dưới: năm ô đó đã đầy,
+          và thêm ô thứ sáu là bốn ô kia hẹp lại cho tất cả mọi người. Chỗ này
+          là màn cư dân mở đầu tiên khi tới cửa, một chạm là ra thẻ. */}
+      <LinkButton href="/the" dang="phu" className="h-11 w-full">
+        <IcThe width={16} height={16} /> Thẻ cư dân
+      </LinkButton>
 
       {/* Duyệt thành viên nằm ở đây chứ không ở thanh tab dưới: phần lớn cư
           dân không bao giờ duyệt ai, chỉ chủ hộ mới cần và chỉ khi có người

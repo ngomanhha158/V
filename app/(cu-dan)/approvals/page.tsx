@@ -1,17 +1,14 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { decide } from './actions'
 import { Button, Card, Field, Input, PageHead, Pill, Trong, ngayVN } from '@/components/ui'
+import { vaiCan } from '@/lib/vai-tro'
 import { IcNguoi } from '@/components/icons'
 
 export const dynamic = 'force-dynamic'
 
-const VAI: Record<string, string> = {
-  owner: 'Chủ hộ', authorized: 'Được ủy quyền', tenant: 'Người thuê', family: 'Thành viên',
-}
-
 export default async function Approvals() {
-  const supabase = await createClient()
-  const { data: pending } = await supabase
+  const db = await createClient()
+  const { data: pending } = await db
     .from('unit_memberships')
     // Phải chỉ đích danh FK: unit_memberships có 2 đường sang profiles
     // (user_id và approved_by). Để trống thì PostgREST không đoán được và query lỗi.
@@ -52,7 +49,7 @@ export default async function Approvals() {
                       {m.profiles?.phone ?? 'Chưa có số điện thoại'}
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                      <Pill tone="brand" cham={false}>{VAI[m.role] ?? m.role}</Pill>
+                      <Pill tone="brand" cham={false}>{vaiCan(m.role)}</Pill>
                       <span className="text-[0.75rem] text-faint">
                         xin vào {m.units?.code} · {ngayVN(String(m.created_at))}
                       </span>

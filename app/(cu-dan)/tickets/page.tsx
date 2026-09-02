@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { Card, LinkButton, PageHead, Pill, Trong, cx, ngayVN } from '@/components/ui'
 import { IcPhai, IcThem } from '@/components/icons'
 
@@ -31,9 +31,9 @@ export function Sao({ n }: { n: number }) {
 }
 
 export default async function Tickets() {
-  const supabase = await createClient()
+  const db = await createClient()
   // RLS lo phần lọc: chỉ ticket của căn mình, hoặc toàn dự án nếu là BQL.
-  const { data: tickets } = await supabase
+  const { data: tickets } = await db
     .from('tickets')
     .select('id, title, category, priority, status, created_at, sla_resolve_due, resolved_at, rating, units(code)')
     .order('created_at', { ascending: false })

@@ -1,64 +1,59 @@
-import test from 'node:test'
+import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { dichLoiAuth } from './auth-loi.ts'
+import { doiCho, loiDangNhap, type TrangThai } from './auth-loi.ts'
 
-test('hết lượt gửi thư: nói rõ là lỗi HỆ THỐNG, không phải người dùng nhập sai', () => {
-  const a = dichLoiAuth({ code: 'over_email_send_rate_limit', message: 'Email rate limit exceeded' })
-  assert.match(a, /giới hạn của hệ thống/)
-  assert.match(a, /không phải do bạn/)
-  // Phải có việc để làm, không chỉ mô tả sự cố
-  assert.match(a, /một giờ|ban quản lý/)
-  // Khớp cả khi supabase-js cũ không trả code
-  assert.equal(dichLoiAuth({ message: 'Email rate limit exceeded' }), a)
+// Mọi trạng thái mà railway/03_auth.sql và lib/db/dang-nhap.ts có thể trả về.
+// Danh sách này là bản hợp đồng giữa hai bên; thêm một bên mà quên bên kia là
+// người dùng nhận đúng cái chuỗi mã máy.
+const HET: TrangThai[] = [
+  'cho', 'sai', 'het_han', 'qua_nhieu', 'sai_mat_khau', 'chua_dat_mat_khau',
+  'khong_gui_duoc', 'chua_co_sms', 'mang', 'la',
+]
+
+test('mọi trạng thái đều có câu tiếng Việt riêng, không ai rơi vào câu chung', () => {
+  const chung = loiDangNhap('la')
+  for (const tt of HET) {
+    const c = loiDangNhap(tt, 47)
+    assert.ok(c.length > 20, `${tt} quá ngắn: ${c}`)
+    assert.doesNotMatch(c, /[a-z]_[a-z]/, `${tt} lộ mã máy ra giao diện: ${c}`)
+    if (tt !== 'la') assert.notEqual(c, chung, `${tt} rơi vào câu chung`)
+  }
 })
 
-test('thời gian chờ giữa hai lần gửi: lấy ra đúng số giây', () => {
-  assert.match(
-    dichLoiAuth({ message: 'For security purposes, you can only request this after 47 seconds.' }),
-    /chờ 47 giây/,
-  )
-  assert.match(
-    dichLoiAuth({ message: 'you can only request this after 9 second' }),
-    /chờ 9 giây/,
-  )
+test('trạng thái lạ không làm trắng màn, rơi về câu chung', () => {
+  assert.equal(loiDangNhap('mot_thu_gi_do_moi'), loiDangNhap('la'))
+  assert.equal(loiDangNhap(''), loiDangNhap('la'))
 })
 
-test('mã hết hạn khác với mã nhập sai — hai việc phải làm khác nhau', () => {
-  assert.match(dichLoiAuth({ code: 'otp_expired' }), /Gửi lại mã/)
-  assert.match(dichLoiAuth({ code: 'invalid_credentials' }), /Kiểm tra lại dãy số/)
+test('bị chặn thì nói ra còn bao lâu, không bắt đoán', () => {
+  assert.match(loiDangNhap('cho', 47), /47 giây/)
+  assert.match(loiDangNhap('cho', 300), /5 phút/)
 })
 
-test('sai mật khẩu không được nói thành "kiểm tra dãy số trong thư"', () => {
-  const mk = dichLoiAuth({ code: 'invalid_credentials' }, 'matkhau')
-  assert.match(mk, /mật khẩu/)
-  assert.doesNotMatch(mk, /dãy số|trong thư/)
-  // Người chưa từng đặt mật khẩu phải biết đường quay lại
-  assert.match(mk, /bằng mã/)
-  // Bối cảnh mặc định vẫn là OTP, không đổi hành vi của các chỗ gọi cũ
-  assert.equal(dichLoiAuth({ code: 'invalid_credentials' }),
-               dichLoiAuth({ code: 'invalid_credentials' }, 'otp'))
+test('thời gian chờ làm tròn LÊN', () => {
+  // Nói "2 phút" cho 121 giây rồi để người ta bấm ở giây thứ 120 và lại bị
+  // chặn là hỏng đúng lúc họ đã chịu khó chờ.
+  assert.equal(doiCho(121), '3 phút')
+  assert.equal(doiCho(0.2), '1 giây')
+  assert.equal(doiCho(90), '90 giây')
+  assert.equal(doiCho(91), '2 phút')
 })
 
-test('email chưa xác nhận: chỉ đúng chỗ tắc, không đổ cho mật khẩu', () => {
-  const a = dichLoiAuth({ code: 'email_not_confirmed' }, 'matkhau')
-  assert.match(a, /chưa xác nhận/)
-  assert.match(a, /bằng mã/)
+test('gõ sai mã và sai mật khẩu phải khuyên khác nhau', () => {
+  // Cùng là "sai" nhưng bảo người đang gõ mật khẩu đi "kiểm tra lại dãy số
+  // trong thư" là vừa sai vừa bắt họ đi tìm một bức thư không tồn tại.
+  assert.notEqual(loiDangNhap('sai'), loiDangNhap('sai_mat_khau'))
+  assert.match(loiDangNhap('sai'), /thư/)
+  assert.match(loiDangNhap('sai_mat_khau'), /mật khẩu/)
 })
 
-test('hết lượt gửi thư thì chỉ luôn lối thoát bằng mật khẩu', () => {
-  assert.match(dichLoiAuth({ code: 'over_email_send_rate_limit' }), /mật khẩu/)
+test('bị khóa vì dò thì chỉ ra lối khác, không để người ta kẹt', () => {
+  assert.match(loiDangNhap('qua_nhieu'), /mật khẩu/)
+  assert.match(loiDangNhap('khong_gui_duoc'), /mật khẩu/)
+  assert.match(loiDangNhap('chua_co_sms'), /mật khẩu|email/)
 })
 
-test('lỗi mạng của trình duyệt không đổ cho máy chủ', () => {
-  assert.match(dichLoiAuth({ message: 'Failed to fetch' }), /Kiểm tra mạng/)
-})
-
-test('lỗi lạ thì trả NGUYÊN VĂN, không nuốt thành "có lỗi xảy ra"', () => {
-  const la = 'Something entirely new from Supabase'
-  assert.equal(dichLoiAuth({ message: la }), la)
-})
-
-test('không có lỗi thì không vỡ', () => {
-  assert.match(dichLoiAuth(null), /lỗi/)
-  assert.match(dichLoiAuth({}), /lỗi/)
+test('lỗi hệ thống nói rõ là lỗi hệ thống', () => {
+  // Người ta mặc định cho là mình gõ sai. Không nói ra thì họ gõ lại mãi.
+  assert.match(loiDangNhap('khong_gui_duoc'), /không phải do bạn/)
 })

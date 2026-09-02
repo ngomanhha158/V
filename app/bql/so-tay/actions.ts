@@ -1,6 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 
 export type SoTayState = { error?: string; ok?: string }
 
@@ -10,8 +10,8 @@ const rong = (v: FormDataEntryValue | null) => {
 }
 
 export async function luuMuc(_prev: SoTayState, form: FormData): Promise<SoTayState> {
-  const supabase = await createClient()
-  const { data: project } = await supabase.from('projects').select('id').limit(1).maybeSingle()
+  const db = await createClient()
+  const { data: project } = await db.from('projects').select('id').limit(1).maybeSingle()
   if (!project) return { error: 'Chưa có dự án nào.' }
 
   const section = rong(form.get('section'))
@@ -25,15 +25,15 @@ export async function luuMuc(_prev: SoTayState, form: FormData): Promise<SoTaySt
   if (id) {
     // Sửa mục cũ: tăng version. Nội quy là thứ cư dân viện dẫn khi tranh cãi,
     // nên phải biết mình đang đọc bản thứ mấy.
-    const { data: cu } = await supabase
+    const { data: cu } = await db
       .from('documents').select('version').eq('id', id).maybeSingle()
-    const { error } = await supabase
+    const { error } = await db
       .from('documents')
       .update({ section, title, body, version: (cu?.version ?? 1) + 1 })
       .eq('id', id)
     if (error) return { error: error.message }
   } else {
-    const { error } = await supabase
+    const { error } = await db
       .from('documents')
       .insert({ project_id: project.id, section, title, body })
     if (error) return { error: error.message }
@@ -45,10 +45,10 @@ export async function luuMuc(_prev: SoTayState, form: FormData): Promise<SoTaySt
 }
 
 export async function xoaMuc(id: string) {
-  const supabase = await createClient()
+  const db = await createClient()
   // announcements.document_id là ON DELETE SET NULL, nên xóa nội quy không làm
   // hỏng thông báo cũ — nó chỉ mất nút trích dẫn.
-  const { error } = await supabase.from('documents').delete().eq('id', id)
+  const { error } = await db.from('documents').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/bql/so-tay')
   revalidatePath('/so-tay')

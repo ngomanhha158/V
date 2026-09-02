@@ -2,9 +2,10 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { NavDoc } from './nav-link'
 import { ThemeToggle } from './theme-toggle'
+import { NutRa } from './nut-ra'
 import {
-  IcBieuDo, IcCheck, IcDoiSoat, IcHoaDon, IcLoa, IcNguoi, IcNha, IcNhap, IcQR, IcSach,
-  IcTien, IcToaNha, IcYeuCau,
+  IcBieuDo, IcCanHo, IcCheck, IcDoiSoat, IcHoaDon, IcLich, IcLoa, IcNguoi, IcNha, IcNhap, IcQR,
+  IcSach, IcSo, IcTaiVe, IcThe, IcTien, IcToaNha, IcXe, IcYeuCau,
 } from '@/components/icons'
 
 /** Nhãn nhóm. Ẩn trên điện thoại: hàng ngang không diễn đạt được phân cấp,
@@ -28,20 +29,28 @@ function Muc({ nhan }: { nhan: string }) {
 export function BqlShell({
   children, base = '', duAn,
 }: { children: ReactNode; base?: string; duAn?: string }) {
+  // Bản demo không có phiên nào để thoát ra — xem ghi chú ở ResidentShell.
+  const laThat = base === ''
   const nav = (
     <>
       <Muc nhan="Vận hành" />
       <NavDoc href={`${base}/bql/dashboard`} icon={<IcBieuDo />}>Sức khỏe vận hành</NavDoc>
       <NavDoc href={`${base}/bql/tickets`} icon={<IcYeuCau />}>Điều phối yêu cầu</NavDoc>
+      <NavDoc href={`${base}/bql/sla`} icon={<IcCheck />}>Cam kết thời gian</NavDoc>
+      <NavDoc href={`${base}/bql/bao-tri`} icon={<IcLich />}>Bảo trì định kỳ</NavDoc>
+      <NavDoc href={`${base}/quet`} icon={<IcThe />}>Quét thẻ cư dân</NavDoc>
+      <NavDoc href={`${base}/bql/bai-xe`} icon={<IcXe />}>Chỗ đỗ xe</NavDoc>
 
       <Muc nhan="Truyền thông" />
       <NavDoc href={`${base}/bql/bang-tin`} icon={<IcLoa />}>Bảng tin</NavDoc>
       <NavDoc href={`${base}/bql/so-tay`} icon={<IcSach />}>Sổ tay cư dân</NavDoc>
 
       <Muc nhan="Tài chính" />
+      <NavDoc href={`${base}/bql/bieu-phi`} icon={<IcTien />}>Biểu phí</NavDoc>
       <NavDoc href={`${base}/bql/billing`} icon={<IcHoaDon />}>Hóa đơn</NavDoc>
       <NavDoc href={`${base}/bql/cong-no`} icon={<IcTien />}>Công nợ</NavDoc>
       <NavDoc href={`${base}/bql/doi-soat`} icon={<IcDoiSoat />}>Đối soát tiền về</NavDoc>
+      <NavDoc href={`${base}/bql/xuat`} icon={<IcTaiVe />}>Xuất Excel</NavDoc>
 
       {/* Tòa nhà và import là việc DỰNG hệ thống, làm vài lần rồi thôi. Để
           chúng cạnh việc trực ban hằng ngày là bắt người trực lướt qua mỗi lần. */}
@@ -49,9 +58,12 @@ export function BqlShell({
       <NavDoc href={`${base}/bql/duyet-chu-ho`} icon={<IcNguoi />}>Duyệt chủ hộ</NavDoc>
       <NavDoc href={`${base}/bql/go-live`} icon={<IcCheck />}>Sẵn sàng go-live</NavDoc>
       <NavDoc href={`${base}/bql/poster`} icon={<IcQR />}>Poster QR</NavDoc>
+      <NavDoc href={`${base}/bql/nhat-ky`} icon={<IcSo />}>Nhật ký kiểm toán</NavDoc>
 
       <Muc nhan="Dữ liệu" />
-      <NavDoc href={`${base}/bql`} icon={<IcToaNha />} chinhXac>Tòa nhà & căn hộ</NavDoc>
+      <NavDoc href={`${base}/bql/nguoi-dung`} icon={<IcNguoi />}>Người dùng & phân quyền</NavDoc>
+      <NavDoc href={`${base}/bql`} icon={<IcToaNha />} chinhXac>Tòa nhà</NavDoc>
+      <NavDoc href={`${base}/bql/can-ho`} icon={<IcCanHo />}>Căn hộ & diện tích</NavDoc>
       <NavDoc href={`${base}/bql/import`} icon={<IcNhap />}>Nhập từ Excel</NavDoc>
       <NavDoc href={base || '/'} icon={<IcNha />} chinhXac>Về màn cư dân</NavDoc>
     </>
@@ -91,6 +103,7 @@ export function BqlShell({
               <span className="block truncate text-faint">Đang trực</span>
             </span>
             <ThemeToggle />
+            {laThat && <NutRa />}
           </div>
         </div>
       </aside>

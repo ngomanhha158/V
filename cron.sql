@@ -1,6 +1,24 @@
--- Lịch job nền (pg_cron). CHỈ chạy trên Supabase — Postgres thuần không có
--- pg_cron, nên file này không nằm trong npm run verify. Bản thân các hàm được
--- test ở test_jobs.sql và test_tickets.sql.
+-- Lịch job nền (pg_cron). File này không nằm trong npm run verify vì Postgres
+-- thuần không có pg_cron. Bản thân các hàm được test ở test_jobs.sql và
+-- test_tickets.sql.
+--
+-- TRÊN RAILWAY KHÔNG DÙNG FILE NÀY. Ảnh Postgres mặc định không có pg_cron;
+-- chạy file này ở đó sẽ đỏ ngay câu `create extension`. Đường đang dùng là
+-- Railway Cron Service gọi POST /api/cron/<việc> kèm header x-cron-key.
+--
+-- Giữ file lại vì nó là bản mô tả duy nhất của "job nào, mấy giờ, vì sao giờ
+-- đó" — và vì trên một Postgres CÓ pg_cron thì nó vẫn là cách gọn nhất. Hai
+-- bên phải khớp nhau; bảng đối chiếu:
+--
+--   expire-memberships        -> /api/cron/thu-hoi-thanh-vien   5 17 * * *
+--   escalate-overdue-tickets  -> /api/cron/leo-thang-ticket     */5 * * * *
+--   remind-unpaid-invoices    -> /api/cron/nhac-no              0 1 * * *
+--   mo-ky-bao-tri             -> /api/cron/mo-ky-bao-tri        0 0 * * *
+--   don-ma-dang-nhap          -> /api/cron/don-ma-dang-nhap     0 20 * * *
+--
+-- Thêm job ở đây mà quên thêm lịch bên Railway thì nó KHÔNG chạy, và không có
+-- gì báo — đó là lý do bảng đối chiếu nằm ngay đầu file chứ không nằm trong
+-- một trang tài liệu nào khác.
 --
 -- BẪY MÚI GIỜ: pg_cron trên Supabase chạy theo cron.timezone, mặc định GMT.
 -- Kiểm tra trước khi sửa lịch:  show cron.timezone;
@@ -32,6 +50,26 @@ select cron.schedule(
   'remind-unpaid-invoices',
   '0 1 * * *',
   $job$ select public.remind_unpaid_invoices() $job$
+);
+
+-- Bảo trì định kỳ — mở lần bảo trì cho kế hoạch đã tới cửa sổ nhắc.
+-- 1 lần/ngày lúc 07:00 giờ VN = 00:00 UTC. Trước giờ làm việc để lúc kỹ thuật
+-- vào ca là danh sách đã sẵn trên màn.
+-- Hàm chống trùng bằng unique (plan_id, han) nên chạy lại không hại gì.
+select cron.schedule(
+  'mo-ky-bao-tri',
+  '0 0 * * *',
+  $job$ select public.mo_ky_bao_tri() $job$
+);
+
+-- Dọn mã đăng nhập cũ — 1 lần/ngày lúc 03:00 giờ VN = 20:00 UTC hôm trước.
+-- Không có job này thì auth.ma_dang_nhap chỉ lớn dần chứ không sai gì; để đây
+-- vì một bảng chỉ-lớn-dần trên một hệ thống chạy nhiều năm cuối cùng vẫn thành
+-- việc của ai đó.
+select cron.schedule(
+  'don-ma-dang-nhap',
+  '0 20 * * *',
+  $job$ select public.auth_don_ma() $job$
 );
 
 -- Gỡ lịch:            select cron.unschedule('expire-memberships');

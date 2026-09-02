@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import QRCode from 'qrcode'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { buildVietQr, paymentRef } from '@/lib/vietqr'
 import { bankConfig } from '@/lib/bank'
 import { Card, CardHead, Hop, PageHead, Pill, cx, ngayVN, vnd } from '@/components/ui'
@@ -11,16 +11,16 @@ export const dynamic = 'force-dynamic'
 
 export default async function InvoiceDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const supabase = await createClient()
+  const db = await createClient()
 
-  const { data: inv } = await supabase
+  const { data: inv } = await db
     .from('invoices')
     .select('id, period, total_amount, paid_amount, status, due_date, units(code)')
     .eq('id', id)
     .maybeSingle()
   if (!inv) notFound()
 
-  const { data: lines } = await supabase
+  const { data: lines } = await db
     .from('invoice_lines')
     .select('id, description, quantity, unit_price, amount')
     .eq('invoice_id', id)

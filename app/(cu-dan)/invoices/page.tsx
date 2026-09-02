@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { Card, PageHead, Pill, Stat, Trong, cx, ngayVN, vnd } from '@/components/ui'
 import { IcPhai } from '@/components/icons'
 
@@ -13,10 +13,10 @@ const TT: Record<string, { nhan: string; tone: 'trung' | 'canh' | 'tot' }> = {
 }
 
 export default async function Invoices() {
-  const supabase = await createClient()
+  const db = await createClient()
   // RLS lo phần lọc: chỉ hóa đơn căn mình, và family không thấy nếu chủ hộ
   // chưa bật can_view_finance.
-  const { data: invoices } = await supabase
+  const { data: invoices } = await db
     .from('invoices')
     .select('id, period, total_amount, paid_amount, status, due_date, units(code)')
     .neq('status', 'draft')          // hóa đơn nháp là việc nội bộ của BQL

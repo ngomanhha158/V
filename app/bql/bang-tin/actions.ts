@@ -1,6 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 
 export type BangTinState = { error?: string; ok?: string }
 
@@ -13,11 +13,11 @@ const rong = (v: FormDataEntryValue | null) => {
 export async function dangThongBao(
   _prev: BangTinState, form: FormData,
 ): Promise<BangTinState> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const db = await createClient()
+  const { data: { user } } = await db.auth.getUser()
   if (!user) return { error: 'Chưa đăng nhập.' }
 
-  const { data: project } = await supabase.from('projects').select('id').limit(1).maybeSingle()
+  const { data: project } = await db.from('projects').select('id').limit(1).maybeSingle()
   if (!project) return { error: 'Chưa có dự án nào.' }
 
   const title = rong(form.get('title'))
@@ -42,7 +42,7 @@ export async function dangThongBao(
   const phatHanhNgay = form.get('phat_hanh') === '1'
 
   // RLS (announcement_staff_write) là chốt chặn: không phải BQL thì insert bị từ chối.
-  const { error } = await supabase.from('announcements').insert({
+  const { error } = await db.from('announcements').insert({
     project_id: project.id,
     building_id: unit ? null : building,   // nhắm 1 căn thì tòa/tầng thừa
     floor_no: unit ? null : floor,
@@ -62,8 +62,8 @@ export async function dangThongBao(
 }
 
 export async function phatHanh(id: string) {
-  const supabase = await createClient()
-  const { error } = await supabase
+  const db = await createClient()
+  const { error } = await db
     .from('announcements')
     .update({ published_at: new Date().toISOString() })
     .eq('id', id)
@@ -73,9 +73,87 @@ export async function phatHanh(id: string) {
 }
 
 export async function xoaThongBao(id: string) {
-  const supabase = await createClient()
-  const { error } = await supabase.from('announcements').delete().eq('id', id)
+  const db = await createClient()
+  const { error } = await db.from('announcements').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/bql/bang-tin')
   revalidatePath('/bang-tin')
+}
+
+// ─────────────────── Thăm dò và kiểm duyệt bình luận ───────────────────
+
+export type GopYState = { error?: string; ok?: string }
+
+function dichLoiGopY(code: string | undefined, msg: string): string {
+  if (code === '42501') return 'Bạn không có quyền làm việc này trên khu của mình.'
+  if (code === '23505') return 'Thông báo này đã có một cuộc thăm dò rồi.'
+  if (code === '23514') return 'Cần từ 2 tới 8 lựa chọn, mỗi lựa chọn không để trống.'
+  if (code === '42P01') {
+    return 'Phần thăm dò chưa có trên database. Chạy lại schema.sql rồi thử lại.'
+  }
+  return msg
+}
+
+export async function themThamDo(_prev: GopYState, formData: FormData): Promise<GopYState> {
+  const tb = String(formData.get('tb') ?? '')
+  const cauHoi = String(formData.get('cau_hoi') ?? '').trim()
+  // Mỗi dòng một lựa chọn: người ta gõ danh sách theo dòng, không gõ theo dấu
+  // phẩy — mà lựa chọn thì hay có dấu phẩy bên trong.
+  const luaChon = String(formData.get('lua_chon') ?? '')
+    .split('\n').map((s) => s.trim()).filter(Boolean)
+  const kin = formData.get('kin') === '1'
+  const dong = String(formData.get('dong_luc') ?? '').trim()
+
+  if (!tb) return { error: 'Thiếu thông báo.' }
+  if (!cauHoi) return { error: 'Chưa nhập câu hỏi.' }
+  if (luaChon.length < 2) return { error: 'Cần ít nhất 2 lựa chọn, mỗi lựa chọn một dòng.' }
+  if (luaChon.length > 8) return { error: `Tối đa 8 lựa chọn, đang có ${luaChon.length}.` }
+  if (new Set(luaChon).size !== luaChon.length) {
+    return { error: 'Có hai lựa chọn trùng chữ — người bỏ phiếu sẽ không phân biệt được.' }
+  }
+
+  const db = await createClient()
+  const { error } = await db.from('announcement_polls').insert({
+    announcement_id: tb, cau_hoi: cauHoi, lua_chon: luaChon, kin,
+    dong_luc: dong ? new Date(dong).toISOString() : null,
+  })
+  if (error) return { error: dichLoiGopY(error.code, `Không tạo được: ${error.message}`) }
+
+  revalidatePath('/bql/bang-tin')
+  revalidatePath('/bang-tin')
+  return {
+    ok: kin
+      ? 'Đã tạo. Kết quả giấu cho tới khi đóng, nên người bỏ sau không bị số đang chạy kéo theo.'
+      : 'Đã tạo. Kết quả hiện ngay cho cư dân.',
+  }
+}
+
+/**
+ * Ẩn hoặc bỏ ẩn một bình luận.
+ *
+ * ẨN chứ không XÓA, và không có nút xóa ở đâu cả: xóa được là BQL xóa sạch lời
+ * chê mà không để lại dấu. Ẩn thì dòng vẫn còn, nhật ký kiểm toán vẫn ghi ai
+ * ẩn lúc nào, và màn cư dân vẫn hiện "một ý kiến đã được ẩn".
+ */
+export async function doiAnBinhLuan(_prev: GopYState, formData: FormData): Promise<GopYState> {
+  const id = Number(formData.get('id'))
+  const an = formData.get('an') === '1'
+  const lyDo = String(formData.get('ly_do') ?? '').trim()
+  if (!Number.isInteger(id)) return { error: 'Thiếu bình luận.' }
+  if (an && !lyDo) return { error: 'Ghi lý do ẩn — để sau này còn giải trình được.' }
+
+  const db = await createClient()
+  const { data: { user } } = await db.auth.getUser()
+  if (!user) return { error: 'Phiên đăng nhập đã hết.' }
+
+  const { error } = await db.from('announcement_comments').update(
+    an
+      ? { an_luc: new Date().toISOString(), an_boi: user.id, an_ly_do: lyDo }
+      : { an_luc: null, an_boi: null, an_ly_do: null },
+  ).eq('id', id)
+  if (error) return { error: dichLoiGopY(error.code, `Không đổi được: ${error.message}`) }
+
+  revalidatePath('/bql/bang-tin')
+  revalidatePath('/bang-tin')
+  return { ok: an ? 'Đã ẩn khỏi màn cư dân. Dòng vẫn còn trong hệ thống.' : 'Đã hiện lại.' }
 }

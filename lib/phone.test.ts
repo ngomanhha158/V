@@ -22,7 +22,7 @@ test('đã ở dạng +84 hoặc 84 thì giữ nguyên phần thân', () => {
 
 test('+84 mà vẫn giữ số 0 thừa: +84 0901234567', () => {
   // Kiểu gõ rất hay gặp khi copy từ danh bạ rồi thêm mã nước bằng tay.
-  // Không xử lý thì ra +840901234567 — sai 1 chữ số, Supabase từ chối.
+  // Không xử lý thì ra +840901234567 — sai 1 chữ số, và đó là một tài khoản khác.
   assert.equal(toE164VN('+840901234567'), '+84901234567')
 })
 

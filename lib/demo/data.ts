@@ -1,12 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // DỮ LIỆU GIẢ CHO BẢN DEMO. Không phải dữ liệu thật, không đọc database.
 //
-// Toàn bộ thư mục app/demo chạy trên đúng file này — không import supabase,
-// không có service key, không có đường nào ra DB thật. Cố ý như vậy: bản demo
+// Toàn bộ thư mục app/demo chạy trên đúng file này — không import client
+// database, không có khóa ký nào, không có đường nào ra DB thật. Cố ý như vậy: bản demo
 // bỏ qua đăng nhập, nên nó tuyệt đối không được chạm vào dữ liệu thật.
 //
 // Đây là code VỨT ĐI sau khi chốt giao diện. Đừng dùng lại kiểu dữ liệu ở đây
-// cho app thật — kiểu thật sinh từ DB, nằm ở lib/supabase/database.types.ts.
+// cho app thật — kiểu thật sinh từ DB, nằm ở lib/db/database.types.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Ngày lệch n ngày so với hôm nay, dạng YYYY-MM-DD. */
@@ -476,4 +476,260 @@ export const CHO_DUYET_CHU_HO: YeuCauChuHo[] = [
   { membership_id: 'mb-3', unit_code: 'P2-08.05', building_code: 'P2',
     ho_ten: 'Phạm Hoàng Nam', dien_thoai: null, email: 'nam.pham@example.vn',
     xin_luc: ngayGio(1, 8) },
+]
+
+export type NguoiDungDemo = {
+  user_id: string
+  ho_ten: string
+  email: string | null
+  phone: string | null
+  vai_tro_bql: string[] | null
+  can_ho: string[] | null
+  tao_luc: string
+}
+
+// Nhân sự xếp trước, cư dân xếp sau — đúng thứ tự bql_danh_sach_nguoi_dung trả về.
+export const NGUOI_DUNG: NguoiDungDemo[] = [
+  { user_id: 'nd-1', ho_ten: 'Ngô Mạnh Hà', email: 'ha.ngo@example.vn', phone: '0901234567',
+    vai_tro_bql: ['bql_manager', 'bqt'], can_ho: null, tao_luc: ngayGio(96, 0) },
+  { user_id: 'nd-2', ho_ten: 'Đỗ Văn Thắng', email: null, phone: '0938776655',
+    vai_tro_bql: ['bql_staff'], can_ho: null, tao_luc: ngayGio(72, 0) },
+  { user_id: 'nd-3', ho_ten: 'Nguyễn Văn Cường', email: null, phone: '0977001122',
+    vai_tro_bql: ['security'], can_ho: null, tao_luc: ngayGio(60, 0) },
+  { user_id: 'nd-4', ho_ten: 'Vũ Đình Kỹ', email: 'ky.vu@example.vn', phone: '0966554433',
+    vai_tro_bql: ['technician'], can_ho: null, tao_luc: ngayGio(60, 0) },
+  { user_id: 'nd-5', ho_ten: 'Trần Thị Bích Ngọc', email: 'ngoc.tran@example.vn', phone: '0912004455',
+    vai_tro_bql: null, can_ho: ['P1-09.03 (owner)'], tao_luc: ngayGio(30, 0) },
+  { user_id: 'nd-6', ho_ten: 'Lê Quang Vinh', email: null, phone: '0987112233',
+    vai_tro_bql: null, can_ho: ['P2-06.06 (owner)'], tao_luc: ngayGio(24, 0) },
+  { user_id: 'nd-7', ho_ten: 'Phạm Hoàng Nam', email: 'nam.pham@example.vn', phone: null,
+    vai_tro_bql: null, can_ho: ['P2-08.05 (owner)', 'P3-02.01 (tenant)'], tao_luc: ngayGio(12, 0) },
+]
+
+export const CAN_CHUA_CO_CHU = [
+  { id: 'ct-1', nhan: 'P1-12.04' },
+  { id: 'ct-2', nhan: 'P2-03.07' },
+  { id: 'ct-3', nhan: 'P3-15.02' },
+]
+
+export type BieuPhiDemo = {
+  id: string
+  code: string
+  name: string
+  unit_price: number | null
+  calc_method: string
+}
+
+// Giá lấy quanh mức thường gặp ở chung cư Hà Nội/TP.HCM 2026 — đủ thật để nhìn
+// ra thành tiền có hợp lý không, nhưng vẫn là số bịa của bản demo.
+export const BIEU_PHI: BieuPhiDemo[] = [
+  { id: 'bp-1', code: 'QL',   name: 'Phí quản lý',        unit_price: 16500,  calc_method: 'per_m2' },
+  { id: 'bp-2', code: 'NUOC', name: 'Nước sinh hoạt',     unit_price: 8500,   calc_method: 'metered' },
+  { id: 'bp-3', code: 'XEMAY',name: 'Gửi xe máy',         unit_price: 90000,  calc_method: 'fixed' },
+  { id: 'bp-4', code: 'OTO',  name: 'Gửi ô tô',           unit_price: 1200000,calc_method: 'fixed' },
+  { id: 'bp-5', code: 'RAC',  name: 'Vệ sinh, thu gom rác', unit_price: 30000, calc_method: 'fixed' },
+]
+
+export type SlaDemo = {
+  id: string
+  category: string
+  priority: string
+  respond_mins: number
+  resolve_mins: number
+  escalate_to: string
+}
+
+// Hạn lấy quanh mức các khu vận hành tốt hay cam kết. Vẫn là số của bản demo —
+// hạn thật phải BQL ngồi chốt, vì đây là lời hứa với cư dân.
+export const SLA: SlaDemo[] = [
+  { id: 'sla-1', category: 'Thang máy', priority: 'urgent', respond_mins: 5, resolve_mins: 30, escalate_to: 'bql_manager' },
+  { id: 'sla-2', category: 'Thang máy', priority: 'normal', respond_mins: 30, resolve_mins: 240, escalate_to: 'technician' },
+  { id: 'sla-3', category: 'Mất nước', priority: 'high', respond_mins: 15, resolve_mins: 120, escalate_to: 'bql_manager' },
+  { id: 'sla-4', category: 'Điện, chiếu sáng', priority: 'normal', respond_mins: 60, resolve_mins: 480, escalate_to: 'technician' },
+  { id: 'sla-5', category: 'Điện, chiếu sáng', priority: 'low', respond_mins: 240, resolve_mins: 4320, escalate_to: 'technician' },
+  { id: 'sla-6', category: 'Vệ sinh', priority: 'normal', respond_mins: 120, resolve_mins: 1440, escalate_to: 'bql_staff' },
+  { id: 'sla-7', category: 'An ninh', priority: 'urgent', respond_mins: 3, resolve_mins: 60, escalate_to: 'security' },
+]
+
+export const SO_TICKET_THEO_DANH_MUC: Record<string, number> = {
+  'Thang máy': 14, 'Mất nước': 6, 'Điện, chiếu sáng': 23, 'Vệ sinh': 9, 'An ninh': 2,
+}
+
+export type CanHoDemo = {
+  id: string
+  code: string
+  toa: string
+  floor_no: number
+  area_m2: number | null
+  kind: string
+  state: string
+}
+
+/**
+ * Căn hộ của bản demo.
+ *
+ * Cố ý để một phần chưa có diện tích: màn thật sinh ra chính vì tình huống đó —
+ * khu đã nhập đủ căn nhưng chưa nhập diện tích, và phí theo m² lặng lẽ ra 0
+ * đồng. Bản demo mà căn nào cũng đủ diện tích thì giấu mất việc màn này làm.
+ */
+export const CAN_HO: CanHoDemo[] = [
+  { id: 'ch-1',  code: 'P1-08.01', toa: 'P1', floor_no: 8,  area_m2: 96.4, kind: 'apartment', state: 'owner_occupied' },
+  { id: 'ch-2',  code: 'P1-08.02', toa: 'P1', floor_no: 8,  area_m2: 62,   kind: 'apartment', state: 'rented' },
+  { id: 'ch-3',  code: 'P1-08.03', toa: 'P1', floor_no: 8,  area_m2: 62,   kind: 'apartment', state: 'owner_occupied' },
+  { id: 'ch-4',  code: 'P1-08.04', toa: 'P1', floor_no: 8,  area_m2: null, kind: 'apartment', state: 'vacant' },
+  { id: 'ch-5',  code: 'P1-10.01', toa: 'P1', floor_no: 10, area_m2: 96.4, kind: 'apartment', state: 'owner_occupied' },
+  { id: 'ch-6',  code: 'P1-10.02', toa: 'P1', floor_no: 10, area_m2: null, kind: 'apartment', state: 'rented' },
+  { id: 'ch-7',  code: 'P1-10.03', toa: 'P1', floor_no: 10, area_m2: null, kind: 'apartment', state: 'vacant' },
+  { id: 'ch-8',  code: 'P1-12.04', toa: 'P1', floor_no: 12, area_m2: null, kind: 'apartment', state: 'vacant' },
+  { id: 'ch-9',  code: 'P2-03.07', toa: 'P2', floor_no: 3,  area_m2: 78.5, kind: 'apartment', state: 'vacant' },
+  { id: 'ch-10', code: 'P2-08.05', toa: 'P2', floor_no: 8,  area_m2: 78.5, kind: 'apartment', state: 'owner_occupied' },
+  { id: 'ch-11', code: 'P2-08.06', toa: 'P2', floor_no: 8,  area_m2: null, kind: 'apartment', state: 'vacant' },
+  { id: 'ch-12', code: 'P2-01.01', toa: 'P2', floor_no: 1,  area_m2: 145,  kind: 'shophouse', state: 'rented' },
+  { id: 'ch-13', code: 'P3-02.01', toa: 'P3', floor_no: 2,  area_m2: null, kind: 'apartment', state: 'rented' },
+  { id: 'ch-14', code: 'P3-15.02', toa: 'P3', floor_no: 15, area_m2: null, kind: 'apartment', state: 'vacant' },
+  { id: 'ch-15', code: 'P3-25.01', toa: 'P3', floor_no: 25, area_m2: 210,  kind: 'penthouse', state: 'owner_occupied' },
+]
+
+export const TOA_NHA_DEMO = [
+  { code: 'P1', name: 'Tháp Sông' },
+  { code: 'P2', name: 'Tháp Vườn' },
+  { code: 'P3', name: 'Tháp Nắng' },
+]
+
+export type DongSoDemo = {
+  id: number
+  at: string
+  actor_id: string | null
+  actor_role: string
+  bang: string
+  ban_ghi: string
+  thao_tac: string
+  truoc: Record<string, unknown>
+  sau: Record<string, unknown>
+}
+
+/**
+ * Nhật ký kiểm toán của bản demo.
+ *
+ * Cố ý có đủ ba loại người ghi sổ: người thật, cron, và webhook ngân hàng —
+ * vì phân biệt được ba loại đó mới là phần khó của một sổ kiểm toán. Cũng cố ý
+ * có một dòng cột nhạy cảm bị ẩn, để thấy sổ vẫn ghi LÀ CÓ ĐỔI mà không chép
+ * nội dung sang.
+ */
+export const NHAT_KY: DongSoDemo[] = [
+  { id: 128, at: ngayGio(0, 3), actor_id: 'nd-1', actor_role: 'authenticated',
+    bang: 'fee_types', ban_ghi: '7f3a1c22', thao_tac: 'UPDATE',
+    truoc: { unit_price: 15000 }, sau: { unit_price: 16500 } },
+  { id: 127, at: ngayGio(0, 2), actor_id: null, actor_role: 'service_role',
+    bang: 'bank_transactions', ban_ghi: 'b1094e77', thao_tac: 'INSERT',
+    truoc: {}, sau: { amount: 2983500, trang_thai: 'chua_khop', raw_payload: '(đã ẩn)',
+                      content: 'NGUYEN VAN MINH chuyen tien thang 8' } },
+  { id: 126, at: ngayGio(1, 9), actor_id: 'nd-2', actor_role: 'authenticated',
+    bang: 'staff_assignments', ban_ghi: '3c8de401', thao_tac: 'UPDATE',
+    truoc: { is_active: true }, sau: { is_active: false } },
+  { id: 125, at: ngayGio(1, 4), actor_id: 'nd-1', actor_role: 'authenticated',
+    bang: 'units', ban_ghi: 'a20f5b13', thao_tac: 'UPDATE',
+    truoc: { area_m2: null }, sau: { area_m2: 96.4 } },
+  { id: 124, at: ngayGio(2, 1), actor_id: null, actor_role: 'postgres',
+    bang: 'invoices', ban_ghi: '9d41c0ab', thao_tac: 'UPDATE',
+    truoc: { paid_amount: 0, status: 'issued' },
+    sau: { paid_amount: 2983500, status: 'paid' } },
+  { id: 123, at: ngayGio(3, 6), actor_id: 'nd-3', actor_role: 'authenticated',
+    bang: 'sla_policies', ban_ghi: '5e70aa19', thao_tac: 'INSERT',
+    truoc: {}, sau: { priority: 'urgent', respond_mins: 5, resolve_mins: 30,
+                      escalate_to: 'bql_manager' } },
+  { id: 122, at: ngayGio(5, 8), actor_id: 'nd-1', actor_role: 'authenticated',
+    bang: 'invoice_lines', ban_ghi: 'cc02f8d5', thao_tac: 'DELETE',
+    truoc: { description: 'Gửi ô tô', quantity: 1, unit_price: 1200000, amount: 1200000 },
+    sau: {} },
+  { id: 121, at: ngayGio(6, 2), actor_id: 'nd-2', actor_role: 'authenticated',
+    bang: 'unit_memberships', ban_ghi: '1a9b3327', thao_tac: 'UPDATE',
+    truoc: { status: 'pending', approved_at: null },
+    sau: { status: 'active', approved_at: ngayGio(6, 2) } },
+]
+
+/** Tên người, tra riêng — audit_log cố ý không có khóa ngoại sang profiles. */
+export const TEN_NGUOI_GHI_SO: Record<string, string> = {
+  'nd-1': 'Trần Thị Bích Ngọc',
+  'nd-2': 'Ngô Mạnh Hà',
+  'nd-3': 'Lê Quang Huy',
+}
+
+export type KeHoachBaoTriDemo = {
+  id: string
+  ten: string
+  hang_muc: string
+  chu_ky_ngay: number
+  han_ke_tiep: string
+  nhac_truoc_ngay: number
+  bat_buoc_phap_ly: boolean
+  nha_thau: string | null
+  building_id: string | null
+  is_active: boolean
+}
+
+/** n ngày kể từ hôm nay, dạng YYYY-MM-DD. */
+const ngayThuong = (n: number) =>
+  new Date(Date.now() + n * 86400_000).toISOString().slice(0, 10)
+
+/**
+ * Lịch bảo trì của bản demo.
+ *
+ * Cố ý có đủ bốn tình trạng: quá hạn của hạng mục BẮT BUỘC THEO LUẬT (nặng
+ * nhất), sắp tới, còn xa nhưng vẫn theo luật nên không xuống xanh, và một cái
+ * đã tạm dừng. Nhìn một màn là thấy hết thang màu.
+ */
+export const BAO_TRI: KeHoachBaoTriDemo[] = [
+  { id: 'bt-1', ten: 'Kiểm định thang máy tháp P1', hang_muc: 'thang_may',
+    chu_ky_ngay: 365, han_ke_tiep: ngayThuong(-4), nhac_truoc_ngay: 30,
+    bat_buoc_phap_ly: true, nha_thau: 'Công ty Thang máy Thái Bình', building_id: null,
+    is_active: true },
+  { id: 'bt-2', ten: 'Bảo trì hệ PCCC quý', hang_muc: 'pccc',
+    chu_ky_ngay: 90, han_ke_tiep: ngayThuong(6), nhac_truoc_ngay: 14,
+    bat_buoc_phap_ly: true, nha_thau: 'PCCC Miền Bắc', building_id: null, is_active: true },
+  { id: 'bt-3', ten: 'Vệ sinh bể nước ngầm', hang_muc: 'bom_nuoc',
+    chu_ky_ngay: 180, han_ke_tiep: ngayThuong(41), nhac_truoc_ngay: 7,
+    bat_buoc_phap_ly: false, nha_thau: null, building_id: null, is_active: true },
+  { id: 'bt-4', ten: 'Chạy thử máy phát điện', hang_muc: 'dien',
+    chu_ky_ngay: 30, han_ke_tiep: ngayThuong(58), nhac_truoc_ngay: 5,
+    bat_buoc_phap_ly: true, nha_thau: null, building_id: null, is_active: true },
+  { id: 'bt-5', ten: 'Thay lọc bơm tăng áp', hang_muc: 'bom_nuoc',
+    chu_ky_ngay: 90, han_ke_tiep: ngayThuong(12), nhac_truoc_ngay: 7,
+    bat_buoc_phap_ly: false, nha_thau: null, building_id: null, is_active: true },
+  { id: 'bt-6', ten: 'Diệt côn trùng tầng hầm', hang_muc: 've_sinh',
+    chu_ky_ngay: 90, han_ke_tiep: ngayThuong(20), nhac_truoc_ngay: 7,
+    bat_buoc_phap_ly: false, nha_thau: null, building_id: null, is_active: false },
+]
+
+/** Việc đã mở, chờ đánh dấu làm xong. Khớp với hai kế hoạch gấp nhất bên trên. */
+export const VIEC_BAO_TRI = [
+  { id: 'vbt-1', plan_id: 'bt-1', han: ngayThuong(-4) },
+  { id: 'vbt-2', plan_id: 'bt-2', han: ngayThuong(6) },
+]
+
+/** Thăm dò gắn vào thông báo đầu tiên của bản demo. */
+export const THAM_DO_DEMO = {
+  cau_hoi: 'Có nên lắp thêm camera hầm B2?',
+  lua_chon: ['Đồng ý', 'Không', 'Cần bàn thêm'],
+  kin: false,
+  dong_luc: null as string | null,
+  dem: [148, 61, 22],
+}
+
+export type BinhLuanDemo = {
+  id: number
+  body: string
+  created_at: string
+  an_luc: string | null
+  can: string
+  ten: string
+}
+
+export const BINH_LUAN_DEMO: BinhLuanDemo[] = [
+  { id: 1, body: 'Nên lắp cả lối thoát hiểm chứ không chỉ chỗ để xe.',
+    created_at: ngayGio(2, 3), an_luc: null, can: 'P1-15.02', ten: 'Vũ Thị Hạnh' },
+  { id: 2, body: 'Chi phí lấy từ quỹ nào? Đề nghị BQL công bố dự toán trước khi chốt.',
+    created_at: ngayGio(1, 8), an_luc: null, can: 'P2-08.05', ten: 'Phạm Hoàng Nam' },
+  { id: 3, body: '(nội dung đã ẩn)',
+    created_at: ngayGio(1, 9), an_luc: ngayGio(1, 10), can: 'P1-07.02', ten: 'Hoàng Thị Mai' },
 ]

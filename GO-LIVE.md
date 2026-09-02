@@ -1,19 +1,28 @@
 # Go-live
 
-Trạng thái đo trên project Supabase `upsfjlfonphyazbiwtov` (Singapore) ngày 29/08/2026.
+Từ 02/09/2026 hệ thống chạy **trọn trên Railway**, không còn Supabase. Ba
+service: Postgres, PostgREST, và app Next.js. Dựng theo `railway/GD1-runbook.sh`.
+
 Không phải kế hoạch — là những gì đã kiểm và những gì còn thiếu.
+
+> **Áp bất kỳ file `.sql` nào, kể cả sau này, thì phải chạy tiếp một câu:**
+> `psql -c "notify pgrst, 'reload schema'"`
+>
+> PostgREST đọc danh mục bảng và hàm **một lần lúc khởi động** rồi giữ trong bộ
+> nhớ. Thêm hàm mới mà không bảo nó nạp lại thì nó trả **404 cho đúng thứ vừa
+> tạo** — và 404 nhìn giống hệt "gõ sai tên hàm", nên rất dễ đi tìm nhầm chỗ.
 
 ## Đã sẵn sàng
 
 | Hạng mục | Trạng thái |
 |---|---|
-| Database | Project **Singapore** (`ap-southeast-1`), cùng vùng với Railway |
-| Schema + RLS | 4 migration đã áp. Advisor bảo mật: **0 lỗi ERROR** |
-| Backup | GitHub Actions dump hằng ngày (gói Free không có backup tự động) |
-| Job nền | 3 job pg_cron đang chạy, lần chạy gần nhất `succeeded` |
-| Lưu trữ ảnh | bucket `ticket-photos` riêng tư, 2 policy |
-| Quyền `anon` | **Không có bảng nào** — khóa công khai không đọc được gì |
-| Bộ test | 6 file SQL + 27 test JS, xanh trên CI mỗi lần push |
+| Database | Postgres trên Railway, vùng **Singapore**, cùng vùng với app |
+| Schema + RLS | `schema.sql` + `auth_hooks.sql`, chạy lại được từ đầu bất cứ lúc nào |
+| Đăng nhập | Tự dựng (`railway/03_auth.sql`): mật khẩu bcrypt + mã một lần, đếm lượt dò ở tầng DB |
+| Backup | GitHub Actions dump hằng ngày, gồm cả schema `auth` |
+| Lưu trữ ảnh | Volume của service `v`, phục vụ qua `/api/anh` — hỏi lại quyền từng lần xem |
+| Quyền `anon` | **Không có bảng nào** — request không JWT không đọc được gì |
+| Bộ test | 13 file SQL độc lập + cả ngăn xếp Railway + 142 test JS, xanh trên CI mỗi lần push |
 | Giao diện | 24 route, build sạch, sáng/tối |
 
 Ba job nền và giờ chạy (giờ VN):
@@ -31,18 +40,22 @@ Ba job nền và giờ chạy (giờ VN):
 nên không phải mở thêm nhà cung cấp.
 
 - Build `npm ci && npm run build`, chạy `npm run start` (Next tự nghe `$PORT`)
-- Health check `/api/health` — cố ý KHÔNG chạm Supabase, vì health check trả
-  lời "tiến trình còn sống không" chứ không phải "Supabase còn sống không".
-  Gọi DB trong đó thì một sự cố bên Supabase sẽ làm Railway giết container và
-  chặn mọi lần deploy sau.
+- Health check `/api/health` — cố ý KHÔNG chạm database, vì health check trả
+  lời "tiến trình còn sống không" chứ không phải "mọi thứ phụ thuộc còn sống
+  không". Gọi DB trong đó thì một sự cố ở tầng dữ liệu sẽ làm Railway giết
+  container và chặn mọi lần deploy sau.
 - **Chọn vùng Southeast Asia (Singapore)** khi tạo service. Railway chỉ có 4
   vùng: US West, US East, EU West, Singapore — Singapore gần VN nhất.
 
-Cần đặt 6 biến môi trường:
+Biến môi trường của service `v` (danh sách đầy đủ và lý do từng cái ở
+`.env.example`):
 
 ```
-NEXT_PUBLIC_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+POSTGREST_URL=http://postgrest.railway.internal:3000
+AUTH_JWT_SECRET                    # PHẢI trùng khít PGRST_JWT_SECRET
+SMTP_URL                           # thư đăng nhập; thiếu là không ai vào được
+SMTP_FROM
+ANH_DIR=/data/ticket-photos        # PHẢI trỏ vào một Volume đã gắn
 NEXT_PUBLIC_VBUILDING_AUTH=email   # 'email' hoặc 'sms'; đang tạm email
 VBUILDING_BANK_BIN                 # BIN NAPAS 6 số, VD Vietcombank 970436
 VBUILDING_BANK_ACCOUNT             # số tài khoản nhận phí
@@ -50,37 +63,39 @@ VBUILDING_BANK_NAME                # tên chủ tài khoản, in trên màn hóa
 ```
 
 Ba biến ngân hàng thiếu thì hóa đơn vẫn xem được, chỉ là không có mã QR và
-cư dân phải hỏi BQL số tài khoản.
+cư dân phải hỏi BQL số tài khoản. `SMTP_URL` thiếu thì nặng hơn nhiều: nút
+"Gửi mã" báo lỗi, và lối vào duy nhất còn lại là mật khẩu BQL đặt tay.
+
+**Volume cho ảnh.** Gắn một Volume vào service `v` tại đúng `/data/ticket-photos`.
+Không gắn thì app vẫn nhận ảnh bình thường rồi mất sạch ở lần deploy kế tiếp —
+lặng lẽ, và chỉ lộ ra lúc có người mở lại một yêu cầu cũ để đối chất.
+
+**PostgREST không được có tên miền công khai.** Nó chỉ cần địa chỉ nội bộ. Mở
+ra internet là phơi thẳng tầng dữ liệu, và chốt duy nhất còn lại là chữ ký JWT.
 
 **Lưu ý về biến `NEXT_PUBLIC_`**: Next nhúng chúng vào bundle JavaScript lúc
 `next build`, không đọc lúc chạy. Nên đổi `NEXT_PUBLIC_VBUILDING_AUTH` từ
 email sang sms là phải **build lại**, không chỉ restart. Railway đổi biến thì
 tự deploy lại nên vẫn đúng một thao tác.
 
-### 2. Đăng nhập — đang tạm dùng email OTP  ✔ đã làm
+### 2. Đăng nhập — email OTP hoặc mật khẩu  ✔ đã làm
 
-Đã chuyển sang **email OTP**. Supabase gửi email sẵn, không cần nhà cung cấp
-nào. SMS để sau; lúc có thì đổi `NEXT_PUBLIC_VBUILDING_AUTH=sms` rồi deploy
-lại — code đã hỗ trợ sẵn cả hai đường, không phải sửa gì.
+Hai lối vào cùng một tài khoản: **mã một lần qua email** (mặc định cho cư dân,
+không phải nhớ gì) và **mật khẩu** do BQL đặt (cho người dùng thường xuyên, và
+cho lúc SMTP hỏng).
 
-Còn **hai việc phải làm trong dashboard Supabase**, không làm được từ code:
+Không còn dashboard nào phải vào. Link trong thư lấy tên miền từ chính request
+đang phục vụ, nên cùng một bản build chạy đúng ở cả máy dev lẫn Railway — không
+có một ô "Site URL" nào để quên cập nhật. Mẫu thư nằm ở `lib/mail.ts` và có
+sẵn **cả mã 6 số lẫn đường link**, mã đứng trước.
 
-**a. Site URL và Redirect URLs** (Authentication → URL Configuration).
-Link trong email trỏ về đây. Đặt Site URL là domain thật sau khi deploy, và
-thêm `<domain>/auth/confirm` vào danh sách Redirect URLs. Thiếu bước này thì
-bấm link trong email sẽ rơi về localhost.
+Việc duy nhất phải làm bên ngoài: có một tài khoản SMTP và điền `SMTP_URL`.
+Gmail (mật khẩu ứng dụng), SendGrid, Amazon SES — cái nào cũng được, đổi nhà
+cung cấp là đổi một chuỗi.
 
-**b. Mẫu email** (Authentication → Email Templates → Magic Link).
-Mẫu mặc định **chỉ có đường link, không có mã 6 số**. Thêm dòng này vào mẫu
-để cư dân gõ mã cho nhanh:
-
-```html
-<p>Mã đăng nhập của bạn: <b>{{ .Token }}</b></p>
-```
-
-Không sửa cũng vẫn đăng nhập được — app có sẵn route `/auth/confirm` xử lý
-đường link, nên bấm link là vào. Sửa mẫu chỉ để có thêm đường gõ mã, tiện hơn
-khi mở email trên máy khác.
+SMS để sau; lúc có thì đổi `NEXT_PUBLIC_VBUILDING_AUTH=sms` rồi deploy lại —
+màn đăng nhập đã có sẵn cả hai đường, nhưng `/api/auth/ma` hiện trả lỗi rõ
+ràng cho số điện thoại vì chưa cắm nhà cung cấp nào.
 
 ### 3. Chưa có tài khoản BQL
 
@@ -89,11 +104,18 @@ khi mở email trên máy khác.
 
 Thứ tự bắt buộc — không đảo được:
 
-1. Deploy xong và đặt Site URL (mục 1 và 2 ở trên)
-2. Người sẽ làm BQL **tự đăng nhập một lần** (để `auth.users` và `profiles`
-   có bản ghi của họ)
+1. Deploy xong (mục 1 ở trên), đã chạy `railway/03_auth.sql`
+2. Tạo tài khoản cho người sẽ làm BQL. Chạy trong Console của service Postgres:
+
+   ```sql
+   select auth_tao_nguoi_dung('email-cua-bql@…', '', 'Họ tên', 'mật khẩu tạm');
+   ```
+
+   Không còn phải chờ họ "tự đăng nhập một lần" như hồi Supabase: `auth.users`
+   giờ là bảng của chính mình, tạo thẳng được, và trigger tự dựng `profiles`.
 3. Điền `v_email` (và `v_du_an` nếu DB còn trống) trong `bootstrap_bql.sql`
    rồi chạy file đó
+4. Báo họ đăng nhập bằng mật khẩu tạm, rồi tự đổi ở màn Người dùng
 
 `bootstrap_bql.sql` cố ý chạy bằng quyền `postgres`: `staff_assignments`
 không cấp quyền ghi cho ai, vì tự ghi được bảng đó là tự phong mình làm BQL
@@ -104,16 +126,22 @@ và vượt luôn RLS của toàn bộ ticket/hóa đơn.
 `.github/workflows/backup.yml` dump DB hằng ngày lúc 01:30 giờ VN và lưu thành
 artifact của workflow (giữ 90 ngày). Cần **một** secret trong repo:
 
-- Tên: `SUPABASE_DB_URL`
-- Lấy ở Supabase Dashboard → **Connect** → **Session pooler** (cổng 5432)
+- Tên: `DATABASE_URL_BACKUP`
+- Lấy ở Railway → service Postgres → Variables → **DATABASE_PUBLIC_URL**
 
-**Phải là Session pooler, không phải Direct connection.** Direct chỉ có IPv6
-trên gói Free, mà runner của GitHub chỉ chạy IPv4 — dùng direct là job không
-bao giờ nối được.
+**Phải là bản PUBLIC.** Địa chỉ `*.railway.internal` chỉ sống trong mạng nội bộ
+của Railway; runner của GitHub không nối tới được.
+
+Dump gồm cả schema `auth`. Thiếu nó thì bản khôi phục có đủ hóa đơn và công nợ
+nhưng **không ai đăng nhập được**, kể cả BQL — nên workflow kiểm riêng sự có
+mặt của `auth.users` trước khi lưu.
+
+**Ảnh KHÔNG nằm trong bản dump.** Ảnh ở trên Volume của service `v`, không ở
+database. Bật thêm snapshot cho Volume nếu ảnh là bằng chứng cần giữ.
 
 Bản dump chứa **dữ liệu cá nhân thật**: họ tên, SĐT, email, CCCD cư dân, toàn
-bộ hóa đơn và thanh toán. Nó không vào git (chỉ là artifact), nhưng ai đọc
-được repo là tải được — giữ repo riêng tư.
+bộ hóa đơn, thanh toán, và băm mật khẩu. Nó không vào git (chỉ là artifact),
+nhưng ai đọc được repo là tải được — giữ repo riêng tư.
 
 Job tự kiểm bản dump có nội dung thật (đếm số bảng có dữ liệu) rồi mới lưu.
 Không có bước đó thì một bản dump rỗng vẫn upload thành công và ba tháng sau
@@ -126,9 +154,9 @@ sinh ra. Chính file đó ghi "KHÔNG chạy trên production" nhưng đã lỡ 
 
 Cư dân thật đăng nhập vào mà thấy 24 căn ma thì hỏng ngay ấn tượng đầu.
 
-DB Singapore mới **hoàn toàn trống** — không chạy `seed.sql`, nên không có dữ
-liệu mẫu nào. `reset_demo_data.sql` chỉ cần cho project Mumbai cũ, nếu anh muốn
-dọn trước khi xóa nó.
+DB trên Railway dựng mới thì **hoàn toàn trống** — không chạy `seed.sql`, nên
+không có dữ liệu mẫu nào. `reset_demo_data.sql` chỉ cần khi dọn một DB đã lỡ
+chạy seed.
 
 Trên DB mới, `bootstrap_bql.sql` **tự tạo dự án** nếu chưa có — điền `v_du_an`
 bằng tên tòa thật. Sau đó:
@@ -150,15 +178,13 @@ chiếu sao kê và nhập tay. Với 24 căn thì chịu được; vài trăm c
 ## Thứ tự chạy
 
 ```
-[anh] chọn nơi host, tạo project trên đó
+[anh] chạy railway/GD1-runbook.sh phần A (Console của service Postgres)
         ↓
-[em] deploy + cắm biến môi trường
+[anh] dựng service PostgREST + gắn Volume + đặt biến (phần B)
         ↓
-[anh] đặt Site URL + Redirect URL trong Supabase (Authentication → URL Configuration)
+[anh] đặt SMTP_URL (một tài khoản gửi thư bất kỳ)
         ↓
-[anh] người làm BQL đăng nhập một lần bằng email
-        ↓
-[anh] đưa email đó  →  [em] chạy bootstrap_bql.sql
+[anh] đưa email + họ tên người làm BQL  →  [em] tạo tài khoản + chạy bootstrap_bql.sql
         ↓
 [anh] đưa danh sách căn hộ thật (Excel) + mức phí thật + số tài khoản nhận tiền
         ↓

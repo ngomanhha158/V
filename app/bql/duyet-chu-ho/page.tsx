@@ -1,18 +1,18 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { Card, CardHead, Hop, PageHead, Pill, Trong } from '@/components/ui'
 import { HangCho, type YeuCau } from './hang-cho'
 
 export const dynamic = 'force-dynamic'
 
 export default async function DuyetChuHo() {
-  const supabase = await createClient()
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const db = await createClient()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
-  const { data: rows, error } = await supabase.rpc('bql_cho_duyet_chu_ho', {
+  const { data: rows, error } = await db.rpc('bql_cho_duyet_chu_ho', {
     p_project: project.id,
   })
 

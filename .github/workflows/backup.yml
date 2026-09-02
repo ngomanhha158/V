@@ -1,11 +1,15 @@
 name: backup-db
 
-# Gói Free của Supabase KHÔNG có backup tự động — tài liệu của họ nói rõ chỉ
-# Pro/Team/Enterprise mới được sao lưu hằng ngày, còn free tier thì "tự dump và
-# giữ bản sao ở nơi khác". Đây chính là cái đó.
+# Bản sao lưu độc lập, không phụ thuộc snapshot của nhà cung cấp. Snapshot nằm
+# cùng chỗ với database: một lần lỡ tay xóa cả service là mất cả hai.
+#
+# KHÔNG bao gồm ẢNH hỏng hóc — ảnh nằm trên Volume của service `v`, không nằm
+# trong database. Muốn sao lưu ảnh thì phải làm riêng. Nói ra ở đây vì "đã có
+# backup hằng ngày" rất dễ được hiểu là đã có backup mọi thứ.
 #
 # Bản dump chứa DỮ LIỆU CÁ NHÂN THẬT: họ tên, số điện thoại, email, CCCD của cư
-# dân, cùng toàn bộ hóa đơn và bản ghi thanh toán. Vì vậy:
+# dân, toàn bộ hóa đơn, bản ghi thanh toán, VÀ băm mật khẩu trong schema auth.
+# Vì vậy:
 #   - KHÔNG commit vào git. Nó nằm ở artifact của workflow, hết hạn tự xóa.
 #   - Ai có quyền đọc repo là tải được artifact. Giữ repo riêng tư.
 
@@ -20,18 +24,18 @@ jobs:
     steps:
       - name: Kiểm secret trước khi làm gì khác
         env:
-          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DB_URL: ${{ secrets.DATABASE_URL_BACKUP }}
         run: |
           if [ -z "$DB_URL" ]; then
-            echo "::error::Thiếu secret SUPABASE_DB_URL."
-            echo "Lấy ở Supabase Dashboard > Connect > Session pooler (cổng 5432)."
-            echo "PHẢI là Session pooler, KHÔNG phải Direct connection: direct chỉ có"
-            echo "IPv6 trên gói Free, mà runner của GitHub chỉ chạy IPv4 nên sẽ không nối được."
+            echo "::error::Thiếu secret DATABASE_URL_BACKUP."
+            echo "Lấy ở Railway > service Postgres > Variables > DATABASE_PUBLIC_URL."
+            echo "PHẢI là bản PUBLIC: địa chỉ *.railway.internal chỉ sống trong mạng nội bộ"
+            echo "của Railway, runner của GitHub không nối tới được."
             exit 1
           fi
 
       # pg_dump phải BẰNG HOẶC MỚI HƠN server, nếu không nó từ chối chạy.
-      # Runner mặc định chỉ có client 16, server Supabase là 17 -> phải thêm kho PGDG.
+      # Runner mặc định chỉ có client 16 -> thêm kho PGDG cho chắc.
       - name: Cài postgresql-client 17
         run: |
           sudo install -d /usr/share/postgresql-common/pgdg
@@ -46,20 +50,25 @@ jobs:
 
       - name: Dump
         env:
-          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DB_URL: ${{ secrets.DATABASE_URL_BACKUP }}
         run: |
           set -euo pipefail
           TEN="vbuilding-$(date -u +%Y%m%d-%H%M).dump"
           echo "TEN=$TEN" >> "$GITHUB_ENV"
 
           # --format=custom: nén sẵn và khôi phục chọn lọc được bằng pg_restore.
-          # --no-owner --no-privileges: khôi phục sang project khác không vấp
-          # chuyện role không tồn tại — mà khôi phục sang project khác chính là
-          # tình huống cần backup nhất.
+          # --no-owner --no-privileges: khôi phục sang database khác không vấp
+          # chuyện role không tồn tại — mà khôi phục sang chỗ khác chính là tình
+          # huống cần backup nhất. Dựng lại role bằng railway/00_compat.sql, rồi
+          # auth_hooks.sql cấp lại quyền.
+          #
+          # schema `auth` PHẢI có mặt: từ khi tự dựng lớp đăng nhập, băm mật khẩu
+          # nằm ở auth.users. Dump thiếu nó thì bản khôi phục có đủ hóa đơn và
+          # công nợ nhưng KHÔNG AI đăng nhập được, kể cả ban quản lý.
           pg_dump "$DB_URL" \
             --format=custom --compress=9 \
             --no-owner --no-privileges \
-            --schema=public --schema=storage \
+            --schema=public --schema=auth \
             --file="$TEN"
 
       # Dump rỗng vẫn là một file, vẫn upload thành công, và ba tháng sau mới
@@ -76,8 +85,15 @@ jobs:
             exit 1
           fi
           if [ "$SO_BANG" -lt 10 ]; then
-            echo "::error::Chỉ thấy $SO_BANG bảng trong bản dump, schema có 18 bảng."
+            echo "::error::Chỉ thấy $SO_BANG bảng trong bản dump, schema có hơn 20 bảng."
             echo "Nhiều khả năng dump nhầm database hoặc thiếu quyền."
+            exit 1
+          fi
+          # Đếm riêng schema auth: nó chỉ có 2 bảng nên ngưỡng 10 ở trên không
+          # bao giờ bắt được trường hợp thiếu đúng nó — mà thiếu đúng nó là bản
+          # khôi phục không ai đăng nhập được.
+          if ! pg_restore --list "$TEN" | grep -q 'TABLE DATA auth users'; then
+            echo "::error::Bản dump không có auth.users. Khôi phục từ bản này thì không ai đăng nhập được."
             exit 1
           fi
 

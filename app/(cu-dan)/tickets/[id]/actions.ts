@@ -1,6 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 
 export type RateState = { error?: string; ok?: string }
 
@@ -11,9 +11,9 @@ export async function rateTicket(ticketId: string, _prev: RateState, formData: F
     return { error: 'Chọn số sao từ 1 đến 5.' }
   }
 
-  const supabase = await createClient()
+  const db = await createClient()
   // rate_ticket tự kiểm tra quyền bên trong (nó là definer, bỏ qua RLS).
-  const { error } = await supabase.rpc('rate_ticket', {
+  const { error } = await db.rpc('rate_ticket', {
     p_ticket: ticketId,
     p_rating: rating,
     ...(note ? { p_note: note } : {}),

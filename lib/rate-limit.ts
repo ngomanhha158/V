@@ -5,7 +5,7 @@
  * trình. Chạy nhiều bản sao trên Railway thì mỗi bản đếm riêng, nên ngưỡng
  * thực tế bị nhân lên theo số bản sao. Nó vẫn cắt được kiểu dò khóa bắn hàng
  * nghìn lượt một phút — thứ nó không thay thế được là rate limit ở tầng biên
- * (Cloudflare / Railway) và rate limit của chính Supabase Auth.
+ * (Cloudflare / Railway) và bộ đếm lượt đăng nhập trong railway/03_auth.sql.
  *
  * Cố ý không kéo Redis về: thêm một dịch vụ trạng thái nữa vào đường tiền là
  * thêm một chỗ chết. Khi nào cần chính xác thật thì mới đổi.

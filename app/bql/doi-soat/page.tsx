@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import {
   Bang, Card, CardHead, Chip, Hop, PageHead, Pill, Td, Th, Tr, Trong, ngayGioVN, vnd,
 } from '@/components/ui'
@@ -23,16 +23,16 @@ export default async function DoiSoat({
   const sp = await searchParams
   const tab: TabKey = laTab(sp.tab) ? sp.tab : 'chua_khop'
 
-  const supabase = await createClient()
-  const { data: project } = await supabase.from('projects').select('id, name').limit(1).maybeSingle()
+  const db = await createClient()
+  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
+  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
 
   const [{ data: rows, error }, { data: units }, { count: soChoXuLy }] = await Promise.all([
-    supabase.rpc('bql_doi_soat', { p_project: project.id, p_trang_thai: tab }),
-    supabase.from('units').select('id, code').order('code'),
-    supabase.from('bank_transactions')
+    db.rpc('bql_doi_soat', { p_project: project.id, p_trang_thai: tab }),
+    db.from('units').select('id, code').order('code'),
+    db.from('bank_transactions')
       .select('id', { count: 'exact', head: true })
       .eq('project_id', project.id).eq('trang_thai', 'chua_khop'),
   ])

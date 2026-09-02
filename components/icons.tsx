@@ -105,3 +105,41 @@ export const IcSang = (p: SVGProps<SVGSVGElement>) => (
 export const IcToi = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" /></I>
 )
+
+/** Lưới ô: từng căn một. Khác IcToaNha ở chỗ đó vẽ cả tòa, đây vẽ các căn bên trong. */
+export const IcCanHo = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+  </I>
+)
+
+/** Mũi tên xuống khay: tải file về. IcNhap là mũi tên vào hệ thống, đây là chiều ngược lại. */
+export const IcTaiVe = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></I>
+)
+
+/** Danh sách có dấu tích: sổ ghi việc đã xảy ra, không phải việc sắp làm. */
+export const IcSo = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M4 5h16v14H4z" /><path d="M8 3v4M8 12h8M8 16h5" />
+    <path d="m6.5 8.5 1 1 2-2" />
+  </I>
+)
+
+/** Lịch có một ngày được khoanh: việc lặp theo chu kỳ, có hạn cụ thể. */
+export const IcLich = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" />
+    <circle cx="12" cy="15" r="2" />
+  </I>
+)
+export const IcRa = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" /><path d="M10 17l-5-5 5-5" /><path d="M5 12h11" /></I>
+)
+export const IcThe = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="9" cy="11" r="2" /><path d="M6.5 16c.6-1.3 1.5-2 2.5-2s1.9.7 2.5 2" /><path d="M15 10h4M15 13.5h4" /></I>
+)
+export const IcXe = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}><path d="M5 16.5V19a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1v-2.5" /><path d="M21.5 16.5V19a1 1 0 0 1-1 1H20a1 1 0 0 1-1-1v-2.5" /><path d="M3 16.5h18v-4l-1.6-4.2A2 2 0 0 0 17.5 7h-11a2 2 0 0 0-1.9 1.3L3 12.5z" /><circle cx="6.75" cy="14.25" r=".9" /><circle cx="17.25" cy="14.25" r=".9" /></I>
+)

@@ -21,6 +21,7 @@ declare
   v_total   bigint;
   v_first   bigint;
   n int;
+  f_xe uuid; v_xe_can uuid; v_xe_can2 uuid;
 begin
   select id, area_m2 into v_unit, v_area from units where code = 'P1-10.01';
 
@@ -63,6 +64,65 @@ begin
   if v_total <> v_first then
     raise exception 'FAIL 5: hoa don da phat hanh bi tinh lai, % -> %', v_first, v_total;
   end if;
+
+  -- ── Phí gửi xe tính theo ĐẦU XE ĐÃ DUYỆT ──
+  -- Đây là chỗ tính năng chỗ đỗ chạm vào tiền, nên nó phải nằm trong bộ test
+  -- của đường tiền chứ không nằm riêng: thu nhầm một chiếc là thu tiền một chỗ
+  -- đỗ không tồn tại, và cư dân phát hiện ra ở đúng lúc họ xuống hầm.
+  -- KHÔNG dùng lại v_unit: hóa đơn của căn đó vừa bị chuyển sang 'issued' ở
+  -- assert 5, mà generate_invoices cố ý không đụng vào hóa đơn đã phát hành —
+  -- test sẽ đỏ vì một lý do chẳng liên quan gì tới phí gửi xe.
+  select id into v_xe_can  from units where id <> v_unit
+   and building_id = (select building_id from units where id = v_unit)
+   order by code limit 1;
+  select id into v_xe_can2 from units where id not in (v_unit, v_xe_can)
+   and building_id = (select building_id from units where id = v_unit)
+   order by code limit 1;
+  insert into fee_types (project_id, code, name, unit_price, calc_method, loai_xe)
+    values (v_project, 'GUIXE', 'Phi gui o to', 1200000, 'per_vehicle', 'o_to')
+    returning id into f_xe;
+
+  -- Căn 1: hai ô tô ĐÃ DUYỆT, một chiếc đang xếp hàng, một xe máy.
+  insert into unit_vehicles (unit_id, plate, loai, trang_thai) values
+    (v_xe_can, '30A-001.01', 'o_to',   'da_duyet'),
+    (v_xe_can, '30A-001.02', 'o_to',   'da_duyet'),
+    (v_xe_can, '30A-001.03', 'o_to',   'hang_cho'),
+    (v_xe_can, '29A-001.04', 'xe_may', 'da_duyet');
+
+  perform generate_invoices(v_project, v_period);
+  select l.quantity, l.amount into v_ngay, v_total
+    from invoice_lines l join invoices i on i.id = l.invoice_id
+   where i.unit_id = v_xe_can and i.period = v_period and l.fee_type_id = f_xe;
+  if v_ngay is null then raise exception 'FAIL XE1: khong sinh dong phi gui xe'; end if;
+  if v_ngay <> 2 then
+    raise exception 'FAIL XE2: phai thu 2 chiec da duyet (khong tinh chiec dang xep hang, khong tinh xe may), tinh %', v_ngay;
+  end if;
+  if v_total <> 2400000 then raise exception 'FAIL XE3: thanh tien phai la 2.400.000, ra %', v_total; end if;
+
+  -- Căn không đăng ký chiếc nào: KHÔNG được có dòng 0đ. Một dòng 0đ trên hóa
+  -- đơn làm cư dân tưởng mình đang bị tính một khoản rồi được miễn, và làm kế
+  -- toán phải giải thích từng tháng.
+  if exists (select 1 from invoice_lines l join invoices i on i.id = l.invoice_id
+              where i.unit_id = v_xe_can2 and i.period = v_period and l.fee_type_id = f_xe) then
+    raise exception 'FAIL XE4: can khong co xe van bi sinh dong phi gui xe 0d';
+  end if;
+
+  -- Duyệt chiếc đang xếp hàng rồi phát hành lại: tiền phải tăng đúng một suất.
+  update unit_vehicles set trang_thai = 'da_duyet'
+   where unit_id = v_xe_can and plate = '30A-001.03';
+  perform generate_invoices(v_project, v_period);
+  select l.amount into v_total from invoice_lines l join invoices i on i.id = l.invoice_id
+   where i.unit_id = v_xe_can and i.period = v_period and l.fee_type_id = f_xe;
+  if v_total <> 3600000 then raise exception 'FAIL XE5: duyet them mot chiec thi phai thu 3.600.000, ra %', v_total; end if;
+
+  -- Dọn lại để các assert phía sau không bị dòng phí xe chen vào. Thứ tự bắt
+  -- buộc: bỏ xe -> sinh lại hóa đơn (dòng phí xe biến mất vì đếm ra 0) -> mới
+  -- xóa được loại phí. Xóa loại phí trước thì khóa ngoại của invoice_lines chặn
+  -- lại — đúng như thiết kế: hệ thống không cho xóa một loại phí đã nằm trong
+  -- hóa đơn đã phát.
+  delete from unit_vehicles where unit_id in (v_xe_can, v_xe_can2);
+  perform generate_invoices(v_project, v_period);
+  delete from fee_types where id = f_xe;
 
   -- ── Lớp quyền: đường tiền sai thì mất tiền thật ──
   insert into profiles (id, full_name) values (u_res,'Cu dan'), (u_bql,'BQL');

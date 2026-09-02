@@ -1,7 +1,9 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { Card, PageHead, Pill, Trong, cx } from '@/components/ui'
 import { IcCanh, IcSach } from '@/components/icons'
+import { KhoiBinhLuan, KhoiThamDo, type BinhLuan, type ThamDo } from './gop-y'
+import type { KetQua } from '@/lib/tham-do'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,11 +15,11 @@ function khiNao(iso: string) {
 }
 
 export default async function BangTin() {
-  const supabase = await createClient()
+  const db = await createClient()
   // Policy announcement_read lo toàn bộ phần lọc: chỉ bản ĐÃ phát hành và nhắm
   // đúng căn/tầng/tòa/dự án của người này. Trang không tự lọc lại — lọc hai nơi
   // là sớm muộn hai nơi lệch nhau.
-  const { data: ds } = await supabase
+  const { data: ds } = await db
     .from('announcements')
     .select('id, title, body, is_urgent, published_at, building_id, floor_no, unit_id, documents(id, title, section)')
     .order('published_at', { ascending: false })
@@ -25,6 +27,56 @@ export default async function BangTin() {
 
   const list = ds ?? []
   const khan = list.filter((a) => a.is_urgent)
+  const ids = list.map((a) => a.id)
+
+  // Căn của người đang xem, để bỏ phiếu và ký tên bình luận. Lấy căn ĐẦU TIÊN:
+  // người có nhiều căn thì bỏ phiếu cho căn nào là câu hỏi thật, nhưng để đó
+  // còn hơn đoán bừa — màn nói rõ đang bỏ cho căn nào.
+  const { data: canCuaToi } = await db
+    .from('unit_memberships')
+    .select('unit_id, units(code)')
+    .eq('status', 'active').limit(1).maybeSingle()
+  const unitId = canCuaToi?.unit_id ?? null
+  const canEmbed = canCuaToi?.units
+  const tenCan = (Array.isArray(canEmbed) ? canEmbed[0] : canEmbed)?.code ?? null
+
+  const [thamDo, binhLuan, phieu] = ids.length
+    ? await Promise.all([
+      db.from('announcement_polls')
+        .select('announcement_id, cau_hoi, lua_chon, kin, dong_luc').in('announcement_id', ids),
+      db.from('announcement_comments')
+        .select('id, announcement_id, body, created_at, an_luc, unit_id, units(code), profiles(full_name)')
+        .in('announcement_id', ids).order('created_at'),
+      unitId
+        ? db.from('announcement_votes')
+          .select('poll_id, chon').in('poll_id', ids).eq('unit_id', unitId)
+        : Promise.resolve({ data: [] as { poll_id: string; chon: number }[] }),
+    ])
+    : [{ data: [] }, { data: [] }, { data: [] }]
+
+  const td = new Map(((thamDo.data ?? []) as ThamDo[]).map((t) => [t.announcement_id, t]))
+  const phieuCua = new Map((phieu.data ?? []).map((v) => [v.poll_id, v.chon]))
+
+  // Kết quả từng cuộc: hàm SQL tự quyết cuộc kín có trả số hay không, nên trang
+  // không cần biết luật đó — biết ở hai nơi là sớm muộn hai nơi lệch nhau.
+  const ketQua = new Map<string, KetQua[]>()
+  await Promise.all([...td.keys()].map(async (id) => {
+    const { data } = await db.rpc('ket_qua_tham_do', { p_poll: id })
+    ketQua.set(id, (data ?? []) as KetQua[])
+  }))
+
+  const mot = <T,>(v: T | T[] | null | undefined): T | null =>
+    (Array.isArray(v) ? (v[0] ?? null) : (v ?? null))
+  const blTheoTb = new Map<string, BinhLuan[]>()
+  for (const c of binhLuan.data ?? []) {
+    const ds = blTheoTb.get(c.announcement_id) ?? []
+    ds.push({
+      id: c.id, body: c.body, created_at: c.created_at, an_luc: c.an_luc,
+      can: mot(c.units)?.code ?? null,
+      ten: mot(c.profiles)?.full_name ?? null,
+    })
+    blTheoTb.set(c.announcement_id, ds)
+  }
 
   return (
     <div className="space-y-5">
@@ -81,6 +133,17 @@ export default async function BangTin() {
                     </span>
                   </Link>
                 )}
+
+                {td.has(a.id) && (
+                  <KhoiThamDo
+                    td={td.get(a.id)!}
+                    ketQua={ketQua.get(a.id) ?? []}
+                    phieuCuaToi={phieuCua.get(a.id) ?? null}
+                    unitId={unitId} tenCan={tenCan}
+                  />
+                )}
+
+                <KhoiBinhLuan tb={a.id} ds={blTheoTb.get(a.id) ?? []} unitId={unitId} />
               </div>
             </Card>
           ))}

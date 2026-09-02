@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
+import { LOAI_XE, type LoaiXe } from '@/lib/xe'
 
 export type FormState = { error?: string; ok?: string }
 
@@ -17,27 +18,50 @@ function fail(error: unknown, fallback: string): FormState {
   return { error: `${fallback}: ${e?.message ?? 'lỗi không rõ'}` }
 }
 
+/**
+ * Đăng ký xe đi qua HÀM dang_ky_xe(), không insert thẳng nữa.
+ *
+ * Chèn thẳng thì mọi chiếc đều thành "đang dùng chỗ", kể cả khi hầm đã đầy —
+ * và cái hạn mức chỉ còn là con số trang trí. Phép quyết định (hạn mức căn,
+ * sức chứa hầm, vị trí hàng chờ) phải nằm đúng một chỗ, vì ba câu hỏi đó chỉ
+ * trả lời đúng khi trả lời cùng lúc.
+ */
 export async function addVehicle(unitId: string, _prev: FormState, formData: FormData): Promise<FormState> {
   const plate = String(formData.get('plate') ?? '').trim().toUpperCase()
-  const type = String(formData.get('vehicle_type') ?? '').trim() || null
+  const loai = String(formData.get('loai') ?? '')
   const card = String(formData.get('card_no') ?? '').trim() || null
   if (!plate) return { error: 'Thiếu biển số.' }
+  if (!(LOAI_XE as readonly string[]).includes(loai)) return { error: 'Chưa chọn loại xe.' }
 
-  const supabase = await createClient()
-  const { error } = await supabase
-    .from('unit_vehicles')
-    .insert({ unit_id: unitId, plate, vehicle_type: type, card_no: card })
-  if (error) return fail(error, 'Không thêm được xe')
+  const db = await createClient()
+  const { data, error } = await db.rpc('dang_ky_xe', {
+    p_unit: unitId, p_bien_so: plate, p_loai: loai as LoaiXe, p_the: card,
+  })
+  if (error) {
+    if (error.code === '42883') {
+      return { error: 'Phần chỗ đỗ xe chưa có trên database. Chạy lại schema.sql.' }
+    }
+    return fail(error, 'Không đăng ký được xe')
+  }
 
   revalidatePath(`/unit/${unitId}`)
-  return { ok: `Đã thêm xe ${plate}.` }
+  const kq = data?.[0]
+  if (kq?.trang_thai === 'hang_cho') {
+    return { ok: `Đã ghi nhận ${plate}. Hầm đang đầy nên xe vào hàng chờ, `
+      + `bạn ở vị trí ${kq.vi_tri}.` }
+  }
+  if (kq?.trang_thai === 'qua_han_muc') {
+    return { ok: `Đã ghi nhận ${plate}, nhưng căn đã dùng hết số chỗ được cấp. `
+      + 'Chiếc này chưa vào hàng chờ — liên hệ ban quản lý để xin nới hạn mức.' }
+  }
+  return { ok: `Đã đăng ký ${plate}, xe có chỗ trong hầm.` }
 }
 
 export async function removeVehicle(unitId: string, formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  const supabase = await createClient()
-  await supabase.from('unit_vehicles').delete().eq('id', id)
+  const db = await createClient()
+  await db.from('unit_vehicles').delete().eq('id', id)
   revalidatePath(`/unit/${unitId}`)
 }
 
@@ -47,8 +71,8 @@ export async function addPet(unitId: string, _prev: FormState, formData: FormDat
   const until = String(formData.get('vaccinated_until') ?? '').trim() || null
   if (!name) return { error: 'Thiếu tên thú cưng.' }
 
-  const supabase = await createClient()
-  const { error } = await supabase
+  const db = await createClient()
+  const { error } = await db
     .from('unit_pets')
     .insert({ unit_id: unitId, name, species, vaccinated_until: until })
   if (error) return fail(error, 'Không thêm được thú cưng')
@@ -60,8 +84,8 @@ export async function addPet(unitId: string, _prev: FormState, formData: FormDat
 export async function removePet(unitId: string, formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  const supabase = await createClient()
-  await supabase.from('unit_pets').delete().eq('id', id)
+  const db = await createClient()
+  await db.from('unit_pets').delete().eq('id', id)
   revalidatePath(`/unit/${unitId}`)
 }
 
@@ -71,12 +95,12 @@ export async function updateMember(unitId: string, formData: FormData): Promise<
   const action = String(formData.get('action') ?? '')
   if (!id) return
 
-  const supabase = await createClient()
+  const db = await createClient()
   if (action === 'revoke') {
-    await supabase.from('unit_memberships').update({ status: 'revoked' }).eq('id', id)
+    await db.from('unit_memberships').update({ status: 'revoked' }).eq('id', id)
   } else if (action === 'valid_to') {
     const validTo = String(formData.get('valid_to') ?? '').trim() || null
-    await supabase.from('unit_memberships').update({ valid_to: validTo }).eq('id', id)
+    await db.from('unit_memberships').update({ valid_to: validTo }).eq('id', id)
   }
   revalidatePath(`/unit/${unitId}`)
 }

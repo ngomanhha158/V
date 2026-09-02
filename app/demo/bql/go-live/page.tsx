@@ -53,12 +53,13 @@ export default async function DemoGoLive() {
   const rows = [SAN_SANG]
   const d = rows[0]
   const bank = null as { bin: string; accountNumber: string } | null
-  const host = 'vbuilding.example.vn'
 
   // Biến môi trường đọc ở SERVER. Không đưa giá trị nào ra màn hình — chỉ nói
   // "đã điền" hay "chưa": màn này BQL mở được, mà khóa thì không phải việc của họ.
   const coServiceKey = true
   const coWebhook = true
+  const coThu = true
+  const coCron = true
 
   const tyLe = d.so_can > 0 ? (d.so_can_co_chu / d.so_can) * 100 : 0
 
@@ -88,6 +89,20 @@ export default async function DemoGoLive() {
         : 'Cư dân mở Sổ tay ra sẽ thấy trang trống ngay ngày đầu.',
       lam: { nhan: 'Soạn sổ tay', href: '/demo/bql/so-tay' } },
 
+    { ten: 'Đã cấu hình gửi thư đăng nhập', xong: coThu, batBuoc: true,
+      chiTiet: coThu
+        ? 'Cư dân nhận được mã đăng nhập qua email.'
+        : 'Chưa điền SMTP_URL. Cư dân bấm "Gửi mã" sẽ báo lỗi, và lối vào duy nhất '
+          + 'còn lại là mật khẩu do ban quản lý đặt tay cho từng người.' },
+
+    { ten: 'Đã bật job nền', xong: coCron, batBuoc: true,
+      chiTiet: coCron
+        ? 'Khóa đã điền. Kiểm tiếp trên Railway: phải có đủ 5 Cron Service, danh sách '
+          + 'và lịch ở đầu file cron.sql. Màn này chỉ thấy được khóa, không thấy được lịch.'
+        : 'Chưa điền CRON_SECRET, nên chắc chắn chưa có job nền nào chạy: không nhắc nợ, '
+          + 'không leo thang yêu cầu quá hạn, không thu quyền hợp đồng đã hết hạn. '
+          + 'Không màn nào báo lỗi — chỉ là mọi thứ đứng yên.' },
+
     { ten: 'Đã cấu hình tài khoản nhận tiền', xong: !!bank, batBuoc: true,
       chiTiet: bank
         ? `BIN ${bank.bin} · số tài khoản kết thúc ${bank.accountNumber.slice(-4)}.`
@@ -97,7 +112,7 @@ export default async function DemoGoLive() {
       chiTiet: coWebhook && coServiceKey
         ? 'Tiền về sẽ tự gạch công nợ.'
         : !coServiceKey
-          ? 'Thiếu SUPABASE_SERVICE_ROLE_KEY — webhook không ghi được vào database.'
+          ? 'Thiếu AUTH_JWT_SECRET hoặc POSTGREST_URL — webhook không ghi được vào database.'
           : 'Chưa điền khóa của SePay hoặc Casso. Không có nó thì mọi khoản thu phải gạch tay.' },
 
     { ten: 'Đã phát hành hóa đơn kỳ này', xong: d.so_hoa_don_da_phat > 0, batBuoc: false,
@@ -171,20 +186,22 @@ export default async function DemoGoLive() {
         />
         <div className="space-y-3 p-4 text-[0.8125rem] leading-relaxed text-muted">
           <p>
-            <strong className="text-ink">Giới hạn gửi OTP.</strong> Trang đăng nhập gọi thẳng
-            Supabase Auth từ trình duyệt, không đi qua máy chủ này — nên rate limit phải đặt ở
-            Supabase, mục Authentication → Rate Limits. Để mặc định thì có người spam mã đăng
-            nhập tới email bất kỳ.
+            <strong className="text-ink">Volume cho ảnh.</strong> Ảnh kèm theo yêu cầu nằm
+            trên đĩa của máy chủ này. Trên Railway phải gắn một Volume vào đúng đường dẫn{' '}
+            <code className="rounded bg-sunken px-1">/data/ticket-photos</code>. Không gắn thì
+            app vẫn chạy bình thường, nhận ảnh bình thường — rồi mất sạch ảnh ở lần deploy kế
+            tiếp, và chỉ lộ ra lúc có người mở lại một yêu cầu cũ để đối chất.
           </p>
           <p>
-            <strong className="text-ink">Site URL và Redirect URL.</strong> Cũng ở Supabase, mục
-            Authentication → URL Configuration. Phải có{' '}
-            <code className="rounded bg-sunken px-1">{host ? `https://${host}` : 'tên miền'}</code>{' '}
-            và{' '}
-            <code className="rounded bg-sunken px-1">
-              {host ? `https://${host}/auth/confirm` : '<tên miền>/auth/confirm'}
-            </code>
-            . Sai chỗ này thì link trong email đăng nhập dẫn đi đâu không biết.
+            <strong className="text-ink">Sao lưu database.</strong> Bật snapshot cho service
+            Postgres trên Railway. Toàn bộ công nợ, hóa đơn và sổ kiểm toán nằm trong đó; không
+            có bản sao thì một lần lỡ tay là mất hết, không ai khôi phục hộ được.
+          </p>
+          <p>
+            <strong className="text-ink">PostgREST không có tên miền công khai.</strong> Vào
+            service PostgREST kiểm lại phần Networking: chỉ được có địa chỉ nội bộ. Có tên miền
+            public nghĩa là tầng dữ liệu phơi thẳng ra internet, và chốt duy nhất còn lại là
+            chữ ký JWT.
           </p>
           <p>
             <strong className="text-ink">Dán poster.</strong> In ở màn Poster QR, dán sảnh và

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { RatingForm } from './rating-form'
 import { Card, CardHead, Hop, PageHead, Pill, Trong, cx } from '@/components/ui'
 import { IcTrai } from '@/components/icons'
@@ -23,9 +23,9 @@ function when(iso: string) {
 
 export default async function TicketDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const supabase = await createClient()
+  const db = await createClient()
 
-  const { data: ticket } = await supabase
+  const { data: ticket } = await db
     .from('tickets')
     .select('id, title, description, category, priority, status, created_at, sla_respond_due, sla_resolve_due, responded_at, resolved_at, rating, rating_note, unit_id, photo_urls, units(code, buildings(name))')
     .eq('id', id)
@@ -34,11 +34,11 @@ export default async function TicketDetail({ params }: { params: Promise<{ id: s
 
   // BQL cũng thấy ticket này (policy ticket_resident_read có nhánh is_staff),
   // nhưng chấm điểm là việc của cư dân — không hiện form cho BQL.
-  const { data: myUnits } = await supabase.rpc('current_unit_ids')
+  const { data: myUnits } = await db.rpc('current_unit_ids')
   const isMember = (myUnits ?? []).includes(ticket.unit_id)
 
   // ticket_events chỉ đọc được nếu đọc được chính ticket (policy ticket_event_read).
-  const { data: events } = await supabase
+  const { data: events } = await db
     .from('ticket_events')
     .select('id, event_type, from_value, to_value, note, created_at')
     .eq('ticket_id', id)
@@ -47,13 +47,10 @@ export default async function TicketDetail({ params }: { params: Promise<{ id: s
   const overdue = !ticket.resolved_at && ticket.sla_resolve_due
     && new Date(ticket.sla_resolve_due) < new Date()
 
-  // Bucket riêng tư nên URL thẳng không xem được — phải ký, hạn 1 giờ.
-  // RLS của Storage vẫn là chốt chặn: ký hộ đường dẫn không phải căn mình thì
-  // Supabase từ chối ngay ở đây.
+  // Không ký URL: /api/anh hỏi lại quyền ở TỪNG lần xem. Một đường link ký sẵn
+  // thì ai chuyển tiếp được là xem được, và thu hồi quyền của một người không
+  // có tác dụng cho tới lúc chữ ký hết hạn.
   const photos = ticket.photo_urls ?? []
-  const { data: signed } = photos.length
-    ? await supabase.storage.from('ticket-photos').createSignedUrls(photos, 3600)
-    : { data: null }
 
   const tt = TT[ticket.status] ?? { nhan: ticket.status, tone: 'trung' as const }
 
@@ -95,29 +92,19 @@ export default async function TicketDetail({ params }: { params: Promise<{ id: s
         </Card>
       )}
 
-      {signed && signed.length > 0 && (
+      {photos.length > 0 && (
         <Card>
-          <CardHead title="Ảnh kèm theo" sub="Đường dẫn có chữ ký, hết hạn sau 1 giờ" />
+          <CardHead title="Ảnh kèm theo" sub="Chỉ người liên quan tới yêu cầu này xem được" />
           <div className="flex flex-wrap gap-2 p-4">
-            {signed.map((s, i) =>
-              s.signedUrl ? (
-                <a
-                  key={i} href={s.signedUrl} target="_blank" rel="noreferrer"
-                  className="overflow-hidden rounded-ctl border border-line transition-opacity hover:opacity-85"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={s.signedUrl} alt={`Ảnh ${i + 1}`} className="size-28 object-cover" />
-                </a>
-              ) : (
-                // Ký hụt (ảnh bị xóa, hoặc hết quyền) — nói ra thay vì hiện ô vỡ.
-                <span
-                  key={i}
-                  className="grid size-28 place-items-center rounded-ctl border border-dashed border-line-firm p-2 text-center text-[0.75rem] text-faint"
-                >
-                  Không mở được ảnh {i + 1}
-                </span>
-              ),
-            )}
+            {photos.map((d, i) => (
+              <a
+                key={d} href={`/api/anh/${d}`} target="_blank" rel="noreferrer"
+                className="overflow-hidden rounded-ctl border border-line transition-opacity hover:opacity-85"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/api/anh/${d}`} alt={`Ảnh ${i + 1}`} className="size-28 object-cover" />
+              </a>
+            ))}
           </div>
         </Card>
       )}

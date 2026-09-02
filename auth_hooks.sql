@@ -1,5 +1,6 @@
--- CHỈ chạy trên Supabase — cần schema auth.users và các role anon/authenticated
--- (không có ở Postgres thuần, nên file này không nằm trong npm run verify).
+-- Cần schema auth.users và ba role anon/authenticated/service_role. Trên
+-- Postgres thuần thì railway/00_compat.sql dựng sẵn chúng, nên file này chạy
+-- được nguyên văn ở cả hai nơi và nằm trong `npm run verify:railway`.
 -- Chạy sau schema.sql và seed.sql.
 
 -- Tạo profiles tự động khi có user mới, nếu không FK unit_memberships.user_id sẽ gãy.
@@ -33,6 +34,37 @@ revoke all on all sequences in schema public from anon, authenticated;
 alter default privileges in schema public revoke all on tables    from anon, authenticated;
 alter default privileges in schema public revoke all on sequences from anon, authenticated;
 
+-- ───────────────────── service_role: cấp lại nền của nó ──────────────────────
+-- BẪY, và là bẫy chỉ lộ ra khi rời Supabase: bên đó `service_role` được cấp
+-- sẵn mọi thứ bằng default privileges của họ. Trên Postgres thuần thì KHÔNG có
+-- gì cấp cho nó cả, mà `bypassrls` chỉ bỏ qua RLS — nó không cho quyền bảng.
+--
+-- Hai đường chết ngay nếu thiếu đoạn này, và cả hai đều im lặng cho tới lúc
+-- có tiền thật hoặc có hạn thật:
+--   • Webhook ngân hàng — `.from('projects')` rồi `.rpc('ghi_nhan_tien_ve')`.
+--     Trả 5xx, nhà cung cấp retry vài lần rồi bỏ, tiền của cư dân biến mất
+--     khỏi hệ thống.
+--   • Cả năm job nền qua /api/cron — nhắc nợ, leo thang ticket, thu hồi tư
+--     cách hết hạn, mở kỳ bảo trì, dọn mã. Không cái nào chạy, không cái nào
+--     kêu.
+-- Câu `revoke execute ... from public` bên dưới càng làm nặng thêm: nó gỡ luôn
+-- cái quyền PUBLIC mà service_role đang vô tình sống nhờ.
+--
+-- Cấp RỘNG, đúng bằng những gì Supabase vẫn cấp, chứ không liệt kê từng bảng.
+-- Liệt kê nghe có vẻ chặt hơn nhưng không mua được gì: role này đã bypassrls,
+-- và ai ký được token của nó thì cũng ký được token vai bất kỳ. Đổi lại, danh
+-- sách liệt kê nghĩa là mỗi tính năng mới đi qua đường admin sẽ hỏng bằng một
+-- lỗi 403 khó hiểu, phát hiện ở production — đúng kiểu hỏng vừa xảy ra.
+--
+-- An toàn nằm ở chỗ khác, và nằm ở ba lớp: khóa ký không có tiền tố
+-- NEXT_PUBLIC_ nên không vào bundle; createAdminClient ném lỗi nếu thấy mình
+-- chạy trong trình duyệt; token nó ký ra chỉ sống 60 giây.
+grant usage on schema public to service_role;
+grant all on all tables    in schema public to service_role;
+grant all on all sequences in schema public to service_role;
+alter default privileges in schema public grant all on tables    to service_role;
+alter default privileges in schema public grant all on sequences to service_role;
+
 -- ─────────────────────────── Cấp lại đúng phần cần ───────────────────────────
 -- Role `authenticated` của Supabase cần quyền bảng; RLS mới là lớp lọc dòng.
 -- anon giữ usage trên schema nhưng không có bảng nào -> PostgREST không trả dữ liệu.
@@ -53,6 +85,11 @@ grant select, insert, update on tickets to authenticated;
 grant select on staff_assignments to authenticated;
 -- Biểu phí và chỉ số công tơ: RLS quyết định ai ghi (chỉ BQL).
 grant insert, update, delete on fee_types to authenticated;
+-- SLA: policy sla_staff_write đã cho phép BQL ghi từ đầu, nhưng thiếu grant thì
+-- policy không bao giờ chạy tới — Postgres chặn ở tầng quyền bảng trước. Hệ quả
+-- không ai ngờ: danh mục sự cố ở màn báo hỏng của cư dân lấy từ chính bảng này,
+-- nên khu chưa có SLA là cư dân không gửi được yêu cầu nào.
+grant insert, update, delete on sla_policies to authenticated;
 grant select, insert, update, delete on meter_readings to authenticated;
 -- CỐ Ý không cấp update/insert trên invoices, invoice_lines, payments cho
 -- authenticated: đường tiền đi qua RPC definer (bql_generate_invoices,
@@ -63,15 +100,26 @@ grant select on ticket_events to authenticated;
 -- Không cấp insert/update/delete cho ai — ghi vào sổ tiền chỉ qua hàm definer.
 grant select on bank_transactions to authenticated;
 grant select on invoices, invoice_lines, announcements, notifications to authenticated;
+-- Sổ quỹ: policy payment_staff_read đã lọc xuống BQL của đúng dự án từ đầu,
+-- nhưng thiếu grant thì policy không bao giờ chạy tới — Postgres chặn ở tầng
+-- quyền bảng TRƯỚC. Đây là bảng thứ hai dính đúng cái bẫy đó sau sla_policies.
+--
+-- raw_payload giữ nguyên gói tin ngân hàng, có tên người chuyển; nhưng đó đúng
+-- là thứ BQL cần khi đối chiếu, và policy đã chặn cư dân. Cấp select ở đây là
+-- cùng một quyết định đã cấp cho bank_transactions ngay trên, không phải nới
+-- lỏng gì thêm. Vẫn KHÔNG cấp insert/update/delete: ghi vào bảng tiền chỉ đi
+-- qua hàm definer.
+grant select on payments to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
 grant insert, update, delete on announcements, documents to authenticated;
 -- KHÔNG cấp update trên notifications: đánh dấu đã đọc đi qua RPC
 -- mark_notifications_read để không ai sửa được nội dung thông báo của mình.
 
--- Không cấp gì trên profiles, staff_assignments, ticket_events, meter_readings,
+-- Không cấp GHI trên profiles, staff_assignments, ticket_events, meter_readings,
 -- payments, unit_vehicles, unit_pets: đây là dữ liệu cá nhân / tài chính / audit,
--- app đọc qua service_role ở phía server, client không đụng thẳng.
+-- sửa được là mất luôn ý nghĩa của việc lưu. Ghi vào chúng đi qua hàm definer
+-- hoặc service_role ở phía server, client không đụng thẳng.
 
 -- ──────────────────────────── EXECUTE trên function ──────────────────────────
 -- BẪY: Postgres mặc định cấp EXECUTE cho PUBLIC trên MỌI function mới (ACL hiện
@@ -79,6 +127,13 @@ grant insert, update, delete on announcements, documents to authenticated;
 -- KHÔNG đủ — nó chỉ xóa dòng thừa, PUBLIC vẫn cho tất cả gọi được. Phải revoke
 -- từ PUBLIC rồi cấp lại đúng chỗ cần.
 revoke execute on all functions in schema public from public, anon, authenticated;
+
+-- Cấp lại cho service_role NGAY SAU câu revoke ở trên, không phải trước: câu
+-- đó gỡ quyền của PUBLIC, mà service_role vốn chỉ gọi được hàm nhờ đúng cái
+-- quyền PUBLIC ấy. Đây là chỗ ghi_nhan_tien_ve và cả năm hàm job nền mất
+-- quyền, và không có gì báo cho tới khi ngân hàng bắn giao dịch đầu tiên.
+grant execute on all functions in schema public to service_role;
+alter default privileges in schema public grant execute on functions to service_role;
 
 -- Helper của RLS: policy gọi chúng dưới quyền chính người đang truy vấn, mất
 -- execute là policy tự lỗi permission denied và cư dân không đọc được gì.
@@ -105,6 +160,13 @@ grant execute on function bql_bo_qua_giao_dich(uuid, text) to authenticated;
 grant execute on function bql_cho_duyet_chu_ho(uuid)         to authenticated;
 grant execute on function bql_duyet_chu_ho_dau_tien(uuid)    to authenticated;
 grant execute on function bql_san_sang_go_live(uuid)          to authenticated;
+-- Quản lý người dùng. is_bql_manager là helper của các hàm dưới nhưng trang
+-- /bql/nguoi-dung cũng gọi thẳng để quyết định có hiện form tạo tài khoản không.
+grant execute on function is_bql_manager(uuid)                to authenticated;
+grant execute on function bql_danh_sach_nguoi_dung(uuid)      to authenticated;
+grant execute on function bql_gan_nhan_su(uuid, uuid, staff_role)   to authenticated;
+grant execute on function bql_ngung_nhan_su(uuid, uuid, staff_role) to authenticated;
+grant execute on function bql_gan_chu_ho_dau_tien(uuid, uuid)       to authenticated;
 
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là
@@ -139,3 +201,47 @@ alter table payments         force row level security;
 -- dưới quyền owner và phải ghi được vào bảng này, mà bảng cố ý không có policy
 -- ghi nào. Chốt chặn ở đây là GRANT — authenticated chỉ có select — cộng với
 -- policy đọc theo dự án.
+
+-- Sổ kiểm toán: chỉ ĐỌC, và RLS (audit_staff_read) lọc xuống dự án của người
+-- đó. Cố ý không cấp insert/update/delete cho bất kỳ ai, kể cả BQL — sổ mà
+-- người bị ghi sổ sửa được thì vô nghĩa. Trigger ghi_nhat_ky() chạy security
+-- definer nên vẫn ghi được.
+grant select on audit_log to authenticated;
+
+-- Bảo trì định kỳ: RLS (mp_staff / mr_staff) đã chốt xuống BQL của đúng dự án.
+-- Cấp đủ quyền ghi vì đây là bảng BQL tự quản lý — khác payments hay audit_log.
+grant select, insert, update, delete on maintenance_plans, maintenance_runs to authenticated;
+grant execute on function xong_bao_tri(uuid, text) to authenticated;
+
+-- Bình luận và thăm dò trên bảng tin.
+-- Cư dân VIẾT được bình luận nhưng KHÔNG sửa/xóa: sửa lời mình đã nói sau khi
+-- người khác trả lời là bẻ cong cả mạch hội thoại. Ẩn là quyền của BQL, và
+-- policy ac_bql đã chốt điều đó — grant update ở đây chưa đủ để cư dân sửa.
+grant select, insert, update on announcement_comments to authenticated;
+grant usage, select on sequence announcement_comments_id_seq to authenticated;
+grant select, insert, update, delete on announcement_polls to authenticated;
+grant select on announcement_votes to authenticated;
+-- KHÔNG cấp insert/update thẳng trên announcement_votes: bỏ phiếu đi qua
+-- bo_phieu() để một căn một phiếu và chốt "đã đóng" nằm ở một chỗ duy nhất.
+grant execute on function bo_phieu(uuid, uuid, int) to authenticated;
+grant execute on function ket_qua_tham_do(uuid) to authenticated;
+
+-- Thẻ cư dân. Hàm tự chốt is_staff BÊN TRONG, nên cấp cho authenticated ở đây
+-- không mở gì thêm: cư dân gọi được nhưng nhận về lỗi quyền. Cấp riêng cho
+-- role `security` thì không làm được — Postgres cấp quyền theo role đăng nhập,
+-- mà cả BQL lẫn bảo vệ đều đăng nhập dưới cùng một role `authenticated`; vai
+-- trò trong tòa nhà nằm ở staff_assignments, không nằm ở tầng Postgres.
+grant execute on function kiem_the(uuid, uuid) to authenticated;
+
+-- Chỗ đỗ xe. Cư dân ĐỌC được hạn mức của tòa mình — không thấy con số thì
+-- "còn 3 chỗ" chỉ là lời nói miệng và hàng chờ mất hết sức thuyết phục.
+-- KHÔNG cấp quyền ghi thẳng: mọi thay đổi đi qua hàm, vì thứ tự hàng chờ và
+-- phép đếm sức chứa là những thứ chỉ đúng khi làm trong một chỗ duy nhất.
+-- Policy bai_xe_staff vì thế không bao giờ chạy tới — giữ lại làm lớp chặn
+-- thứ hai cho ngày ai đó cấp thêm quyền ghi mà quên mất lý do ở đây.
+grant select on bai_xe to authenticated;
+grant execute on function dang_ky_xe(uuid, text, loai_xe, text) to authenticated;
+grant execute on function duyet_xe_tiep(uuid, loai_xe)          to authenticated;
+grant execute on function dat_han_muc_bai_xe(uuid, loai_xe, int, int, text) to authenticated;
+grant execute on function cho_do_cua_can(uuid)                  to authenticated;
+grant execute on function bai_xe_tong_quan(uuid)                to authenticated;

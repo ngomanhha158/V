@@ -1,6 +1,9 @@
-// SINH TỰ ĐỘNG TỪ DB. Sinh lại sau mỗi lần đổi schema:
-//   npx supabase gen types typescript --project-id upsfjlfonphyazbiwtov > lib/supabase/database.types.ts
-// (hoặc qua Supabase MCP: generate_typescript_types)
+// Kiểu của schema, khớp với schema.sql.
+//
+// Trước đây sinh tự động bằng `db gen types`. Hệ thống không còn chạy
+// trên Supabase nên không còn lệnh đó: sửa schema.sql thì sửa tay ở đây, rồi
+// chạy `npx tsc --noEmit`. Tẻ nhạt, nhưng cái mất là một lệnh tiện tay, còn
+// cái được là không còn phải trả tiền cho một nhà cung cấp để có kiểu dữ liệu.
 //
 // MỘT chỗ sửa tay, phải giữ lại sau mỗi lần sinh lại: bộ sinh khai mọi cột của
 // `returns table` là non-null, kể cả cột chắc chắn null được — avg/percentile
@@ -24,6 +27,279 @@ export type Database = {
   }
   public: {
     Tables: {
+      maintenance_plans: {
+        Row: {
+          bat_buoc_phap_ly: boolean
+          building_id: string | null
+          chu_ky_ngay: number
+          created_at: string
+          ghi_chu: string | null
+          han_ke_tiep: string
+          hang_muc: string
+          id: string
+          is_active: boolean
+          nha_thau: string | null
+          nhac_truoc_ngay: number
+          project_id: string
+          ten: string
+        }
+        Insert: {
+          bat_buoc_phap_ly?: boolean
+          building_id?: string | null
+          chu_ky_ngay: number
+          created_at?: string
+          ghi_chu?: string | null
+          han_ke_tiep: string
+          hang_muc: string
+          id?: string
+          is_active?: boolean
+          nha_thau?: string | null
+          nhac_truoc_ngay?: number
+          project_id: string
+          ten: string
+        }
+        Update: {
+          bat_buoc_phap_ly?: boolean
+          building_id?: string | null
+          chu_ky_ngay?: number
+          created_at?: string
+          ghi_chu?: string | null
+          han_ke_tiep?: string
+          hang_muc?: string
+          id?: string
+          is_active?: boolean
+          nha_thau?: string | null
+          nhac_truoc_ngay?: number
+          project_id?: string
+          ten?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_plans_building_id_fkey"
+            columns: ["building_id"]
+            isOneToOne: false
+            referencedRelation: "buildings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_plans_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maintenance_runs: {
+        Row: {
+          han: string
+          id: string
+          ket_qua: string | null
+          lam_luc: string | null
+          mo_luc: string
+          nguoi_lam: string | null
+          plan_id: string
+        }
+        Insert: {
+          han: string
+          id?: string
+          ket_qua?: string | null
+          lam_luc?: string | null
+          mo_luc?: string
+          nguoi_lam?: string | null
+          plan_id: string
+        }
+        Update: {
+          han?: string
+          id?: string
+          ket_qua?: string | null
+          lam_luc?: string | null
+          mo_luc?: string
+          nguoi_lam?: string | null
+          plan_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_runs_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "maintenance_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      announcement_comments: {
+        Row: {
+          an_boi: string | null
+          an_luc: string | null
+          an_ly_do: string | null
+          announcement_id: string
+          author_id: string
+          body: string
+          created_at: string
+          id: number
+          unit_id: string | null
+        }
+        Insert: {
+          an_boi?: string | null
+          an_luc?: string | null
+          an_ly_do?: string | null
+          announcement_id: string
+          author_id: string
+          body: string
+          created_at?: string
+          id?: number
+          unit_id?: string | null
+        }
+        Update: {
+          an_boi?: string | null
+          an_luc?: string | null
+          an_ly_do?: string | null
+          announcement_id?: string
+          author_id?: string
+          body?: string
+          created_at?: string
+          id?: number
+          unit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_comments_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "announcement_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "announcement_comments_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      announcement_polls: {
+        Row: {
+          announcement_id: string
+          cau_hoi: string
+          created_at: string
+          dong_luc: string | null
+          kin: boolean
+          lua_chon: string[]
+        }
+        Insert: {
+          announcement_id: string
+          cau_hoi: string
+          created_at?: string
+          dong_luc?: string | null
+          kin?: boolean
+          lua_chon: string[]
+        }
+        Update: {
+          announcement_id?: string
+          cau_hoi?: string
+          created_at?: string
+          dong_luc?: string | null
+          kin?: boolean
+          lua_chon?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_polls_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: true
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      announcement_votes: {
+        Row: {
+          bo_luc: string
+          chon: number
+          poll_id: string
+          unit_id: string
+          user_id: string
+        }
+        Insert: {
+          bo_luc?: string
+          chon: number
+          poll_id: string
+          unit_id: string
+          user_id: string
+        }
+        Update: {
+          bo_luc?: string
+          chon?: number
+          poll_id?: string
+          unit_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_votes_poll_id_fkey"
+            columns: ["poll_id"]
+            isOneToOne: false
+            referencedRelation: "announcement_polls"
+            referencedColumns: ["announcement_id"]
+          },
+        ]
+      }
+      audit_log: {
+        Row: {
+          actor_id: string | null
+          actor_role: string
+          at: string
+          ban_ghi: string
+          bang: string
+          id: number
+          project_id: string | null
+          sau: Json
+          thao_tac: string
+          truoc: Json
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_role: string
+          at?: string
+          ban_ghi: string
+          bang: string
+          id?: number
+          project_id?: string | null
+          sau?: Json
+          thao_tac: string
+          truoc?: Json
+        }
+        Update: {
+          actor_id?: string | null
+          actor_role?: string
+          at?: string
+          ban_ghi?: string
+          bang?: string
+          id?: number
+          project_id?: string | null
+          sau?: Json
+          thao_tac?: string
+          truoc?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcements: {
         Row: {
           author_id: string
@@ -249,6 +525,7 @@ export type Database = {
       }
       fee_types: {
         Row: {
+          loai_xe: Database["public"]["Enums"]["loai_xe"] | null
           calc_method: string
           code: string
           id: string
@@ -257,6 +534,7 @@ export type Database = {
           unit_price: number | null
         }
         Insert: {
+          loai_xe?: Database["public"]["Enums"]["loai_xe"] | null
           calc_method?: string
           code: string
           id?: string
@@ -265,6 +543,7 @@ export type Database = {
           unit_price?: number | null
         }
         Update: {
+          loai_xe?: Database["public"]["Enums"]["loai_xe"] | null
           calc_method?: string
           code?: string
           id?: string
@@ -930,18 +1209,48 @@ export type Database = {
           },
         ]
       }
+      bai_xe: {
+        Row: {
+          building_id: string
+          ghi_chu: string | null
+          loai: Database["public"]["Enums"]["loai_xe"]
+          moi_can: number
+          tong_cho: number
+        }
+        Insert: {
+          building_id: string
+          ghi_chu?: string | null
+          loai: Database["public"]["Enums"]["loai_xe"]
+          moi_can: number
+          tong_cho: number
+        }
+        Update: {
+          building_id?: string
+          ghi_chu?: string | null
+          loai?: Database["public"]["Enums"]["loai_xe"]
+          moi_can?: number
+          tong_cho?: number
+        }
+        Relationships: []
+      }
       unit_vehicles: {
         Row: {
           card_no: string | null
+          dang_ky_luc: string
           id: string
+          loai: Database["public"]["Enums"]["loai_xe"] | null
           plate: string
+          trang_thai: string
           unit_id: string
           vehicle_type: string | null
         }
         Insert: {
           card_no?: string | null
+          dang_ky_luc?: string
           id?: string
+          loai?: Database["public"]["Enums"]["loai_xe"] | null
           plate: string
+          trang_thai?: string
           unit_id: string
           vehicle_type?: string | null
         }
@@ -1008,6 +1317,103 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      // ── Lớp đăng nhập tự viết (railway/03_auth.sql) ──
+      // Thêm tay, không sinh máy: chỉ service_role gọi được, mà công cụ sinh
+      // kiểu thì chạy dưới quyền khác nên không nhìn thấy chúng.
+      auth_tim: { Args: { p_danh_tinh: string }; Returns: string | null }
+      auth_gui_ma: {
+        Args: { p_danh_tinh: string; p_ma: string }
+        Returns: { trang_thai: string; cho_giay: number }[]
+      }
+      auth_kiem_ma: {
+        Args: { p_danh_tinh: string; p_ma: string }
+        Returns: { trang_thai: string; uid: string | null }[]
+      }
+      auth_kiem_mat_khau: {
+        Args: { p_danh_tinh: string; p_mat_khau: string }
+        Returns: string | null
+      }
+      auth_tao_nguoi_dung: {
+        Args: { p_email: string; p_ho_ten: string; p_mat_khau: string; p_phone: string }
+        Returns: string
+      }
+      auth_dat_mat_khau: { Args: { p_mat_khau: string; p_uid: string }; Returns: boolean }
+      auth_xoa_nguoi_dung: { Args: { p_uid: string }; Returns: boolean }
+      auth_huy_ma: { Args: { p_danh_tinh: string }; Returns: boolean }
+      auth_don_ma: { Args: never; Returns: number }
+      dang_ky_xe: {
+        Args: {
+          p_bien_so: string
+          p_loai: Database["public"]["Enums"]["loai_xe"]
+          p_the?: string | null
+          p_unit: string
+        }
+        Returns: { trang_thai: string; vi_tri: number }[]
+      }
+      duyet_xe_tiep: {
+        Args: { p_building: string; p_loai: Database["public"]["Enums"]["loai_xe"] }
+        Returns: { bien_so: string; can: string }[]
+      }
+      dat_han_muc_bai_xe: {
+        Args: {
+          p_building: string
+          p_ghi_chu?: string | null
+          p_loai: Database["public"]["Enums"]["loai_xe"]
+          p_moi_can: number
+          p_tong_cho: number
+        }
+        Returns: number
+      }
+      cho_do_cua_can: {
+        Args: { p_unit: string }
+        Returns: {
+          loai: Database["public"]["Enums"]["loai_xe"]
+          da_dung: number
+          moi_can: number
+          co_han_muc: boolean
+          tong_cho: number
+          ca_toa_dang_dung: number
+          toi_dang_cho: number
+          vi_tri_dau: number
+          hang_cho_ca_toa: number
+          toi_qua_han_muc: number
+        }[]
+      }
+      bai_xe_tong_quan: {
+        Args: { p_project: string }
+        Returns: {
+          building_id: string
+          toa: string
+          loai: Database["public"]["Enums"]["loai_xe"]
+          co_han_muc: boolean
+          tong_cho: number
+          moi_can: number
+          dang_dung: number
+          hang_cho: number
+          qua_han_muc: number
+        }[]
+      }
+      kiem_the: {
+        Args: { p_uid: string; p_unit: string }
+        Returns: {
+          ho_ten: string | null
+          anh: string | null
+          can: string
+          toa: string
+          vai_tro: Database["public"]["Enums"]["unit_role"] | null
+          con_hieu_luc: boolean
+          ly_do: string
+        }[]
+      }
+
+      bql_gan_nhan_su: {
+        Args: {
+          p_project: string
+          p_role: Database["public"]["Enums"]["staff_role"]
+          p_user: string
+        }
+        Returns: undefined
+      }
       bql_generate_invoices: {
         Args: { p_period: string; p_project: string }
         Returns: number
@@ -1038,6 +1444,10 @@ export type Database = {
           // null khi chưa gạch vào căn nào.
           unit_code: string | null
         }[]
+      }
+      bql_gan_chu_ho_dau_tien: {
+        Args: { p_unit: string; p_user: string }
+        Returns: undefined
       }
       bql_gan_giao_dich: {
         Args: { p_txn: string; p_unit: string }
@@ -1076,6 +1486,14 @@ export type Database = {
         Args: { p_membership: string }
         Returns: Json
       }
+      bql_ngung_nhan_su: {
+        Args: {
+          p_project: string
+          p_role: Database["public"]["Enums"]["staff_role"]
+          p_user: string
+        }
+        Returns: undefined
+      }
       bql_san_sang_go_live: {
         Args: { p_project: string }
         Returns: {
@@ -1103,6 +1521,18 @@ export type Database = {
           ten_lien_he: string | null
           unit_code: string
           unit_id: string
+        }[]
+      }
+      bql_danh_sach_nguoi_dung: {
+        Args: { p_project: string }
+        Returns: {
+          can_ho: string[]
+          email: string
+          ho_ten: string
+          phone: string
+          tao_luc: string
+          user_id: string
+          vai_tro_bql: string[]
         }[]
       }
       bql_dashboard: {
@@ -1168,11 +1598,29 @@ export type Database = {
       }
       current_unit_ids: { Args: never; Returns: string[] }
       escalate_overdue_tickets: { Args: never; Returns: undefined }
+      remind_unpaid_invoices: { Args: never; Returns: number }
       expire_memberships: { Args: never; Returns: undefined }
       generate_invoices: {
         Args: { p_period: string; p_project: string }
         Returns: number
       }
+      xong_bao_tri: {
+        Args: { p_ket_qua?: string; p_run: string }
+        Returns: string
+      }
+      mo_ky_bao_tri: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      bo_phieu: {
+        Args: { p_chon: number; p_poll: string; p_unit: string }
+        Returns: undefined
+      }
+      ket_qua_tham_do: {
+        Args: { p_poll: string }
+        Returns: { chon: number; so_phieu: number }[]
+      }
+      is_bql_manager: { Args: { p_project: string }; Returns: boolean }
       is_staff: { Args: { p_project: string }; Returns: boolean }
       is_unit_manager: { Args: { p_unit: string }; Returns: boolean }
       rate_ticket: {
@@ -1183,6 +1631,7 @@ export type Database = {
     }
     Enums: {
       invoice_status: "draft" | "issued" | "partial" | "paid" | "void"
+      loai_xe: "o_to" | "xe_may" | "xe_dap" | "khac"
       member_status: "pending" | "active" | "revoked" | "expired"
       staff_role:
         | "bql_manager"
@@ -1329,6 +1778,7 @@ export const Constants = {
   public: {
     Enums: {
       invoice_status: ["draft", "issued", "partial", "paid", "void"],
+      loai_xe: ["o_to", "xe_may", "xe_dap", "khac"],
       member_status: ["pending", "active", "revoked", "expired"],
       staff_role: ["bql_manager", "bql_staff", "technician", "security", "bqt"],
       ticket_priority: ["low", "normal", "high", "urgent"],

@@ -1,5 +1,7 @@
--- VBuilding — Core schema (PostgreSQL 15 / Supabase)
--- Chạy: psql -f schema.sql  |  hoặc dán vào Supabase SQL Editor
+-- VBuilding — Core schema (PostgreSQL 15+)
+-- Chạy: psql -f schema.sql
+-- Trên Postgres thuần thì chạy railway/00_compat.sql trước: nó dựng auth.uid()
+-- và ba role mà các policy bên dưới đứng lên.
 -- Nguyên tắc: 3NF cho Master Data, RLS ở DB thay vì check quyền rải rác trong app.
 
 
@@ -48,7 +50,7 @@ create table units (
 create index on units (building_id, floor_no);
 
 -- ────────────────── 2. USERS / RESIDENT MATRIX ───────────────────────
--- Supabase: profiles.id = auth.users.id
+-- profiles.id = auth.users.id
 create table profiles (
   id          uuid primary key,
   full_name   text not null,
@@ -730,26 +732,35 @@ begin
      and i.period = p_period and i.status = 'draft';
 
   insert into invoice_lines (invoice_id, fee_type_id, description, quantity, unit_price, amount)
-  select i.id, f.id, f.name,
-         case f.calc_method
-           when 'per_m2'  then coalesce(u.area_m2, 0)
-           when 'metered' then coalesce(r.curr_index - r.prev_index, 0)
-           else 1
-         end as qty,
-         f.unit_price,
-         round(f.unit_price * case f.calc_method
-           when 'per_m2'  then coalesce(u.area_m2, 0)
-           when 'metered' then coalesce(r.curr_index - r.prev_index, 0)
-           else 1
-         end)::bigint
+  select i.id, f.id, f.name, q.so_luong, f.unit_price,
+         round(f.unit_price * q.so_luong)::bigint
     from invoices i
     join units u on u.id = i.unit_id
     join fee_types f on f.project_id = i.project_id
     left join meter_readings r
            on r.unit_id = u.id and r.fee_type_id = f.id and r.period = i.period
+    -- Số lượng tính MỘT lần rồi dùng cho cả cột quantity lẫn cột amount. Trước
+    -- đây cùng một biểu thức CASE viết hai lần, và hai bản sao của một công
+    -- thức TIỀN là chỗ chờ sẵn để sửa một bên rồi quên bên kia — hóa đơn ghi
+    -- 14 m³ mà tính tiền 12 m³ thì không có test nào của bảng này bắt được.
+    cross join lateral (
+      select case f.calc_method
+               when 'per_m2'  then coalesce(u.area_m2, 0)
+               when 'metered' then coalesce(r.curr_index - r.prev_index, 0)
+               -- Chỉ đếm xe ĐÃ DUYỆT. Thu tiền của một chiếc đang xếp hàng chờ
+               -- là thu tiền một chỗ đỗ chưa hề có.
+               when 'per_vehicle' then (
+                 select count(*) from unit_vehicles v
+                  where v.unit_id = u.id and v.trang_thai = 'da_duyet'
+                    and (f.loai_xe is null or v.loai = f.loai_xe))
+               else 1
+             end as so_luong
+    ) q
    where i.project_id = p_project and i.period = p_period and i.status = 'draft'
      -- không sinh dòng 0đ cho căn chưa có chỉ số công tơ
-     and (f.calc_method <> 'metered' or r.id is not null);
+     and (f.calc_method <> 'metered' or r.id is not null)
+     -- ...và không sinh dòng 0đ phí gửi xe cho căn không đăng ký chiếc nào
+     and (f.calc_method <> 'per_vehicle' or q.so_luong > 0);
 
   update invoices i set total_amount = coalesce(
       (select sum(l.amount) from invoice_lines l where l.invoice_id = i.id), 0)
@@ -1596,3 +1607,949 @@ begin
   insert into ticket_events (ticket_id, event_type, note)
   select id, 'escalated', 'Quá hạn SLA - tự động leo thang' from overdue;
 end $fn$;
+
+-- ─────────────────────── Quản lý người dùng (BQL) ────────────────────────────
+-- Vì sao cần: cư dân không tự đăng ký được — email/số điện thoại phải do BQL
+-- ghi nhận trước. Trước đây việc đó chỉ làm được bằng tay trong dashboard
+-- Supabase, nghĩa là mỗi lần thêm một hộ là một lần mở console quản trị ra.
+-- Và nó phụ thuộc vào việc gửi được thư mời, mà hạn thư mặc định là 2/giờ cho
+-- CẢ dự án.
+
+-- Quản lý người dùng chỉ dành cho TRƯỞNG BQL, không phải mọi nhân sự.
+-- is_staff() gộp cả bảo vệ và kỹ thuật — những người cần xem yêu cầu sửa chữa
+-- chứ không cần tạo được tài khoản cho người khác. Ai tạo được tài khoản thì
+-- tạo được tài khoản có quyền BQL, tức là tự nhân bản quyền của mình.
+create or replace function is_bql_manager(p_project uuid)
+returns boolean language sql stable security definer set search_path = public as $fn$
+  select exists (select 1 from staff_assignments
+                  where user_id = auth.uid() and project_id = p_project
+                    and role = 'bql_manager' and is_active);
+$fn$;
+
+-- Danh sách người dùng của một dự án: nhân sự BQL và cư dân trong cùng một bảng.
+-- CỐ Ý không đọc auth.users. Trạng thái đăng nhập (đã vào lần nào chưa, có mật
+-- khẩu chưa) lấy qua Admin API ở tầng ứng dụng: mở một hàm definer đọc
+-- auth.users là mở một cửa mà sai một dòng grant là lộ dữ liệu xác thực của
+-- toàn hệ thống, để đổi lấy một tiện lợi không đáng.
+create or replace function bql_danh_sach_nguoi_dung(p_project uuid)
+returns table (
+  user_id     uuid,
+  ho_ten      text,
+  email       text,
+  phone       text,
+  vai_tro_bql text[],
+  can_ho      text[],
+  tao_luc     timestamptz
+) language plpgsql stable security definer set search_path = public as $fn$
+begin
+  if not is_staff(p_project) then
+    raise exception 'Chi BQL cua du an nay moi xem duoc' using errcode = '42501';
+  end if;
+
+  return query
+  with nhan_su as (
+    select sa.user_id, array_agg(sa.role::text order by sa.role::text) as roles
+      from staff_assignments sa
+     where sa.project_id = p_project and sa.is_active
+     group by sa.user_id
+  ),
+  cu_dan as (
+    select m.user_id,
+           array_agg(u.code || ' (' || m.role::text || ')' order by u.code) as cans
+      from unit_memberships m
+      join units u     on u.id = m.unit_id
+      join buildings b on b.id = u.building_id
+     where b.project_id = p_project
+       and m.status = 'active'
+       and (m.valid_to is null or m.valid_to >= current_date)
+     group by m.user_id
+  )
+  select p.id, p.full_name, p.email, p.phone,
+         ns.roles, cd.cans, p.created_at
+    from profiles p
+    left join nhan_su ns on ns.user_id = p.id
+    left join cu_dan  cd on cd.user_id = p.id
+   -- Chỉ người CÓ liên hệ với dự án này. Thiếu mệnh đề này thì màn quản lý
+   -- người dùng của khu A liệt kê luôn cư dân khu B.
+   where ns.user_id is not null or cd.user_id is not null
+   order by (ns.user_id is null), p.full_name;
+end $fn$;
+
+-- Gán / thu hồi vai trò nhân sự. Đi qua RPC chứ không phải ghi thẳng bảng:
+-- chốt is_bql_manager nằm ở đây, một chỗ, thay vì rải trong từng server action.
+create or replace function bql_gan_nhan_su(p_user uuid, p_project uuid, p_role staff_role)
+returns void language plpgsql security definer set search_path = public as $fn$
+begin
+  if not is_bql_manager(p_project) then
+    raise exception 'Chi truong ban quan ly moi gan duoc nhan su' using errcode = '42501';
+  end if;
+  insert into staff_assignments (user_id, project_id, role, is_active)
+  values (p_user, p_project, p_role, true)
+  on conflict (user_id, project_id, role) do update set is_active = true;
+end $fn$;
+
+create or replace function bql_ngung_nhan_su(p_user uuid, p_project uuid, p_role staff_role)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare v_con int;
+begin
+  if not is_bql_manager(p_project) then
+    raise exception 'Chi truong ban quan ly moi thu hoi duoc nhan su' using errcode = '42501';
+  end if;
+
+  -- Không cho gỡ trưởng BQL cuối cùng. Gỡ được là khu không còn ai tạo được
+  -- tài khoản, không còn ai gán lại được quyền — và cửa duy nhất mở lại là
+  -- SQL editor của Supabase. Rất dễ xảy ra: người sắp nghỉ tự gỡ mình ra.
+  if p_role = 'bql_manager' then
+    select count(*) into v_con from staff_assignments
+     where project_id = p_project and role = 'bql_manager' and is_active
+       and user_id <> p_user;
+    if v_con = 0 then
+      raise exception 'Day la truong ban quan ly duy nhat cua du an' using errcode = '42501';
+    end if;
+  end if;
+
+  update staff_assignments set is_active = false
+   where user_id = p_user and project_id = p_project and role = p_role;
+end $fn$;
+
+-- Gán chủ hộ đầu tiên cho một căn, ngay lúc tạo tài khoản.
+--
+-- GIỮ NGUYÊN bất biến của bql_duyet_chu_ho_dau_tien: BQL chỉ mở được cánh cửa
+-- ĐẦU TIÊN của mỗi căn, và chỉ với vai trò chủ hộ. Người thuê, thành viên gia
+-- đình, người được ủy quyền vẫn do chính chủ hộ duyệt. Nếu để BQL gán ai vào
+-- căn nào cũng được thì toàn bộ lý do tồn tại của hàng chờ duyệt biến mất, và
+-- BQL tự thêm mình vào căn của cư dân được.
+create or replace function bql_gan_chu_ho_dau_tien(p_user uuid, p_unit uuid)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare v_project uuid; v_da_co int;
+begin
+  v_project := unit_project(p_unit);
+  if v_project is null then
+    raise exception 'Khong tim thay can ho' using errcode = '22023';
+  end if;
+  if not is_bql_manager(v_project) then
+    raise exception 'Chi truong ban quan ly moi gan duoc chu ho' using errcode = '42501';
+  end if;
+
+  select count(*) into v_da_co from unit_memberships
+   where unit_id = p_unit and status = 'active'
+     and role in ('owner','authorized')
+     and (valid_to is null or valid_to >= current_date);
+  if v_da_co > 0 then
+    raise exception 'Can nay da co chu ho, nguoi sau do chu ho tu duyet'
+      using errcode = '42501';
+  end if;
+
+  insert into unit_memberships (unit_id, user_id, role, status, approved_by, approved_at)
+  values (p_unit, p_user, 'owner', 'active', auth.uid(), now());
+end $fn$;
+
+-- ═══════════════════════ 10. NHẬT KÝ KIỂM TOÁN ═══════════════════════
+-- Câu hỏi mà sổ này trả lời: "ai đổi đơn giá phí quản lý hôm 12?", "ai gỡ
+-- quyền của chị Lan?", "hóa đơn này ai sửa thành đã trả?". Không có sổ thì câu
+-- trả lời là suy đoán, và lúc bàn giao giữa hai đơn vị quản lý thì suy đoán
+-- không đủ.
+--
+-- Viết bằng TRIGGER chứ không viết ở app, cùng lý do như ticket_events: nhiều
+-- nơi ghi vào các bảng này (màn BQL, webhook ngân hàng, cron, SQL editor) — để
+-- app tự log thì sớm muộn có nhánh quên log, mà một sổ kiểm toán thủng lỗ chỗ
+-- còn tệ hơn không có sổ, vì nó tạo cảm giác an toàn giả.
+
+create table audit_log (
+  id          bigserial primary key,
+  at          timestamptz not null default now(),
+  -- Ai. null = không có phiên đăng nhập (cron, webhook, service_role, SQL editor).
+  actor_id    uuid,
+  -- Vai trò hiệu lực lúc ghi. Không có cột này thì actor_id null là mơ hồ:
+  -- không phân biệt được cron chạy với người vào SQL editor gõ tay.
+  actor_role  text not null,
+  bang        text not null,
+  ban_ghi     text not null,             -- khóa chính, để text vì có bảng dùng bigint
+  thao_tac    text not null check (thao_tac in ('INSERT','UPDATE','DELETE')),
+  -- Phi chuẩn hóa có chủ ý: RLS phải lọc theo dự án, mà mỗi bảng lại có một
+  -- đường đi tới project khác nhau. Bắt policy tự lần đường là vừa mong manh
+  -- vừa chậm; trigger tính một lần lúc ghi thì rẻ hơn nhiều.
+  project_id  uuid references projects(id) on delete set null,
+  -- CHỈ những cột ĐỔI, không phải cả dòng. Chụp cả dòng hai lần thì sổ không
+  -- đọc được — người xem phải tự dò mắt xem cái gì khác. Và nó phình rất nhanh.
+  truoc       jsonb not null default '{}'::jsonb,
+  sau         jsonb not null default '{}'::jsonb
+);
+create index on audit_log (project_id, at desc);
+create index on audit_log (bang, ban_ghi, at desc);
+create index on audit_log (actor_id, at desc);
+
+-- Cột không bao giờ chép nội dung sang sổ. raw_payload giữ nguyên gói tin ngân
+-- hàng (có tên người chuyển), id_number là số CCCD, qr_payload dựng lại được
+-- mã thanh toán. Sổ kiểm toán vẫn ghi LÀ CÓ ĐỔI, chỉ không nhân bản giá trị —
+-- chép sang đây là tăng gấp đôi số nơi những thứ đó có thể rò ra.
+create or replace function audit_cot_an() returns text[]
+language sql immutable set search_path = public as $fn$
+  select array['raw_payload','id_number','qr_payload']::text[];
+$fn$;
+
+/*
+ * Trigger chung. Tham số duy nhất cho biết tìm project_id bằng đường nào:
+ *   'project_id'  — bảng có sẵn cột
+ *   'unit_id'     — đi qua unit_project()
+ *   'building_id' — đi qua building_project()
+ *   'invoice_id'  — đi qua invoices
+ *
+ * SECURITY DEFINER: `authenticated` KHÔNG được cấp quyền ghi audit_log (sổ mà
+ * người bị ghi sổ sửa được thì vô nghĩa), nên trigger phải chạy dưới quyền
+ * owner mới ghi được.
+ *
+ * Không bắt lỗi: nếu ghi sổ hỏng thì lệnh ghi dữ liệu cũng hỏng theo. Với dữ
+ * liệu tiền và quyền, một thay đổi không ghi được vào sổ là một thay đổi không
+ * nên xảy ra.
+ */
+create or replace function ghi_nhat_ky() returns trigger
+language plpgsql security definer set search_path = public as $fn$
+declare
+  v_cu    jsonb := case when tg_op = 'INSERT' then '{}'::jsonb else to_jsonb(old) end;
+  v_moi   jsonb := case when tg_op = 'DELETE' then '{}'::jsonb else to_jsonb(new) end;
+  v_hang  jsonb := case when tg_op = 'DELETE' then v_cu else v_moi end;
+  v_an    text[] := audit_cot_an();
+  v_duan  uuid;
+  v_truoc jsonb := '{}'::jsonb;
+  v_sau   jsonb := '{}'::jsonb;
+  k       text;
+begin
+  v_duan := case tg_argv[0]
+    when 'project_id'  then (v_hang->>'project_id')::uuid
+    when 'unit_id'     then unit_project((v_hang->>'unit_id')::uuid)
+    when 'building_id' then building_project((v_hang->>'building_id')::uuid)
+    when 'invoice_id'  then (select i.project_id from invoices i
+                              where i.id = (v_hang->>'invoice_id')::uuid)
+  end;
+
+  for k in select jsonb_object_keys(v_cu || v_moi) loop
+    if v_cu->k is distinct from v_moi->k then
+      if k = any (v_an) then
+        v_truoc := v_truoc || jsonb_build_object(k, to_jsonb('(đã ẩn)'::text));
+        v_sau   := v_sau   || jsonb_build_object(k, to_jsonb('(đã ẩn)'::text));
+      else
+        v_truoc := v_truoc || jsonb_build_object(k, v_cu->k);
+        v_sau   := v_sau   || jsonb_build_object(k, v_moi->k);
+      end if;
+    end if;
+  end loop;
+
+  -- UPDATE không đổi cột nào thì không ghi. Cron chạy 5 phút một lần mà lần nào
+  -- cũng đẻ một dòng "đã sửa, không có gì khác" là sổ ngập rác trong một tuần.
+  if tg_op = 'UPDATE' and v_truoc = '{}'::jsonb then
+    return new;
+  end if;
+
+  insert into audit_log (actor_id, actor_role, bang, ban_ghi, thao_tac, project_id, truoc, sau)
+  values (
+    auth.uid(),
+    -- current_user bên trong hàm definer trả về CHỦ hàm, không phải người gọi.
+    -- current_setting('role') mới là vai trò đang SET ROLE (PostgREST đặt thành
+    -- 'authenticated' hoặc 'service_role'); 'none' nghĩa là chưa SET ROLE.
+    coalesce(nullif(current_setting('role', true), 'none'), session_user),
+    tg_table_name, coalesce(v_hang->>'id', '?'), tg_op, v_duan, v_truoc, v_sau
+  );
+
+  return case when tg_op = 'DELETE' then old else new end;
+end $fn$;
+
+-- Chín bảng đáng ghi sổ: tiền, quyền, và những con số đẻ ra tiền. KHÔNG ghi
+-- notifications (rác), ticket_events (đã là sổ), meter_readings (đổi mỗi kỳ,
+-- và số cuối đã nằm trong hóa đơn).
+create trigger trg_audit_units after insert or update or delete on units
+  for each row execute function ghi_nhat_ky('building_id');
+create trigger trg_audit_memberships after insert or update or delete on unit_memberships
+  for each row execute function ghi_nhat_ky('unit_id');
+create trigger trg_audit_staff after insert or update or delete on staff_assignments
+  for each row execute function ghi_nhat_ky('project_id');
+create trigger trg_audit_fee_types after insert or update or delete on fee_types
+  for each row execute function ghi_nhat_ky('project_id');
+create trigger trg_audit_sla after insert or update or delete on sla_policies
+  for each row execute function ghi_nhat_ky('project_id');
+create trigger trg_audit_invoices after insert or update or delete on invoices
+  for each row execute function ghi_nhat_ky('project_id');
+create trigger trg_audit_invoice_lines after insert or update or delete on invoice_lines
+  for each row execute function ghi_nhat_ky('invoice_id');
+create trigger trg_audit_payments after insert or update or delete on payments
+  for each row execute function ghi_nhat_ky('unit_id');
+create trigger trg_audit_bank_txn after insert or update or delete on bank_transactions
+  for each row execute function ghi_nhat_ky('project_id');
+
+-- RLS: chỉ BQL của đúng dự án đọc được. Không có policy ghi nào cả — trigger
+-- chạy security definer nên nó vẫn ghi được, còn mọi role khác thì không.
+--
+-- KHÔNG force row level security, cùng lý do như bank_transactions: force áp
+-- cả lên chủ bảng, mà trigger definer chính là chạy dưới quyền chủ bảng — bật
+-- lên là trigger tự chặn chính nó và MỌI lệnh ghi vào chín bảng kia đều hỏng.
+alter table audit_log enable row level security;
+create policy audit_staff_read on audit_log for select using (is_staff(project_id));
+
+-- ═════════════════════ 11. BẢO TRÌ ĐỊNH KỲ ═════════════════════
+-- Thang máy, PCCC, bơm nước có hạn kiểm định theo luật. Quên hạn là bị phạt,
+-- và tệ hơn là mất an toàn. Đây là nhóm rủi ro có hậu quả nặng nhất trong
+-- vận hành, mà chi phí xây lại thấp vì hạ tầng cron đã có sẵn.
+--
+-- KHÔNG tự tạo ticket cho kỹ thuật, dù kế hoạch ban đầu định thế. tickets.unit_id
+-- là NOT NULL và tickets.reporter_id cũng vậy — mà "kiểm định thang máy tháp P1"
+-- không thuộc căn nào và không do ai báo. Nới hai ràng buộc đó là đụng vào RLS
+-- của luồng cư dân báo sự cố, thứ vừa mới thông lại. Nên lần bảo trì TỰ NÓ là
+-- việc: có người nhận, có trạng thái, hiện trên màn kỹ thuật. Sạch hơn là bẻ
+-- cong bảng ticket cho vừa.
+
+create table maintenance_plans (
+  id            uuid primary key default gen_random_uuid(),
+  project_id    uuid not null references projects(id) on delete cascade,
+  building_id   uuid references buildings(id) on delete cascade,   -- null = cả khu
+  ten           text not null,
+  hang_muc      text not null,            -- 'thang_may','pccc','bom_nuoc','dien','thang_bo','khac'
+  chu_ky_ngay   int  not null check (chu_ky_ngay between 1 and 3650),
+  han_ke_tiep   date not null,
+  nhac_truoc_ngay int not null default 7 check (nhac_truoc_ngay between 0 and 180),
+  -- Hạng mục bắt buộc theo luật thì quá hạn là bị phạt, không phải chỉ bất tiện.
+  -- Màn tô đỏ riêng nhóm này, và không cho tắt nhắc.
+  bat_buoc_phap_ly boolean not null default false,
+  nha_thau      text,
+  ghi_chu       text,
+  is_active     boolean not null default true,
+  created_at    timestamptz not null default now()
+);
+create index on maintenance_plans (project_id, is_active, han_ke_tiep);
+
+-- Mỗi hạn là một dòng. unique (plan_id, han) là chốt chống trùng: cron chạy
+-- lại (retry, hoặc hai bản sao cùng chạy) không đẻ ra hai lần bảo trì cho cùng
+-- một hạn. Cùng kiểu chốt như unique (unit_id, period) bên hóa đơn.
+create table maintenance_runs (
+  id          uuid primary key default gen_random_uuid(),
+  plan_id     uuid not null references maintenance_plans(id) on delete cascade,
+  han         date not null,
+  mo_luc      timestamptz not null default now(),
+  nguoi_lam   uuid references profiles(id),
+  lam_luc     timestamptz,               -- null = chưa làm xong
+  ket_qua     text,
+  unique (plan_id, han)
+);
+create index on maintenance_runs (plan_id, han desc);
+create index on maintenance_runs (lam_luc) where lam_luc is null;
+
+alter table maintenance_plans enable row level security;
+alter table maintenance_plans force row level security;
+create policy mp_staff on maintenance_plans for all
+  using (is_staff(project_id)) with check (is_staff(project_id));
+
+alter table maintenance_runs enable row level security;
+alter table maintenance_runs force row level security;
+create policy mr_staff on maintenance_runs for all
+  using (is_staff((select p.project_id from maintenance_plans p where p.id = plan_id)))
+  with check (is_staff((select p.project_id from maintenance_plans p where p.id = plan_id)));
+
+/*
+ * Mở lần bảo trì cho những kế hoạch đã tới cửa sổ nhắc. Chạy 1 lần/ngày.
+ *
+ * Chỉ mở, không đóng: đóng là việc của người làm. Trả về số lần vừa mở để
+ * job_run_details có con số đọc được thay vì chỉ "thành công".
+ */
+create or replace function mo_ky_bao_tri() returns int
+language plpgsql set search_path = public as $fn$
+declare v_n int;
+begin
+  with can_mo as (
+    select p.id, p.han_ke_tiep
+      from maintenance_plans p
+     where p.is_active
+       and p.han_ke_tiep - p.nhac_truoc_ngay <= current_date
+  )
+  insert into maintenance_runs (plan_id, han)
+  select id, han_ke_tiep from can_mo
+  -- Chốt chống trùng nằm ở unique (plan_id, han); on conflict để cron chạy lại
+  -- được mà không nổ. Bỏ dòng này thì một lần retry là cả job hỏng.
+  on conflict (plan_id, han) do nothing;
+  get diagnostics v_n = row_count;
+  return v_n;
+end $fn$;
+
+/*
+ * Đóng một lần bảo trì và dời hạn kế tiếp.
+ *
+ * Hạn mới = NGÀY LÀM THẬT + chu kỳ, không phải hạn cũ + chu kỳ.
+ *
+ * Với hạng mục kiểm định, giấy chứng nhận có hiệu lực tính từ ngày kiểm định
+ * chứ không từ ngày lẽ ra phải kiểm. Dời theo hạn cũ thì làm muộn 10 ngày là
+ * lần sau nhắc sớm hơn hạn giấy 10 ngày — nhắc thừa thì chỉ phiền, nhưng cùng
+ * công thức đó ở chiều ngược lại (giấy hết hạn trước khi nhắc) là bị phạt.
+ * Đổi lấy: đội làm muộn kinh niên sẽ thấy lịch trôi dần. Phiền, nhưng nhìn
+ * thấy được — khác với hết hạn giấy tờ mà không ai biết.
+ */
+create or replace function xong_bao_tri(p_run uuid, p_ket_qua text default null)
+returns date language plpgsql security definer set search_path = public as $fn$
+declare v_plan maintenance_plans; v_run maintenance_runs; v_han date;
+begin
+  select * into v_run from maintenance_runs where id = p_run;
+  if not found then
+    raise exception 'Khong co lan bao tri nay' using errcode = 'P0002';
+  end if;
+  select * into v_plan from maintenance_plans where id = v_run.plan_id;
+  if not is_staff(v_plan.project_id) then
+    raise exception 'Chi BQL cua du an nay moi dong duoc lan bao tri'
+      using errcode = '42501';
+  end if;
+  if v_run.lam_luc is not null then
+    raise exception 'Lan bao tri nay da dong roi' using errcode = '22023';
+  end if;
+
+  update maintenance_runs
+     set lam_luc = now(), nguoi_lam = auth.uid(), ket_qua = p_ket_qua
+   where id = p_run;
+
+  v_han := current_date + v_plan.chu_ky_ngay;
+  update maintenance_plans set han_ke_tiep = v_han where id = v_plan.id;
+  return v_han;
+end $fn$;
+
+-- ═══════════════ 12. BÌNH LUẬN VÀ THĂM DÒ TRÊN BẢNG TIN ═══════════════
+-- Thông báo đang là một chiều. Ý kiến cư dân vẫn nằm ở nhóm Zalo mà BQL không
+-- đọc hết được — và không lưu lại được để đối chiếu về sau.
+
+create table announcement_comments (
+  id              bigserial primary key,
+  announcement_id uuid not null references announcements(id) on delete cascade,
+  author_id       uuid not null references profiles(id) on delete cascade,
+  -- Căn của người viết, chốt tại lúc viết. Người đó có thể chuyển đi sau này,
+  -- nhưng bình luận vẫn phải đọc được là "căn nào nói câu này".
+  unit_id         uuid references units(id) on delete set null,
+  body            text not null check (length(btrim(body)) between 1 and 2000),
+  -- BQL ẨN chứ không XÓA. Xóa được là BQL xóa sạch lời chê mà không để lại dấu;
+  -- ẩn thì dòng vẫn còn, nhật ký kiểm toán vẫn ghi, và màn vẫn hiện "đã ẩn".
+  an_luc          timestamptz,
+  an_boi          uuid references profiles(id),
+  an_ly_do        text,
+  created_at      timestamptz not null default now()
+);
+create index on announcement_comments (announcement_id, created_at);
+
+create table announcement_polls (
+  -- unique: một thông báo một cuộc thăm dò. Hai cuộc trên cùng một thông báo là
+  -- người đọc không biết đang bỏ phiếu cho cái nào.
+  announcement_id uuid primary key references announcements(id) on delete cascade,
+  cau_hoi         text not null,
+  lua_chon        text[] not null check (array_length(lua_chon, 1) between 2 and 8),
+  -- Kín = giấu kết quả cho tới khi đóng. Hiện số đang chạy làm người bỏ sau
+  -- nghiêng theo số đông; nhưng giấu thì mất tính minh bạch. Để BQL chọn.
+  kin             boolean not null default false,
+  dong_luc        timestamptz,
+  created_at      timestamptz not null default now()
+);
+
+/*
+ * MỘT CĂN MỘT PHIẾU, không phải một người một phiếu.
+ *
+ * Đây là quyết định mô hình quan trọng nhất ở đây. Chung cư ra quyết định theo
+ * hộ: một căn có bốn người lớn đã đăng ký không được lấn phiếu căn chỉ có một.
+ * Khóa chính (poll_id, unit_id) làm điều đó thành bất biến của database chứ
+ * không phải một phép kiểm ở tầng app mà nhánh nào đó quên gọi.
+ *
+ * Đây là thăm dò KHÔNG chính thức trên bảng tin. Biểu quyết hội nghị nhà chung
+ * cư là chuyện khác — có trọng số theo diện tích, có biên bản — và là một tính
+ * năng riêng.
+ */
+create table announcement_votes (
+  poll_id   uuid not null references announcement_polls(announcement_id) on delete cascade,
+  unit_id   uuid not null references units(id) on delete cascade,
+  user_id   uuid not null references profiles(id) on delete cascade,
+  chon      int  not null check (chon >= 0),
+  bo_luc    timestamptz not null default now(),
+  primary key (poll_id, unit_id)
+);
+create index on announcement_votes (poll_id, chon);
+
+alter table announcement_comments enable row level security;
+alter table announcement_polls    enable row level security;
+alter table announcement_votes    enable row level security;
+
+/*
+ * Ai thấy thông báo thì thấy bình luận của thông báo đó — dùng lại đúng policy
+ * announcement_read qua một truy vấn con, không chép lại luật hiển thị. Chép
+ * lại là hai bộ luật, và sớm muộn sửa một bên quên bên kia.
+ *
+ * Bình luận đã ẩn: chỉ BQL còn thấy nội dung. Cư dân thấy dòng trống chỗ (màn
+ * hiện "đã ẩn") chứ không thấy bình luận biến mất không dấu vết.
+ */
+create policy ac_read on announcement_comments for select using (
+  announcement_id in (select id from announcements)
+);
+create policy ac_viet on announcement_comments for insert with check (
+  author_id = auth.uid()
+  and announcement_id in (select id from announcements)
+  and (unit_id is null or unit_id in (select current_unit_ids()))
+);
+-- Sửa/ẩn: BQL của dự án chứa thông báo đó. Cư dân KHÔNG sửa được lời mình đã
+-- nói — sửa sau khi người khác đã trả lời là bẻ cong cả mạch hội thoại.
+create policy ac_bql on announcement_comments for update using (
+  is_staff((select a.project_id from announcements a where a.id = announcement_id))
+) with check (
+  is_staff((select a.project_id from announcements a where a.id = announcement_id))
+);
+
+create policy ap_read on announcement_polls for select using (
+  announcement_id in (select id from announcements)
+);
+create policy ap_bql on announcement_polls for all using (
+  is_staff((select a.project_id from announcements a where a.id = announcement_id))
+) with check (
+  is_staff((select a.project_id from announcements a where a.id = announcement_id))
+);
+
+-- Phiếu: đọc được thì đếm được. Cuộc thăm dò KÍN che kết quả ở tầng hàm
+-- ket_qua_tham_do() chứ không ở tầng RLS — che bằng RLS thì chính người bỏ
+-- phiếu cũng không đọc lại được phiếu của mình.
+create policy av_read on announcement_votes for select using (
+  poll_id in (select announcement_id from announcement_polls)
+);
+create policy av_bo on announcement_votes for all using (
+  unit_id in (select current_unit_ids())
+) with check (
+  unit_id in (select current_unit_ids())
+);
+
+/*
+ * Bỏ phiếu, hoặc đổi phiếu đã bỏ.
+ *
+ * Đổi được cho tới khi đóng là CỐ Ý: người ta đọc bình luận rồi mới nghĩ lại,
+ * mà đó chính là lý do đặt thăm dò cạnh phần thảo luận. Khóa phiếu đầu tiên
+ * thì phần thảo luận chỉ còn để trang trí.
+ */
+create or replace function bo_phieu(p_poll uuid, p_unit uuid, p_chon int)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare v_poll announcement_polls;
+begin
+  select * into v_poll from announcement_polls where announcement_id = p_poll;
+  if not found then
+    raise exception 'Khong co cuoc tham do nay' using errcode = 'P0002';
+  end if;
+  if v_poll.dong_luc is not null and v_poll.dong_luc <= now() then
+    raise exception 'Cuoc tham do da dong' using errcode = '22023';
+  end if;
+  if p_chon < 0 or p_chon >= array_length(v_poll.lua_chon, 1) then
+    raise exception 'Lua chon khong hop le' using errcode = '22023';
+  end if;
+  if p_unit not in (select current_unit_ids()) then
+    raise exception 'Ban khong thuoc can ho nay' using errcode = '42501';
+  end if;
+
+  insert into announcement_votes (poll_id, unit_id, user_id, chon)
+  values (p_poll, p_unit, auth.uid(), p_chon)
+  on conflict (poll_id, unit_id)
+  do update set chon = excluded.chon, user_id = excluded.user_id, bo_luc = now();
+end $fn$;
+
+/*
+ * Kết quả: số phiếu theo từng lựa chọn.
+ *
+ * Cuộc KÍN chưa đóng thì chỉ BQL thấy số. Cư dân nhận về mảng rỗng — màn hiện
+ * "kết quả công bố khi đóng" chứ không hiện 0 phiếu, vì 0 phiếu là một con số
+ * sai chứ không phải một lời từ chối.
+ */
+create or replace function ket_qua_tham_do(p_poll uuid)
+returns table (chon int, so_phieu bigint)
+language plpgsql stable security definer set search_path = public as $fn$
+declare v_poll announcement_polls; v_project uuid;
+begin
+  select * into v_poll from announcement_polls where announcement_id = p_poll;
+  if not found then return; end if;
+  select a.project_id into v_project from announcements a where a.id = p_poll;
+
+  if v_poll.kin and (v_poll.dong_luc is null or v_poll.dong_luc > now())
+     and not is_staff(v_project) then
+    return;
+  end if;
+
+  return query
+    select v.chon, count(*)::bigint from announcement_votes v
+     where v.poll_id = p_poll group by v.chon;
+end $fn$;
+
+-- ══════════════════════ 13. THẺ CƯ DÂN ĐIỆN TỬ ══════════════════════
+-- Thẻ từ mất là phải làm lại, mất phí và mất thời gian. Nặng hơn: người thuê
+-- trả nhà rồi vẫn còn thẻ vào được, vì thu hồi thẻ nhựa là một việc phải NHỚ
+-- LÀM, mà không ai nhớ.
+--
+-- Thẻ điện tử đảo ngược điều đó: mã QR trên máy cư dân chỉ nói "người này, căn
+-- này, còn hiệu lực 60 giây". Việc "có được vào không" hỏi lại đúng hàm dưới
+-- đây MỖI LẦN QUÉT. Hợp đồng thuê hết hạn thì valid_to đã qua, thẻ chết ngay
+-- lần quét kế tiếp — không phải chờ ai nhớ ra.
+--
+-- KHÔNG có bảng ghi lượt quét, cố ý. Sổ ra vào là tính năng riêng (QR khách
+-- thăm), và một bảng lần-lượt-ai-đi-qua-cửa-nào là dữ liệu theo dõi đường đi
+-- của cư dân: nó cần chính sách lưu trữ, cần RLS riêng, cần nói với cư dân là
+-- có. Dựng nó như một tác dụng phụ của tính năng thẻ là dựng lén.
+
+create or replace function kiem_the(p_uid uuid, p_unit uuid)
+returns table (
+  ho_ten text, anh text, can text, toa text,
+  vai_tro unit_role, con_hieu_luc boolean, ly_do text
+)
+language plpgsql stable security definer set search_path = public as $fn$
+declare
+  v_du_an uuid;
+  v_can   record;
+  v_tv    record;
+begin
+  select u.id, u.code, b.name as toa, b.project_id
+    into v_can
+    from units u join buildings b on b.id = u.building_id
+   where u.id = p_unit;
+  if not found then
+    raise exception 'khong co can ho nay' using errcode = 'P0002';
+  end if;
+  v_du_an := v_can.project_id;
+
+  -- Chỉ nhân sự của ĐÚNG dự án đó mới tra được thẻ. Thiếu chốt này thì bất kỳ
+  -- ai đăng nhập cũng dựng được một trang quét và tra ra họ tên cư dân của mọi
+  -- khu chỉ bằng cách đoán id căn hộ.
+  if not is_staff(v_du_an) then
+    raise exception 'chi nhan su cua du an moi tra duoc the' using errcode = '42501';
+  end if;
+
+  -- Ưu tiên dòng ĐANG hiệu lực. Một người có thể có nhiều dòng cho cùng một
+  -- căn: thuê một kỳ, nghỉ, rồi thuê lại. Lấy bừa dòng đầu tiên là có lúc đọc
+  -- trúng hợp đồng cũ và từ chối một người đang ở thật.
+  select m.role, m.status, m.valid_from, m.valid_to,
+         (m.status = 'active'
+          and m.valid_from <= current_date
+          and (m.valid_to is null or m.valid_to >= current_date)) as con
+    into v_tv
+    from unit_memberships m
+   where m.unit_id = p_unit and m.user_id = p_uid
+   order by (m.status = 'active'
+             and m.valid_from <= current_date
+             and (m.valid_to is null or m.valid_to >= current_date)) desc,
+            m.valid_from desc
+   limit 1;
+
+  return query
+  select p.full_name, p.avatar_url, v_can.code, v_can.toa,
+         v_tv.role,
+         coalesce(v_tv.con, false),
+         case
+           when v_tv is null                     then 'khong_thuoc'
+           when v_tv.con                         then 'ok'
+           when v_tv.status = 'revoked'          then 'da_thu_hoi'
+           when v_tv.status = 'pending'          then 'cho_duyet'
+           when v_tv.valid_to < current_date     then 'het_han'
+           when v_tv.valid_from > current_date   then 'chua_toi_han'
+           else 'ngung'
+         end
+    from profiles p where p.id = p_uid;
+end $fn$;
+
+-- ══════════════════════ 14. CHỖ ĐỖ XE VÀ HÀNG CHỜ ══════════════════════
+-- Hầm để xe luôn thiếu chỗ. Không có hạn mức theo căn thì hộ đăng ký trước
+-- chiếm hết, và người đến sau không có cách nào biết mình đang đứng thứ mấy —
+-- nên họ gọi điện hỏi BQL, mỗi tuần một lần.
+--
+-- Hai ràng buộc khác nhau, phải tách bạch:
+--   • moi_can  — CÔNG BẰNG. Một hộ không được ôm năm chỗ ô tô.
+--   • tong_cho — VẬT LÝ. Hầm có bấy nhiêu chỗ thì có bấy nhiêu.
+-- Gộp làm một là lúc BQL muốn nới cho một hộ thì phải sửa luôn sức chứa hầm.
+--
+-- Và vì thế có HAI kiểu chờ, không phải một:
+--   • hang_cho     — chờ hầm có chỗ. Xếp theo giờ đăng ký, gọi lần lượt.
+--   • qua_han_muc  — vượt hạn mức của chính căn mình. Chờ BQL nới, không phải
+--                    chờ hầm.
+-- Nhét chung một hàng thì chiếc xe thứ hai của một hộ đã kín hạn mức sẽ đứng
+-- đầu hàng vĩnh viễn: không bao giờ gọi lên được, mà cũng chặn luôn mọi người
+-- phía sau. Con số "bạn đứng thứ 14" khi đó là một lời nói dối.
+
+do $$ begin
+  create type loai_xe as enum ('o_to', 'xe_may', 'xe_dap', 'khac');
+exception when duplicate_object then null; end $$;
+
+create table if not exists bai_xe (
+  building_id uuid not null references buildings(id) on delete cascade,
+  loai        loai_xe not null,
+  tong_cho    int not null check (tong_cho >= 0),
+  moi_can     int not null check (moi_can >= 0),
+  ghi_chu     text,
+  primary key (building_id, loai)
+);
+
+-- Cột thêm cho bảng xe đã có. `add column if not exists` chứ không dựng lại
+-- bảng: khu đang chạy đã có dữ liệu xe thật trong đó.
+alter table unit_vehicles add column if not exists loai loai_xe;
+alter table unit_vehicles add column if not exists trang_thai text not null default 'da_duyet';
+-- clock_timestamp() chứ KHÔNG phải now(): now() trả về giờ MỞ TRANSACTION, nên
+-- hai lượt đăng ký trong cùng một transaction nhận đúng một mốc thời gian và
+-- hàng chờ mất thứ tự — lúc đó ai đứng trước chỉ còn phụ thuộc vào uuid ngẫu
+-- nhiên. Với một cái hàng mà cả tính năng dựng lên để giữ công bằng thì đó là
+-- hỏng ở đúng chỗ quan trọng nhất.
+alter table unit_vehicles add column if not exists dang_ky_luc timestamptz not null default clock_timestamp();
+alter table unit_vehicles alter column dang_ky_luc set default clock_timestamp();
+do $$ begin
+  alter table unit_vehicles add constraint xe_trang_thai
+    check (trang_thai in ('da_duyet', 'hang_cho', 'qua_han_muc'));
+exception when duplicate_object then null; end $$;
+
+-- Xếp hàng theo GIỜ ĐĂNG KÝ — đó là toàn bộ lời hứa công bằng của tính năng
+-- này. Chỉ số để câu "tôi đứng thứ mấy" trả lời được mà không quét cả bảng.
+create index if not exists xe_hang_cho on unit_vehicles (loai, dang_ky_luc)
+  where trang_thai = 'hang_cho';
+
+-- Chuyển dữ liệu cũ: `vehicle_type` là text tự do nên có đủ kiểu viết, mà đếm
+-- hạn mức thì không đếm được trên text tự do. Từ nay `loai` là nguồn sự thật
+-- duy nhất; cột cũ giữ lại vì nó chứa nguyên văn thứ người ta đã gõ, nhưng app
+-- không ghi vào nó nữa.
+update unit_vehicles set loai = case
+    when vehicle_type is null then 'khac'
+    when lower(vehicle_type) ~ 'ô ?tô|o ?to|oto|car|hơi|hoi' then 'o_to'
+    when lower(vehicle_type) ~ 'máy|may|moto|motor|scooter' then 'xe_may'
+    when lower(vehicle_type) ~ 'đạp|dap|bike|bicycle' then 'xe_dap'
+    else 'khac' end::loai_xe
+ where loai is null;
+
+alter table bai_xe enable row level security;
+-- Cư dân ĐỌC được hạn mức của tòa: không thấy con số thì "còn 3 chỗ" chỉ là
+-- lời nói miệng, và hàng chờ mất hết sức thuyết phục.
+create policy bai_xe_read on bai_xe for select
+  using (building_project(building_id) is not null);
+create policy bai_xe_staff on bai_xe for all
+  using (is_staff(building_project(building_id)))
+  with check (is_staff(building_project(building_id)));
+
+-- ─────────────────────────── ĐĂNG KÝ MỘT CHIẾC XE ───────────────────────────
+-- Trả ('da_duyet', 0) | ('hang_cho', <vị trí>) | ('qua_han_muc', 0).
+--
+-- SECURITY DEFINER vì nó phải ĐẾM xe của cả tòa để biết còn chỗ không, mà RLS
+-- chỉ cho cư dân thấy xe của căn mình. Không có nó thì mọi hộ đều tưởng hầm
+-- còn trống.
+create or replace function dang_ky_xe(
+  p_unit uuid, p_bien_so text, p_loai loai_xe, p_the text default null)
+returns table (trang_thai text, vi_tri int)
+language plpgsql volatile security definer set search_path = public as $fn$
+declare v_toa uuid; v_ch record; v_cua_can int; v_ca_toa int; v_id uuid; v_tt text;
+begin
+  if not is_unit_manager(p_unit) then
+    raise exception 'chi chu ho hoac nguoi duoc uy quyen moi dang ky xe' using errcode = '42501';
+  end if;
+  select u.building_id into v_toa from units u where u.id = p_unit;
+  if v_toa is null then raise exception 'khong co can ho nay' using errcode = 'P0002'; end if;
+  if coalesce(trim(p_bien_so), '') = '' then
+    raise exception 'thieu bien so' using errcode = '23514';
+  end if;
+
+  select * into v_ch from bai_xe b where b.building_id = v_toa and b.loai = p_loai;
+
+  if not found then
+    -- BQL chưa đặt hạn mức cho loại xe này. GHI NHẬN chứ không từ chối: một hệ
+    -- thống chặn hết vì thiếu một dòng cấu hình thì tệ hơn hẳn một hệ thống ghi
+    -- lại rồi để BQL dọn sau. Màn bãi xe của BQL nói rõ tòa nào chưa đặt.
+    v_tt := 'da_duyet';
+  else
+    select count(*) into v_cua_can from unit_vehicles v
+     where v.unit_id = p_unit and v.loai = p_loai and v.trang_thai = 'da_duyet';
+    select count(*) into v_ca_toa from unit_vehicles v join units u on u.id = v.unit_id
+     where u.building_id = v_toa and v.loai = p_loai and v.trang_thai = 'da_duyet';
+    v_tt := case
+      when v_cua_can >= v_ch.moi_can  then 'qua_han_muc'
+      when v_ca_toa  >= v_ch.tong_cho then 'hang_cho'
+      else 'da_duyet' end;
+  end if;
+
+  insert into unit_vehicles (unit_id, plate, loai, card_no, trang_thai)
+  values (p_unit, upper(trim(p_bien_so)), p_loai, nullif(trim(p_the), ''), v_tt)
+  returning id into v_id;
+
+  return query
+  select v_tt, case when v_tt <> 'hang_cho' then 0 else (
+    select count(*)::int from unit_vehicles v
+     join units u on u.id = v.unit_id
+     join unit_vehicles t on t.id = v_id
+     where u.building_id = v_toa and v.loai = p_loai and v.trang_thai = 'hang_cho'
+       and (v.dang_ky_luc, v.id) <= (t.dang_ky_luc, t.id)
+  ) end;
+end $fn$;
+
+-- ──────────────────── GỌI NGƯỜI ĐẦU HÀNG CHỜ KHI CÓ CHỖ ─────────────────────
+-- Nhận TÒA và LOẠI xe, không nhận id chiếc xe — cố ý. Nhận id thì BQL chọn được
+-- ai lên trước, và cái hàng chờ vốn sinh ra để công bằng trở thành danh sách
+-- xin-cho. Ai không cần nữa thì tự rút, người kế tiếp thành người đầu hàng.
+create or replace function duyet_xe_tiep(p_building uuid, p_loai loai_xe)
+returns table (bien_so text, can text)
+language plpgsql volatile security definer set search_path = public as $fn$
+declare v_du_an uuid; v_id uuid; v_unit uuid; v_ch record; v_ca_toa int; v_cua_can int;
+begin
+  v_du_an := building_project(p_building);
+  if v_du_an is null then raise exception 'khong co toa nay' using errcode = 'P0002'; end if;
+  if not is_staff(v_du_an) then
+    raise exception 'chi ban quan ly moi duyet hang cho' using errcode = '42501';
+  end if;
+
+  select * into v_ch from bai_xe b where b.building_id = p_building and b.loai = p_loai;
+  if not found then raise exception 'toa nay chua dat han muc cho loai xe do' using errcode = 'P0002'; end if;
+
+  select count(*) into v_ca_toa from unit_vehicles v join units u on u.id = v.unit_id
+   where u.building_id = p_building and v.loai = p_loai and v.trang_thai = 'da_duyet';
+  if v_ca_toa >= v_ch.tong_cho then
+    -- Duyệt khi chưa có chỗ là bán một chỗ không tồn tại, và người ta xuống hầm
+    -- rồi mới biết.
+    raise exception 'chua con cho trong' using errcode = '23514';
+  end if;
+
+  -- Đi từ đầu hàng xuống. Căn nào trong lúc chờ đã kín hạn mức (BQL siết
+  -- moi_can, hoặc căn đó vừa được duyệt một chiếc khác) thì ĐẨY SANG
+  -- qua_han_muc chứ không dừng cả hàng lại ở đó.
+  for v_id, v_unit in
+    select v.id, v.unit_id from unit_vehicles v join units u on u.id = v.unit_id
+     where u.building_id = p_building and v.loai = p_loai and v.trang_thai = 'hang_cho'
+     order by v.dang_ky_luc, v.id
+  loop
+    select count(*) into v_cua_can from unit_vehicles v
+     where v.unit_id = v_unit and v.loai = p_loai and v.trang_thai = 'da_duyet';
+    if v_cua_can >= v_ch.moi_can then
+      update unit_vehicles set trang_thai = 'qua_han_muc' where id = v_id;
+    else
+      update unit_vehicles set trang_thai = 'da_duyet' where id = v_id;
+      return query select v.plate, u.code from unit_vehicles v
+        join units u on u.id = v.unit_id where v.id = v_id;
+      return;
+    end if;
+  end loop;
+
+  raise exception 'hang cho dang trong' using errcode = 'P0002';
+end $fn$;
+
+-- ───────────────────── ĐẶT HẠN MỨC, VÀ XÉT LẠI HÀNG CHỜ ─────────────────────
+-- Nới moi_can mà không xét lại thì những chiếc đang `qua_han_muc` nằm đó mãi:
+-- chúng không nằm trong hàng chờ nên duyet_xe_tiep() không bao giờ nhìn tới, và
+-- chủ xe thì thấy trạng thái đứng yên sau khi BQL đã hứa nới. GIỮ NGUYÊN
+-- dang_ky_luc khi chuyển sang hàng chờ — họ đã đợi từ hôm đó, không phải hôm nay.
+create or replace function dat_han_muc_bai_xe(
+  p_building uuid, p_loai loai_xe, p_tong_cho int, p_moi_can int, p_ghi_chu text default null)
+returns int
+language plpgsql volatile security definer set search_path = public as $fn$
+declare v_du_an uuid; n int;
+begin
+  v_du_an := building_project(p_building);
+  if v_du_an is null then raise exception 'khong co toa nay' using errcode = 'P0002'; end if;
+  if not is_staff(v_du_an) then
+    raise exception 'chi ban quan ly moi dat han muc' using errcode = '42501';
+  end if;
+  if p_tong_cho < 0 or p_moi_can < 0 then
+    raise exception 'so cho khong the am' using errcode = '23514';
+  end if;
+
+  insert into bai_xe (building_id, loai, tong_cho, moi_can, ghi_chu)
+  values (p_building, p_loai, p_tong_cho, p_moi_can, nullif(trim(p_ghi_chu), ''))
+  on conflict (building_id, loai) do update
+    set tong_cho = excluded.tong_cho, moi_can = excluded.moi_can, ghi_chu = excluded.ghi_chu;
+
+  with dem as (
+    select v.id, row_number() over (partition by v.unit_id order by v.dang_ky_luc, v.id)
+           + (select count(*) from unit_vehicles w
+               where w.unit_id = v.unit_id and w.loai = p_loai and w.trang_thai = 'da_duyet') as thu
+      from unit_vehicles v join units u on u.id = v.unit_id
+     where u.building_id = p_building and v.loai = p_loai and v.trang_thai = 'qua_han_muc'
+  )
+  update unit_vehicles x set trang_thai = 'hang_cho'
+    from dem d where d.id = x.id and d.thu <= p_moi_can;
+  get diagnostics n = row_count;
+  return n;
+end $fn$;
+
+-- ─────────────────── TÌNH TRẠNG CHỖ ĐỖ CỦA MỘT CĂN (cư dân) ─────────────────
+-- Một dòng cho mỗi loại xe mà tòa có đặt hạn mức, HOẶC căn đang có xe loại đó.
+-- Không liệt kê cả bốn loại: dòng "xe đạp 0/0" ở một tòa không quản lý xe đạp
+-- chỉ làm người đọc tưởng mình bị cấm để xe đạp.
+--
+-- SECURITY DEFINER vì nó đếm xe của CẢ TÒA để trả lời "còn mấy chỗ" và "tôi
+-- đứng thứ mấy", mà RLS chỉ cho cư dân thấy xe của căn mình. Chốt quyền nằm
+-- ngay đầu hàm.
+create or replace function cho_do_cua_can(p_unit uuid)
+returns table (
+  loai loai_xe, da_dung int, moi_can int, co_han_muc boolean,
+  tong_cho int, ca_toa_dang_dung int,
+  toi_dang_cho int, vi_tri_dau int, hang_cho_ca_toa int, toi_qua_han_muc int
+)
+language plpgsql stable security definer set search_path = public as $fn$
+declare v_toa uuid;
+begin
+  select u.building_id into v_toa from units u where u.id = p_unit;
+  if v_toa is null then raise exception 'khong co can ho nay' using errcode = 'P0002'; end if;
+  if not (p_unit in (select current_unit_ids()) or is_staff(building_project(v_toa))) then
+    raise exception 'khong xem duoc cho do cua can khac' using errcode = '42501';
+  end if;
+
+  return query
+  with co as (
+    select b.loai from bai_xe b where b.building_id = v_toa
+    union
+    select v.loai from unit_vehicles v where v.unit_id = p_unit and v.loai is not null
+  )
+  select
+    c.loai,
+    (select count(*)::int from unit_vehicles v
+      where v.unit_id = p_unit and v.loai = c.loai and v.trang_thai = 'da_duyet'),
+    coalesce(b.moi_can, 0),
+    (b.building_id is not null),
+    coalesce(b.tong_cho, 0),
+    (select count(*)::int from unit_vehicles v join units u on u.id = v.unit_id
+      where u.building_id = v_toa and v.loai = c.loai and v.trang_thai = 'da_duyet'),
+    (select count(*)::int from unit_vehicles v
+      where v.unit_id = p_unit and v.loai = c.loai and v.trang_thai = 'hang_cho'),
+    -- Vị trí của chiếc SỚM NHẤT căn này đang chờ. Căn không chờ gì thì min() ra
+    -- null, phép so sánh thành null, kết quả 0 — đúng nghĩa "không đứng hàng nào".
+    (select count(*)::int from unit_vehicles v join units u on u.id = v.unit_id
+      where u.building_id = v_toa and v.loai = c.loai and v.trang_thai = 'hang_cho'
+        and v.dang_ky_luc <= (select min(x.dang_ky_luc) from unit_vehicles x
+                               where x.unit_id = p_unit and x.loai = c.loai
+                                 and x.trang_thai = 'hang_cho')),
+    (select count(*)::int from unit_vehicles v join units u on u.id = v.unit_id
+      where u.building_id = v_toa and v.loai = c.loai and v.trang_thai = 'hang_cho'),
+    (select count(*)::int from unit_vehicles v
+      where v.unit_id = p_unit and v.loai = c.loai and v.trang_thai = 'qua_han_muc')
+  from co c left join bai_xe b on b.building_id = v_toa and b.loai = c.loai
+  order by c.loai;
+end $fn$;
+
+-- ───────────────────── TOÀN CẢNH BÃI XE CỦA DỰ ÁN (BQL) ─────────────────────
+-- Liệt kê cả những loại xe ĐANG CÓ mà tòa chưa đặt hạn mức — đó chính là chỗ
+-- BQL cần nhìn thấy: dang_ky_xe() cho qua khi chưa có cấu hình, nên một tòa
+-- quên đặt hạn mức sẽ âm thầm nhận xe không giới hạn cho tới lúc hầm đầy thật.
+create or replace function bai_xe_tong_quan(p_project uuid)
+returns table (
+  building_id uuid, toa text, loai loai_xe, co_han_muc boolean,
+  tong_cho int, moi_can int, dang_dung int, hang_cho int, qua_han_muc int
+)
+language plpgsql stable security definer set search_path = public as $fn$
+begin
+  if not is_staff(p_project) then
+    raise exception 'chi ban quan ly moi xem duoc bai xe' using errcode = '42501';
+  end if;
+  return query
+  with co as (
+    select b.building_id, b.loai from bai_xe b
+     join buildings g on g.id = b.building_id where g.project_id = p_project
+    union
+    select u.building_id, v.loai from unit_vehicles v
+     join units u on u.id = v.unit_id
+     join buildings g on g.id = u.building_id
+     where g.project_id = p_project and v.loai is not null
+  )
+  select c.building_id, g.name, c.loai,
+         (b.building_id is not null), coalesce(b.tong_cho, 0), coalesce(b.moi_can, 0),
+         (select count(*)::int from unit_vehicles v join units u on u.id = v.unit_id
+           where u.building_id = c.building_id and v.loai = c.loai and v.trang_thai = 'da_duyet'),
+         (select count(*)::int from unit_vehicles v join units u on u.id = v.unit_id
+           where u.building_id = c.building_id and v.loai = c.loai and v.trang_thai = 'hang_cho'),
+         (select count(*)::int from unit_vehicles v join units u on u.id = v.unit_id
+           where u.building_id = c.building_id and v.loai = c.loai and v.trang_thai = 'qua_han_muc')
+    from co c
+    join buildings g on g.id = c.building_id
+    left join bai_xe b on b.building_id = c.building_id and b.loai = c.loai
+   order by g.code, c.loai;
+end $fn$;
+
+-- ──────────────────── PHÍ GỬI XE TÍNH THEO ĐẦU XE ĐÃ DUYỆT ──────────────────
+-- calc_method mới: 'per_vehicle' (xử lý trong generate_invoices ở §6).
+-- fee_types.loai_xe nói loại nào được đếm — để trống là đếm tất cả, thường
+-- không phải điều người ta muốn, nên màn biểu phí bắt chọn.
+alter table fee_types add column if not exists loai_xe loai_xe;

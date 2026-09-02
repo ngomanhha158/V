@@ -1,8 +1,7 @@
 'use client'
 import { useActionState, useState } from 'react'
 import { createTicket, type NewTicketState } from './actions'
-import { createClient } from '@/lib/supabase/client'
-import { compressImage, photoPath } from '@/lib/photo'
+import { compressImage } from '@/lib/photo'
 import { Button, Field, Hop, Input, Select, Textarea, cx } from '@/components/ui'
 import { IcXong } from '@/components/icons'
 
@@ -27,7 +26,6 @@ export function NewTicketForm({ units, categories }: { units: Unit[]; categories
     if (!unitId) { setPhotoError('Chọn căn hộ trước khi thêm ảnh.'); return }
 
     setUploading(true); setPhotoError(null)
-    const supabase = createClient()
     const done: string[] = []
     for (const f of files) {
       const blob = await compressImage(f)
@@ -35,12 +33,18 @@ export function NewTicketForm({ units, categories }: { units: Unit[]; categories
         setPhotoError(`Ảnh "${f.name}" vẫn lớn hơn 5MB sau khi nén, bỏ qua.`)
         continue
       }
-      const path = photoPath(unitId, blob)
-      // RLS của Storage chặn nếu đoạn đầu đường dẫn không phải căn của mình.
-      const { error } = await supabase.storage.from('ticket-photos')
-        .upload(path, blob, { contentType: blob.type, upsert: false })
-      if (error) { setPhotoError(`Không tải được "${f.name}": ${error.message}`); continue }
-      done.push(path)
+      // Tên file do MÁY CHỦ đặt, không gửi tên gốc lên: tên người dùng đặt có
+      // thể mang dấu gạch chéo và trở thành một đường dẫn khác trên đĩa.
+      const fd = new FormData()
+      fd.set('unit', unitId)
+      fd.set('anh', blob, 'anh')
+      const r = await fetch('/api/anh', { method: 'POST', body: fd }).catch(() => null)
+      const j = (await r?.json().catch(() => null)) as { duong?: string; loi?: string } | null
+      if (!r?.ok || !j?.duong) {
+        setPhotoError(`Không tải được "${f.name}": ${j?.loi ?? 'mất kết nối'}`)
+        continue
+      }
+      done.push(j.duong)
     }
     setPaths((p) => [...p, ...done])
     setUploading(false)

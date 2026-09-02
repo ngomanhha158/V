@@ -4,26 +4,30 @@
   "type": "module",
   "scripts": {
     "verify": "node scripts/verify-schema.mjs",
+    "verify:railway": "node scripts/verify-railway.mjs",
+    "verify:http": "node --experimental-strip-types scripts/verify-http.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "test:js": "node --experimental-strip-types --test \"lib/**/*.test.ts\"",
-    "test": "npm run verify && npm run test:js"
+    "test": "npm run verify && npm run verify:railway && npm run test:js"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.16",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.3.0",
+    "@types/nodemailer": "^8.0.1",
     "@types/react": "^19.2.18",
+    "playwright": "^1.62.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.5",
-    "@supabase/supabase-js": "^2.112.4",
+    "@supabase/postgrest-js": "^2.113.0",
     "@types/qrcode": "^1.5.6",
     "exceljs": "^4.4.0",
     "next": "^16.3.3",
+    "nodemailer": "^9.1.1",
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

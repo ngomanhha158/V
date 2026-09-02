@@ -8,7 +8,8 @@ import { dirname, join } from 'node:path'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const db = new PGlite()
 
-// Supabase có sẵn schema auth + auth.uid(). Local phải stub trước khi apply RLS policies.
+// Bài này cố ý chạy schema.sql ĐỘC LẬP, không có lớp tương thích: stub auth.uid()
+// tối thiểu rồi thôi. Bản đầy đủ nằm ở scripts/verify-railway.mjs.
 await db.exec(`
   create schema if not exists auth;
   create or replace function auth.uid() returns uuid language sql stable as $fn$
@@ -28,7 +29,7 @@ async function run(file) {
 }
 
 // test_rls.sql chạy cuối: nó SET ROLE + FORCE RLS, ảnh hưởng các test sau nếu chạy trước.
-const files = ['schema.sql', 'seed.sql', 'test_billing.sql', 'test_tickets.sql', 'test_jobs.sql', 'test_dashboard.sql', 'test_doisoat.sql', 'test_golive.sql', 'test_rls.sql']
+const files = ['schema.sql', 'seed.sql', 'test_billing.sql', 'test_tickets.sql', 'test_jobs.sql', 'test_dashboard.sql', 'test_doisoat.sql', 'test_golive.sql', 'test_nguoidung.sql', 'test_nhatky.sql', 'test_baotri.sql', 'test_banggop.sql', 'test_the.sql', 'test_xe.sql', 'test_rls.sql']
 let ok = true
 for (const f of files) ok = (await run(f)) && ok
 process.exit(ok ? 0 : 1)
