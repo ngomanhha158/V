@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardHead, Hop, PageHead, Pill, Trong } from '@/components/ui'
@@ -61,8 +62,10 @@ export default async function BieuPhiPage() {
             : `${thieuDienTich} trên ${tongCan} căn chưa có diện tích.`}
           {' '}Phí tính <strong>theo mét vuông</strong> nhân với diện tích của căn, nên những
           căn thiếu sẽ ra <strong>0 đồng</strong> — hóa đơn vẫn phát bình thường, chỉ là
-          không thu được gì. Nhập diện tích ở màn <strong>Nhập từ Excel</strong> trước khi
-          phát hóa đơn kỳ đầu.
+          không thu được gì. Nhập diện tích ở màn{' '}
+          <Link href="/bql/can-ho" className="font-semibold underline">Căn hộ</Link>{' '}
+          trước khi phát hóa đơn kỳ đầu. (Màn Nhập từ Excel không sửa được: nó chỉ thêm
+          căn mới, và từ chối mã căn đã có.)
         </Hop>
       )}
 

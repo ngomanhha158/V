@@ -105,3 +105,11 @@ export const IcSang = (p: SVGProps<SVGSVGElement>) => (
 export const IcToi = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" /></I>
 )
+
+/** Lưới ô: từng căn một. Khác IcToaNha ở chỗ đó vẽ cả tòa, đây vẽ các căn bên trong. */
+export const IcCanHo = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+  </I>
+)

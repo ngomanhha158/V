@@ -3,8 +3,8 @@ import type { ReactNode } from 'react'
 import { NavDoc } from './nav-link'
 import { ThemeToggle } from './theme-toggle'
 import {
-  IcBieuDo, IcCheck, IcDoiSoat, IcHoaDon, IcLoa, IcNguoi, IcNha, IcNhap, IcQR, IcSach,
-  IcTien, IcToaNha, IcYeuCau,
+  IcBieuDo, IcCanHo, IcCheck, IcDoiSoat, IcHoaDon, IcLoa, IcNguoi, IcNha, IcNhap, IcQR,
+  IcSach, IcTien, IcToaNha, IcYeuCau,
 } from '@/components/icons'
 
 /** Nhãn nhóm. Ẩn trên điện thoại: hàng ngang không diễn đạt được phân cấp,
@@ -54,7 +54,8 @@ export function BqlShell({
 
       <Muc nhan="Dữ liệu" />
       <NavDoc href={`${base}/bql/nguoi-dung`} icon={<IcNguoi />}>Người dùng & phân quyền</NavDoc>
-      <NavDoc href={`${base}/bql`} icon={<IcToaNha />} chinhXac>Tòa nhà & căn hộ</NavDoc>
+      <NavDoc href={`${base}/bql`} icon={<IcToaNha />} chinhXac>Tòa nhà</NavDoc>
+      <NavDoc href={`${base}/bql/can-ho`} icon={<IcCanHo />}>Căn hộ & diện tích</NavDoc>
       <NavDoc href={`${base}/bql/import`} icon={<IcNhap />}>Nhập từ Excel</NavDoc>
       <NavDoc href={base || '/'} icon={<IcNha />} chinhXac>Về màn cư dân</NavDoc>
     </>

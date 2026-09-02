@@ -554,3 +554,44 @@ export const SLA: SlaDemo[] = [
 export const SO_TICKET_THEO_DANH_MUC: Record<string, number> = {
   'Thang máy': 14, 'Mất nước': 6, 'Điện, chiếu sáng': 23, 'Vệ sinh': 9, 'An ninh': 2,
 }
+
+export type CanHoDemo = {
+  id: string
+  code: string
+  toa: string
+  floor_no: number
+  area_m2: number | null
+  kind: string
+  state: string
+}
+
+/**
+ * Căn hộ của bản demo.
+ *
+ * Cố ý để một phần chưa có diện tích: màn thật sinh ra chính vì tình huống đó —
+ * khu đã nhập đủ căn nhưng chưa nhập diện tích, và phí theo m² lặng lẽ ra 0
+ * đồng. Bản demo mà căn nào cũng đủ diện tích thì giấu mất việc màn này làm.
+ */
+export const CAN_HO: CanHoDemo[] = [
+  { id: 'ch-1',  code: 'P1-08.01', toa: 'P1', floor_no: 8,  area_m2: 96.4, kind: 'apartment', state: 'owner_occupied' },
+  { id: 'ch-2',  code: 'P1-08.02', toa: 'P1', floor_no: 8,  area_m2: 62,   kind: 'apartment', state: 'rented' },
+  { id: 'ch-3',  code: 'P1-08.03', toa: 'P1', floor_no: 8,  area_m2: 62,   kind: 'apartment', state: 'owner_occupied' },
+  { id: 'ch-4',  code: 'P1-08.04', toa: 'P1', floor_no: 8,  area_m2: null, kind: 'apartment', state: 'vacant' },
+  { id: 'ch-5',  code: 'P1-10.01', toa: 'P1', floor_no: 10, area_m2: 96.4, kind: 'apartment', state: 'owner_occupied' },
+  { id: 'ch-6',  code: 'P1-10.02', toa: 'P1', floor_no: 10, area_m2: null, kind: 'apartment', state: 'rented' },
+  { id: 'ch-7',  code: 'P1-10.03', toa: 'P1', floor_no: 10, area_m2: null, kind: 'apartment', state: 'vacant' },
+  { id: 'ch-8',  code: 'P1-12.04', toa: 'P1', floor_no: 12, area_m2: null, kind: 'apartment', state: 'vacant' },
+  { id: 'ch-9',  code: 'P2-03.07', toa: 'P2', floor_no: 3,  area_m2: 78.5, kind: 'apartment', state: 'vacant' },
+  { id: 'ch-10', code: 'P2-08.05', toa: 'P2', floor_no: 8,  area_m2: 78.5, kind: 'apartment', state: 'owner_occupied' },
+  { id: 'ch-11', code: 'P2-08.06', toa: 'P2', floor_no: 8,  area_m2: null, kind: 'apartment', state: 'vacant' },
+  { id: 'ch-12', code: 'P2-01.01', toa: 'P2', floor_no: 1,  area_m2: 145,  kind: 'shophouse', state: 'rented' },
+  { id: 'ch-13', code: 'P3-02.01', toa: 'P3', floor_no: 2,  area_m2: null, kind: 'apartment', state: 'rented' },
+  { id: 'ch-14', code: 'P3-15.02', toa: 'P3', floor_no: 15, area_m2: null, kind: 'apartment', state: 'vacant' },
+  { id: 'ch-15', code: 'P3-25.01', toa: 'P3', floor_no: 25, area_m2: 210,  kind: 'penthouse', state: 'owner_occupied' },
+]
+
+export const TOA_NHA_DEMO = [
+  { code: 'P1', name: 'Tháp Sông' },
+  { code: 'P2', name: 'Tháp Vườn' },
+  { code: 'P3', name: 'Tháp Nắng' },
+]
