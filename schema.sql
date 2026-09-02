@@ -1732,3 +1732,144 @@ begin
   insert into unit_memberships (unit_id, user_id, role, status, approved_by, approved_at)
   values (p_unit, p_user, 'owner', 'active', auth.uid(), now());
 end $fn$;
+
+-- ═══════════════════════ 10. NHẬT KÝ KIỂM TOÁN ═══════════════════════
+-- Câu hỏi mà sổ này trả lời: "ai đổi đơn giá phí quản lý hôm 12?", "ai gỡ
+-- quyền của chị Lan?", "hóa đơn này ai sửa thành đã trả?". Không có sổ thì câu
+-- trả lời là suy đoán, và lúc bàn giao giữa hai đơn vị quản lý thì suy đoán
+-- không đủ.
+--
+-- Viết bằng TRIGGER chứ không viết ở app, cùng lý do như ticket_events: nhiều
+-- nơi ghi vào các bảng này (màn BQL, webhook ngân hàng, cron, SQL editor) — để
+-- app tự log thì sớm muộn có nhánh quên log, mà một sổ kiểm toán thủng lỗ chỗ
+-- còn tệ hơn không có sổ, vì nó tạo cảm giác an toàn giả.
+
+create table audit_log (
+  id          bigserial primary key,
+  at          timestamptz not null default now(),
+  -- Ai. null = không có phiên đăng nhập (cron, webhook, service_role, SQL editor).
+  actor_id    uuid,
+  -- Vai trò hiệu lực lúc ghi. Không có cột này thì actor_id null là mơ hồ:
+  -- không phân biệt được cron chạy với người vào SQL editor gõ tay.
+  actor_role  text not null,
+  bang        text not null,
+  ban_ghi     text not null,             -- khóa chính, để text vì có bảng dùng bigint
+  thao_tac    text not null check (thao_tac in ('INSERT','UPDATE','DELETE')),
+  -- Phi chuẩn hóa có chủ ý: RLS phải lọc theo dự án, mà mỗi bảng lại có một
+  -- đường đi tới project khác nhau. Bắt policy tự lần đường là vừa mong manh
+  -- vừa chậm; trigger tính một lần lúc ghi thì rẻ hơn nhiều.
+  project_id  uuid references projects(id) on delete set null,
+  -- CHỈ những cột ĐỔI, không phải cả dòng. Chụp cả dòng hai lần thì sổ không
+  -- đọc được — người xem phải tự dò mắt xem cái gì khác. Và nó phình rất nhanh.
+  truoc       jsonb not null default '{}'::jsonb,
+  sau         jsonb not null default '{}'::jsonb
+);
+create index on audit_log (project_id, at desc);
+create index on audit_log (bang, ban_ghi, at desc);
+create index on audit_log (actor_id, at desc);
+
+-- Cột không bao giờ chép nội dung sang sổ. raw_payload giữ nguyên gói tin ngân
+-- hàng (có tên người chuyển), id_number là số CCCD, qr_payload dựng lại được
+-- mã thanh toán. Sổ kiểm toán vẫn ghi LÀ CÓ ĐỔI, chỉ không nhân bản giá trị —
+-- chép sang đây là tăng gấp đôi số nơi những thứ đó có thể rò ra.
+create or replace function audit_cot_an() returns text[]
+language sql immutable set search_path = public as $fn$
+  select array['raw_payload','id_number','qr_payload']::text[];
+$fn$;
+
+/*
+ * Trigger chung. Tham số duy nhất cho biết tìm project_id bằng đường nào:
+ *   'project_id'  — bảng có sẵn cột
+ *   'unit_id'     — đi qua unit_project()
+ *   'building_id' — đi qua building_project()
+ *   'invoice_id'  — đi qua invoices
+ *
+ * SECURITY DEFINER: `authenticated` KHÔNG được cấp quyền ghi audit_log (sổ mà
+ * người bị ghi sổ sửa được thì vô nghĩa), nên trigger phải chạy dưới quyền
+ * owner mới ghi được.
+ *
+ * Không bắt lỗi: nếu ghi sổ hỏng thì lệnh ghi dữ liệu cũng hỏng theo. Với dữ
+ * liệu tiền và quyền, một thay đổi không ghi được vào sổ là một thay đổi không
+ * nên xảy ra.
+ */
+create or replace function ghi_nhat_ky() returns trigger
+language plpgsql security definer set search_path = public as $fn$
+declare
+  v_cu    jsonb := case when tg_op = 'INSERT' then '{}'::jsonb else to_jsonb(old) end;
+  v_moi   jsonb := case when tg_op = 'DELETE' then '{}'::jsonb else to_jsonb(new) end;
+  v_hang  jsonb := case when tg_op = 'DELETE' then v_cu else v_moi end;
+  v_an    text[] := audit_cot_an();
+  v_duan  uuid;
+  v_truoc jsonb := '{}'::jsonb;
+  v_sau   jsonb := '{}'::jsonb;
+  k       text;
+begin
+  v_duan := case tg_argv[0]
+    when 'project_id'  then (v_hang->>'project_id')::uuid
+    when 'unit_id'     then unit_project((v_hang->>'unit_id')::uuid)
+    when 'building_id' then building_project((v_hang->>'building_id')::uuid)
+    when 'invoice_id'  then (select i.project_id from invoices i
+                              where i.id = (v_hang->>'invoice_id')::uuid)
+  end;
+
+  for k in select jsonb_object_keys(v_cu || v_moi) loop
+    if v_cu->k is distinct from v_moi->k then
+      if k = any (v_an) then
+        v_truoc := v_truoc || jsonb_build_object(k, to_jsonb('(đã ẩn)'::text));
+        v_sau   := v_sau   || jsonb_build_object(k, to_jsonb('(đã ẩn)'::text));
+      else
+        v_truoc := v_truoc || jsonb_build_object(k, v_cu->k);
+        v_sau   := v_sau   || jsonb_build_object(k, v_moi->k);
+      end if;
+    end if;
+  end loop;
+
+  -- UPDATE không đổi cột nào thì không ghi. Cron chạy 5 phút một lần mà lần nào
+  -- cũng đẻ một dòng "đã sửa, không có gì khác" là sổ ngập rác trong một tuần.
+  if tg_op = 'UPDATE' and v_truoc = '{}'::jsonb then
+    return new;
+  end if;
+
+  insert into audit_log (actor_id, actor_role, bang, ban_ghi, thao_tac, project_id, truoc, sau)
+  values (
+    auth.uid(),
+    -- current_user bên trong hàm definer trả về CHỦ hàm, không phải người gọi.
+    -- current_setting('role') mới là vai trò đang SET ROLE (PostgREST đặt thành
+    -- 'authenticated' hoặc 'service_role'); 'none' nghĩa là chưa SET ROLE.
+    coalesce(nullif(current_setting('role', true), 'none'), session_user),
+    tg_table_name, coalesce(v_hang->>'id', '?'), tg_op, v_duan, v_truoc, v_sau
+  );
+
+  return case when tg_op = 'DELETE' then old else new end;
+end $fn$;
+
+-- Chín bảng đáng ghi sổ: tiền, quyền, và những con số đẻ ra tiền. KHÔNG ghi
+-- notifications (rác), ticket_events (đã là sổ), meter_readings (đổi mỗi kỳ,
+-- và số cuối đã nằm trong hóa đơn).
+create trigger trg_audit_units after insert or update or delete on units
+  for each row execute function ghi_nhat_ky('building_id');
+create trigger trg_audit_memberships after insert or update or delete on unit_memberships
+  for each row execute function ghi_nhat_ky('unit_id');
+create trigger trg_audit_staff after insert or update or delete on staff_assignments
+  for each row execute function ghi_nhat_ky('project_id');
+create trigger trg_audit_fee_types after insert or update or delete on fee_types
+  for each row execute function ghi_nhat_ky('project_id');
+create trigger trg_audit_sla after insert or update or delete on sla_policies
+  for each row execute function ghi_nhat_ky('project_id');
+create trigger trg_audit_invoices after insert or update or delete on invoices
+  for each row execute function ghi_nhat_ky('project_id');
+create trigger trg_audit_invoice_lines after insert or update or delete on invoice_lines
+  for each row execute function ghi_nhat_ky('invoice_id');
+create trigger trg_audit_payments after insert or update or delete on payments
+  for each row execute function ghi_nhat_ky('unit_id');
+create trigger trg_audit_bank_txn after insert or update or delete on bank_transactions
+  for each row execute function ghi_nhat_ky('project_id');
+
+-- RLS: chỉ BQL của đúng dự án đọc được. Không có policy ghi nào cả — trigger
+-- chạy security definer nên nó vẫn ghi được, còn mọi role khác thì không.
+--
+-- KHÔNG force row level security, cùng lý do như bank_transactions: force áp
+-- cả lên chủ bảng, mà trigger definer chính là chạy dưới quyền chủ bảng — bật
+-- lên là trigger tự chặn chính nó và MỌI lệnh ghi vào chín bảng kia đều hỏng.
+alter table audit_log enable row level security;
+create policy audit_staff_read on audit_log for select using (is_staff(project_id));

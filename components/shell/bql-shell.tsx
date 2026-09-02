@@ -4,7 +4,7 @@ import { NavDoc } from './nav-link'
 import { ThemeToggle } from './theme-toggle'
 import {
   IcBieuDo, IcCanHo, IcCheck, IcDoiSoat, IcHoaDon, IcLoa, IcNguoi, IcNha, IcNhap, IcQR,
-  IcSach, IcTaiVe, IcTien, IcToaNha, IcYeuCau,
+  IcSach, IcSo, IcTaiVe, IcTien, IcToaNha, IcYeuCau,
 } from '@/components/icons'
 
 /** Nhãn nhóm. Ẩn trên điện thoại: hàng ngang không diễn đạt được phân cấp,
@@ -52,6 +52,7 @@ export function BqlShell({
       <NavDoc href={`${base}/bql/duyet-chu-ho`} icon={<IcNguoi />}>Duyệt chủ hộ</NavDoc>
       <NavDoc href={`${base}/bql/go-live`} icon={<IcCheck />}>Sẵn sàng go-live</NavDoc>
       <NavDoc href={`${base}/bql/poster`} icon={<IcQR />}>Poster QR</NavDoc>
+      <NavDoc href={`${base}/bql/nhat-ky`} icon={<IcSo />}>Nhật ký kiểm toán</NavDoc>
 
       <Muc nhan="Dữ liệu" />
       <NavDoc href={`${base}/bql/nguoi-dung`} icon={<IcNguoi />}>Người dùng & phân quyền</NavDoc>

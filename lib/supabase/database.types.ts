@@ -24,6 +24,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          actor_id: string | null
+          actor_role: string
+          at: string
+          ban_ghi: string
+          bang: string
+          id: number
+          project_id: string | null
+          sau: Json
+          thao_tac: string
+          truoc: Json
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_role: string
+          at?: string
+          ban_ghi: string
+          bang: string
+          id?: number
+          project_id?: string | null
+          sau?: Json
+          thao_tac: string
+          truoc?: Json
+        }
+        Update: {
+          actor_id?: string | null
+          actor_role?: string
+          at?: string
+          ban_ghi?: string
+          bang?: string
+          id?: number
+          project_id?: string | null
+          sau?: Json
+          thao_tac?: string
+          truoc?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcements: {
         Row: {
           author_id: string

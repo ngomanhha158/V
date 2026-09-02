@@ -162,3 +162,9 @@ alter table payments         force row level security;
 -- dưới quyền owner và phải ghi được vào bảng này, mà bảng cố ý không có policy
 -- ghi nào. Chốt chặn ở đây là GRANT — authenticated chỉ có select — cộng với
 -- policy đọc theo dự án.
+
+-- Sổ kiểm toán: chỉ ĐỌC, và RLS (audit_staff_read) lọc xuống dự án của người
+-- đó. Cố ý không cấp insert/update/delete cho bất kỳ ai, kể cả BQL — sổ mà
+-- người bị ghi sổ sửa được thì vô nghĩa. Trigger ghi_nhat_ky() chạy security
+-- definer nên vẫn ghi được.
+grant select on audit_log to authenticated;

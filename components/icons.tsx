@@ -118,3 +118,11 @@ export const IcCanHo = (p: SVGProps<SVGSVGElement>) => (
 export const IcTaiVe = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></I>
 )
+
+/** Danh sách có dấu tích: sổ ghi việc đã xảy ra, không phải việc sắp làm. */
+export const IcSo = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M4 5h16v14H4z" /><path d="M8 3v4M8 12h8M8 16h5" />
+    <path d="m6.5 8.5 1 1 2-2" />
+  </I>
+)

@@ -595,3 +595,62 @@ export const TOA_NHA_DEMO = [
   { code: 'P2', name: 'Tháp Vườn' },
   { code: 'P3', name: 'Tháp Nắng' },
 ]
+
+export type DongSoDemo = {
+  id: number
+  at: string
+  actor_id: string | null
+  actor_role: string
+  bang: string
+  ban_ghi: string
+  thao_tac: string
+  truoc: Record<string, unknown>
+  sau: Record<string, unknown>
+}
+
+/**
+ * Nhật ký kiểm toán của bản demo.
+ *
+ * Cố ý có đủ ba loại người ghi sổ: người thật, cron, và webhook ngân hàng —
+ * vì phân biệt được ba loại đó mới là phần khó của một sổ kiểm toán. Cũng cố ý
+ * có một dòng cột nhạy cảm bị ẩn, để thấy sổ vẫn ghi LÀ CÓ ĐỔI mà không chép
+ * nội dung sang.
+ */
+export const NHAT_KY: DongSoDemo[] = [
+  { id: 128, at: ngayGio(0, 3), actor_id: 'nd-1', actor_role: 'authenticated',
+    bang: 'fee_types', ban_ghi: '7f3a1c22', thao_tac: 'UPDATE',
+    truoc: { unit_price: 15000 }, sau: { unit_price: 16500 } },
+  { id: 127, at: ngayGio(0, 2), actor_id: null, actor_role: 'service_role',
+    bang: 'bank_transactions', ban_ghi: 'b1094e77', thao_tac: 'INSERT',
+    truoc: {}, sau: { amount: 2983500, trang_thai: 'chua_khop', raw_payload: '(đã ẩn)',
+                      content: 'NGUYEN VAN MINH chuyen tien thang 8' } },
+  { id: 126, at: ngayGio(1, 9), actor_id: 'nd-2', actor_role: 'authenticated',
+    bang: 'staff_assignments', ban_ghi: '3c8de401', thao_tac: 'UPDATE',
+    truoc: { is_active: true }, sau: { is_active: false } },
+  { id: 125, at: ngayGio(1, 4), actor_id: 'nd-1', actor_role: 'authenticated',
+    bang: 'units', ban_ghi: 'a20f5b13', thao_tac: 'UPDATE',
+    truoc: { area_m2: null }, sau: { area_m2: 96.4 } },
+  { id: 124, at: ngayGio(2, 1), actor_id: null, actor_role: 'postgres',
+    bang: 'invoices', ban_ghi: '9d41c0ab', thao_tac: 'UPDATE',
+    truoc: { paid_amount: 0, status: 'issued' },
+    sau: { paid_amount: 2983500, status: 'paid' } },
+  { id: 123, at: ngayGio(3, 6), actor_id: 'nd-3', actor_role: 'authenticated',
+    bang: 'sla_policies', ban_ghi: '5e70aa19', thao_tac: 'INSERT',
+    truoc: {}, sau: { priority: 'urgent', respond_mins: 5, resolve_mins: 30,
+                      escalate_to: 'bql_manager' } },
+  { id: 122, at: ngayGio(5, 8), actor_id: 'nd-1', actor_role: 'authenticated',
+    bang: 'invoice_lines', ban_ghi: 'cc02f8d5', thao_tac: 'DELETE',
+    truoc: { description: 'Gửi ô tô', quantity: 1, unit_price: 1200000, amount: 1200000 },
+    sau: {} },
+  { id: 121, at: ngayGio(6, 2), actor_id: 'nd-2', actor_role: 'authenticated',
+    bang: 'unit_memberships', ban_ghi: '1a9b3327', thao_tac: 'UPDATE',
+    truoc: { status: 'pending', approved_at: null },
+    sau: { status: 'active', approved_at: ngayGio(6, 2) } },
+]
+
+/** Tên người, tra riêng — audit_log cố ý không có khóa ngoại sang profiles. */
+export const TEN_NGUOI_GHI_SO: Record<string, string> = {
+  'nd-1': 'Trần Thị Bích Ngọc',
+  'nd-2': 'Ngô Mạnh Hà',
+  'nd-3': 'Lê Quang Huy',
+}
