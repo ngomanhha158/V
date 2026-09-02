@@ -1,6 +1,9 @@
-// SINH TỰ ĐỘNG TỪ DB. Sinh lại sau mỗi lần đổi schema:
-//   npx supabase gen types typescript --project-id upsfjlfonphyazbiwtov > lib/supabase/database.types.ts
-// (hoặc qua Supabase MCP: generate_typescript_types)
+// Kiểu của schema, khớp với schema.sql.
+//
+// Trước đây sinh tự động bằng `supabase gen types`. Hệ thống không còn chạy
+// trên Supabase nên không còn lệnh đó: sửa schema.sql thì sửa tay ở đây, rồi
+// chạy `npx tsc --noEmit`. Tẻ nhạt, nhưng cái mất là một lệnh tiện tay, còn
+// cái được là không còn phải trả tiền cho một nhà cung cấp để có kiểu dữ liệu.
 //
 // MỘT chỗ sửa tay, phải giữ lại sau mỗi lần sinh lại: bộ sinh khai mọi cột của
 // `returns table` là non-null, kể cả cột chắc chắn null được — avg/percentile
@@ -1281,6 +1284,30 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      // ── Lớp đăng nhập tự viết (railway/03_auth.sql) ──
+      // Thêm tay, không sinh máy: chỉ service_role gọi được, mà công cụ sinh
+      // kiểu thì chạy dưới quyền khác nên không nhìn thấy chúng.
+      auth_tim: { Args: { p_danh_tinh: string }; Returns: string | null }
+      auth_gui_ma: {
+        Args: { p_danh_tinh: string; p_ma: string }
+        Returns: { trang_thai: string; cho_giay: number }[]
+      }
+      auth_kiem_ma: {
+        Args: { p_danh_tinh: string; p_ma: string }
+        Returns: { trang_thai: string; uid: string | null }[]
+      }
+      auth_kiem_mat_khau: {
+        Args: { p_danh_tinh: string; p_mat_khau: string }
+        Returns: string | null
+      }
+      auth_tao_nguoi_dung: {
+        Args: { p_email: string; p_ho_ten: string; p_mat_khau: string; p_phone: string }
+        Returns: string
+      }
+      auth_dat_mat_khau: { Args: { p_mat_khau: string; p_uid: string }; Returns: boolean }
+      auth_xoa_nguoi_dung: { Args: { p_uid: string }; Returns: boolean }
+      auth_don_ma: { Args: never; Returns: number }
+
       bql_gan_nhan_su: {
         Args: {
           p_project: string

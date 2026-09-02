@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { requestJoin } from './actions'
 import { Button, Card, Field, Hop, PageHead, Select } from '@/components/ui'
 

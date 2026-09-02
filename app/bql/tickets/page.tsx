@@ -1,8 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { dispatchTicket } from './actions'
-import { Constants } from '@/lib/supabase/database.types'
+import { Constants } from '@/lib/db/database.types'
 import {
   Button, Card, CardHead, Chip, Hop, PageHead, Pill, Select, Stat, Trong, cx, ngayVN,
 } from '@/components/ui'

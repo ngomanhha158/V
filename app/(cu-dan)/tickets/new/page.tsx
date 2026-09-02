@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { NewTicketForm } from './form'
 import { Card, LinkButton, PageHead, Trong } from '@/components/ui'
 import { IcTrai } from '@/components/icons'

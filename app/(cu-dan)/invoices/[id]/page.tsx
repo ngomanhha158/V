@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import QRCode from 'qrcode'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { buildVietQr, paymentRef } from '@/lib/vietqr'
 import { bankConfig } from '@/lib/bank'
 import { Card, CardHead, Hop, PageHead, Pill, cx, ngayVN, vnd } from '@/components/ui'

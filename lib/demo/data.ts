@@ -6,7 +6,7 @@
 // bỏ qua đăng nhập, nên nó tuyệt đối không được chạm vào dữ liệu thật.
 //
 // Đây là code VỨT ĐI sau khi chốt giao diện. Đừng dùng lại kiểu dữ liệu ở đây
-// cho app thật — kiểu thật sinh từ DB, nằm ở lib/supabase/database.types.ts.
+// cho app thật — kiểu thật sinh từ DB, nằm ở lib/db/database.types.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Ngày lệch n ngày so với hôm nay, dạng YYYY-MM-DD. */

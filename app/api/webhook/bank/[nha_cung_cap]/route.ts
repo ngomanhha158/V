@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createAdminClient } from '@/lib/db/admin'
 import { docWebhook, laNhaCungCap, type NhaCungCap } from '@/lib/bank/adapter'
 import { demLuot, ipClient, xoaLuot } from '@/lib/rate-limit'
 
@@ -97,7 +97,7 @@ export async function POST(
     return NextResponse.json({ success: true, da_nhan: 0 })
   }
 
-  const supabase = createAdminClient()
+  const supabase = await createAdminClient()
   const { data: project } = await supabase.from('projects').select('id').limit(1).maybeSingle()
   if (!project) {
     return NextResponse.json({ success: false, message: 'Chua co du an' }, { status: 500 })

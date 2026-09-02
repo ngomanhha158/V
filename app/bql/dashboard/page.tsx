@@ -1,11 +1,11 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import {
   Card, CardHead, Chip, Hop, PageHead, Stat, Trong, cx, ngayVN, soVN, vnd, vndGon,
 } from '@/components/ui'
 import { BangThang, ChuThichThu, CotThu, DuongSLA, type ThangKPI } from '@/components/chart'
 import { KY, khoangNgay, laKy, type KyKey } from '@/lib/ky'
-import type { Database } from '@/lib/supabase/database.types'
+import type { Database } from '@/lib/db/database.types'
 
 export const dynamic = 'force-dynamic'
 

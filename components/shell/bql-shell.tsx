@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { NavDoc } from './nav-link'
 import { ThemeToggle } from './theme-toggle'
+import { NutRa } from './nut-ra'
 import {
   IcBieuDo, IcCanHo, IcCheck, IcDoiSoat, IcHoaDon, IcLich, IcLoa, IcNguoi, IcNha, IcNhap, IcQR,
   IcSach, IcSo, IcTaiVe, IcTien, IcToaNha, IcYeuCau,
@@ -28,6 +29,8 @@ function Muc({ nhan }: { nhan: string }) {
 export function BqlShell({
   children, base = '', duAn,
 }: { children: ReactNode; base?: string; duAn?: string }) {
+  // Bản demo không có phiên nào để thoát ra — xem ghi chú ở ResidentShell.
+  const laThat = base === ''
   const nav = (
     <>
       <Muc nhan="Vận hành" />
@@ -98,6 +101,7 @@ export function BqlShell({
               <span className="block truncate text-faint">Đang trực</span>
             </span>
             <ThemeToggle />
+            {laThat && <NutRa />}
           </div>
         </div>
       </aside>

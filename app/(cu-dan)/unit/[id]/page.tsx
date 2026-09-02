@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { removeVehicle, removePet, updateMember } from './actions'
 import { AddVehicleForm, AddPetForm } from './forms'
 import { Button, Card, CardHead, Hop, Input, PageHead, Pill, Trong, ngayVN } from '@/components/ui'

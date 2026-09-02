@@ -31,9 +31,3 @@ export async function compressImage(file: File): Promise<Blob> {
   // Nén xong mà to hơn bản gốc (ảnh vốn đã nhỏ) thì giữ bản gốc.
   return blob && blob.size < file.size ? blob : file
 }
-
-/** {unit_id}/{ngẫu nhiên}.jpg — đoạn đầu là căn hộ để RLS của Storage lọc. */
-export function photoPath(unitId: string, blob: Blob): string {
-  const ext = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg'
-  return `${unitId}/${crypto.randomUUID()}.${ext}`
-}

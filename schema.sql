@@ -1,5 +1,7 @@
--- VBuilding — Core schema (PostgreSQL 15 / Supabase)
--- Chạy: psql -f schema.sql  |  hoặc dán vào Supabase SQL Editor
+-- VBuilding — Core schema (PostgreSQL 15+)
+-- Chạy: psql -f schema.sql
+-- Trên Postgres thuần thì chạy railway/00_compat.sql trước: nó dựng auth.uid()
+-- và ba role mà các policy bên dưới đứng lên.
 -- Nguyên tắc: 3NF cho Master Data, RLS ở DB thay vì check quyền rải rác trong app.
 
 
@@ -48,7 +50,7 @@ create table units (
 create index on units (building_id, floor_no);
 
 -- ────────────────── 2. USERS / RESIDENT MATRIX ───────────────────────
--- Supabase: profiles.id = auth.users.id
+-- profiles.id = auth.users.id
 create table profiles (
   id          uuid primary key,
   full_name   text not null,

@@ -1,7 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
-import { Constants, type Database } from '@/lib/supabase/database.types'
+import { createClient } from '@/lib/db/server'
+import { Constants, type Database } from '@/lib/db/database.types'
 
 type Status = Database['public']['Enums']['ticket_status']
 type TicketUpdate = Database['public']['Tables']['tickets']['Update']

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { NavTab } from './nav-link'
 import { ThemeToggle } from './theme-toggle'
+import { NutRa } from './nut-ra'
 import { GoiYCaiApp } from '@/components/pwa'
 import { IcChuong, IcHoaDon, IcLoa, IcNha, IcSach, IcYeuCau } from '@/components/icons'
 
@@ -19,6 +20,10 @@ export function ResidentShell({
   children: ReactNode; base?: string
   ten?: string; phu?: string; soThongBao?: number
 }) {
+  // Bản demo không có phiên nào để thoát ra. Hiện nút đăng xuất ở đó là hứa
+  // một thứ không tồn tại, và người bấm sẽ bị đá về /login từ một trang vốn
+  // cố ý không cần đăng nhập.
+  const laThat = base === ''
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
       <header className="sticky top-0 z-30 border-b border-line bg-surface/85 backdrop-blur-md">
@@ -49,6 +54,7 @@ export function ResidentShell({
               )}
             </Link>
             <ThemeToggle />
+            {laThat && <NutRa />}
           </div>
         </div>
       </header>

@@ -1,17 +1,37 @@
 'use client'
 import { useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { cachDangNhap } from '@/lib/auth-method'
 import { normalizeEmail, toE164VN } from '@/lib/phone'
-import { dichLoiAuth } from '@/lib/auth-loi'
+import { loiDangNhap } from '@/lib/auth-loi'
 import { Button, Field, Hop, Input } from '@/components/ui'
 import { IcTrai } from '@/components/icons'
 
+// Người tới đây từ một LINK hỏng trong thư, không phải từ ô nhập mã. Câu chữ
+// phải nói về cái link chứ không phải về dãy số họ chưa hề gõ.
 const LOI_URL: Record<string, string> = {
-  thieu_ma: 'Link trong email không hợp lệ. Thử gửi lại mã.',
+  thieu_ma: 'Link trong thư không hợp lệ. Thử gửi lại mã.',
+  sai: 'Link trong thư không còn đúng. Gửi lại mã mới.',
   het_han: 'Link đã hết hạn hoặc đã dùng rồi. Gửi lại mã mới.',
+  qua_nhieu: 'Tài khoản này vừa bị nhập sai quá nhiều lần nên tạm khóa. '
+    + 'Chờ 10 phút rồi thử lại.',
+}
+
+/** Gọi một endpoint đăng nhập. Trả về trạng thái mà lib/auth-loi.ts hiểu. */
+async function goi(duong: string, than: object): Promise<{ tt: string; giay?: number }> {
+  try {
+    const r = await fetch(duong, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(than),
+    })
+    return (await r.json()) as { tt: string; giay?: number }
+  } catch {
+    // Mất mạng giữa chừng. Phân biệt với lỗi máy chủ, vì hai bên làm hai việc
+    // khác nhau: một bên bật lại wifi, một bên gọi ban quản lý.
+    return { tt: 'mang' }
+  }
 }
 
 /**
@@ -35,7 +55,6 @@ function LoginForm() {
   const [daGui, setDaGui] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const router = useRouter()
   const loiUrl = LOI_URL[useSearchParams().get('loi') ?? '']
 
   const laMatKhau = cheDo === 'matkhau'
@@ -49,48 +68,43 @@ function LoginForm() {
       ? 'Địa chỉ email không hợp lệ.'
       : 'Số điện thoại không hợp lệ. Nhập số di động 10 chữ số, ví dụ 0901234567.')
 
+  /** Vào được rồi thì tải lại cả trang chứ không router.replace: cookie phiên
+   *  vừa được máy chủ đặt, mà bộ nhớ đệm RSC của lần điều hướng trước thì chưa
+   *  biết gì về nó. Đi bằng router là có lúc rơi vào màn "chưa đăng nhập" ngay
+   *  sau khi đăng nhập thành công. */
+  const vaoNha = () => { window.location.href = '/' }
+
   async function gui() {
     const v = chuanHoa()
     if (!v) return loiDanhTinh()
     setBusy(true); setError(null)
-    // Tạo client trong handler, không ở thân component: lúc prerender không có
-    // biến môi trường nên createClient() ở render sẽ làm chết build.
-    const { error } = await createClient().auth.signInWithOtp(
-      laEmail
-        // emailRedirectTo: đích của LINK trong email, khớp với app/auth/confirm.
-        // Không đặt thì link trỏ về Site URL và rơi vào trang không xử lý được.
-        ? { email: v, options: { emailRedirectTo: `${location.origin}/auth/confirm` } }
-        : { phone: v },
-    )
+    const { tt, giay } = await goi('/api/auth/ma', { danhTinh: v })
     setBusy(false)
-    if (error) return setError(dichLoiAuth(error))
-    setDaGui(true)
+    if (tt === 'ok') return setDaGui(true)
+    setError(loiDangNhap(tt, giay))
+    // Bị chặn vì vừa gửi rồi: mở luôn ô nhập mã. Họ ĐANG cầm một mã trong tay,
+    // bắt quay lại màn nhập email là bắt họ chờ hết một chu kỳ vô ích.
+    if (tt === 'cho') setDaGui(true)
   }
 
   async function xacNhan() {
     const v = chuanHoa()
     if (!v) return
     setBusy(true); setError(null)
-    const { error } = await createClient().auth.verifyOtp(
-      laEmail ? { email: v, token: code, type: 'email' }
-              : { phone: v, token: code, type: 'sms' },
-    )
+    const { tt, giay } = await goi('/api/auth/vao', { danhTinh: v, ma: code })
+    if (tt === 'ok') return vaoNha()
     setBusy(false)
-    if (error) return setError(dichLoiAuth(error))
-    router.replace('/')
+    setError(loiDangNhap(tt, giay))
   }
 
   async function dangNhapMatKhau() {
     const v = chuanHoa()
     if (!v) return loiDanhTinh()
     setBusy(true); setError(null)
-    const { error } = await createClient().auth.signInWithPassword(
-      laEmail ? { email: v, password: matKhau } : { phone: v, password: matKhau },
-    )
+    const { tt, giay } = await goi('/api/auth/vao', { danhTinh: v, matKhau })
+    if (tt === 'ok') return vaoNha()
     setBusy(false)
-    // 'matkhau': cùng mã invalid_credentials nhưng lời khuyên phải khác.
-    if (error) return setError(dichLoiAuth(error, 'matkhau'))
-    router.replace('/')
+    setError(loiDangNhap(tt, giay))
   }
 
   /** Đổi lối vào thì dọn sạch trạng thái của lối cũ, không để lẫn. */

@@ -97,15 +97,32 @@ B4. Biến môi trường của service `v` (Next.js):
     AUTH_JWT_SECRET phải trùng khít PGRST_JWT_SECRET. Lệch một ký tự thì mọi
     request đều 401 và log chỉ nói "JWT invalid" — không nói là do lệch khóa.
 
-B5. Xóa các biến của Supabase khỏi service `v` sau khi đã chạy xanh:
+B5. Gắn Volume cho ảnh hỏng hóc, vào service `v`, mount tại:
+
+      /data/ticket-photos
+
+    Ảnh KHÔNG còn nằm ở Supabase Storage mà nằm trên đĩa của service này. Không
+    gắn volume thì app vẫn nhận ảnh bình thường — rồi mất sạch ở lần deploy kế
+    tiếp, lặng lẽ, và chỉ lộ ra lúc có người mở lại một yêu cầu cũ để đối chất.
+
+B6. Job nền: ảnh Postgres của Railway KHÔNG có pg_cron, nên cron.sql chưa chạy
+    được ở đây. Nghĩa là hiện chưa có: nhắc nợ, leo thang ticket quá hạn, thu
+    hồi tư cách thành viên hết hạn, mở kỳ bảo trì. Tất cả hỏng LẶNG LẼ — không
+    màn nào báo. Đây là việc còn nợ của GĐ2, đừng coi là đã xong.
+
+B7. Xóa các biến của Supabase khỏi service `v` sau khi đã chạy xanh:
       NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
       SUPABASE_SERVICE_ROLE_KEY, SUPABASE_SECRET_KEY
     Xóa SAU chứ không phải trước: còn biến thì còn đường lùi trong lúc đang dò.
 
-B6. Chuyển dữ liệu từ Supabase sang (nếu khu đã chạy thật):
+B8. Chuyển dữ liệu từ Supabase sang (nếu khu đã chạy thật):
       pg_dump --data-only --schema=public "<chuỗi nối Supabase>" > data.sql
       psql -f data.sql
     Tài khoản đăng nhập KHÔNG chuyển được: mật khẩu bên Supabase băm bằng khóa
     của họ. Mỗi người phải đặt lại mật khẩu một lần — BQL làm ở màn Người dùng,
     hoặc cư dân tự đăng nhập bằng mã một lần rồi đặt mật khẩu mới.
+
+    ẢNH cũng không chuyển được bằng pg_dump: chúng nằm trong Storage của
+    Supabase, không nằm trong database. Tải về rồi chép vào volume theo đúng
+    đường dẫn cũ ({unit_id}/{tên}) — tickets.photo_urls vẫn đang trỏ vào đó.
 HUONGDAN

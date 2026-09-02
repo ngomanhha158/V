@@ -8,7 +8,8 @@ import { dirname, join } from 'node:path'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const db = new PGlite()
 
-// Supabase có sẵn schema auth + auth.uid(). Local phải stub trước khi apply RLS policies.
+// Bài này cố ý chạy schema.sql ĐỘC LẬP, không có lớp tương thích: stub auth.uid()
+// tối thiểu rồi thôi. Bản đầy đủ nằm ở scripts/verify-railway.mjs.
 await db.exec(`
   create schema if not exists auth;
   create or replace function auth.uid() returns uuid language sql stable as $fn$

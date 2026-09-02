@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { Card, LinkButton, PageHead, Pill, Trong, cx, ngayVN } from '@/components/ui'
 import { IcPhai, IcThem } from '@/components/icons'
 

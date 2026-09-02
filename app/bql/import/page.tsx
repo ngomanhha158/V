@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { ImportForm } from './import-form'
 import { PageHead, Trong } from '@/components/ui'
 

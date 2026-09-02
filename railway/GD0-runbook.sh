@@ -2,9 +2,13 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # GĐ0 — dựng nền Postgres cho Vbuilding trên Railway.
 #
+# ĐÃ CHẠY XONG. Giữ lại làm hồ sơ. Bước tiếp theo là railway/GD1-runbook.sh,
+# ở đó 00_compat.sql được áp LẠI (nó thêm role authenticator và auth.uid() đọc
+# JWT) — chạy lại file này không hại gì nhưng cũng không còn đủ.
+#
 # Dán TOÀN BỘ file này vào Console của service Postgres (project bubbly-cat).
 # Script chỉ ĐỌC repo public ngomanhha158/v và áp vào chính DB của container này.
-# Không sửa dữ liệu nào của app đang chạy (app vẫn đang trên Supabase).
+# Không sửa dữ liệu nào của app đang chạy.
 #
 # Đã chạy thử trọn vẹn trên PostgreSQL 16.13 dựng sạch: 7/7 file test xanh.
 # ─────────────────────────────────────────────────────────────────────────────

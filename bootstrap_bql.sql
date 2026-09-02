@@ -1,4 +1,4 @@
--- Gán vai trò BQL cho người đầu tiên. CHẠY MỘT LẦN trong Supabase SQL Editor.
+-- Gán vai trò BQL cho người đầu tiên. CHẠY MỘT LẦN bằng psql.
 --
 -- Vì sao cần: staff_assignments là bảng duy nhất quyết định is_staff(), mà nó
 -- không được cấp quyền cho anon/authenticated (cố ý — ai tự ghi được bảng này
@@ -43,7 +43,7 @@ begin
 
   if v_email is not null then
     v_dinh_danh := lower(trim(v_email));
-    -- So sánh hạ chữ thường cả hai vế: Supabase lưu email theo đúng cách người
+    -- So sánh hạ chữ thường cả hai vế: email lưu theo đúng cách người
     -- ta gõ lúc đăng nhập, nên 'Ha@Gmail.com' và 'ha@gmail.com' là hai chuỗi
     -- khác nhau trong bảng dù cùng một hộp thư.
     select id, full_name into v_user, v_name

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { SoanMuc } from './form'
 import { xoaMuc } from './actions'
 import { Button, Card, CardHead, Hop, PageHead, Pill, Stat, Trong } from '@/components/ui'

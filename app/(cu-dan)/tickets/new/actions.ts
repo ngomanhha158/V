@@ -1,7 +1,7 @@
 'use server'
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
-import { Constants, type Database } from '@/lib/supabase/database.types'
+import { createClient } from '@/lib/db/server'
+import { Constants, type Database } from '@/lib/db/database.types'
 
 type Priority = Database['public']['Enums']['ticket_priority']
 export type NewTicketState = { error?: string }

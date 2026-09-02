@@ -1,6 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import {
   DIEN_TICH_TOI_DA, dieuKien, docDienTich, docLoc, soM2, taLoc, type ThamSo,
 } from '@/lib/can-ho'

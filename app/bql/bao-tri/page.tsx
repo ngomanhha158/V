@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { theoHan, tinhTrangHan } from '@/lib/bao-tri'
 import {
   Card, CardHead, Hop, ngayVN, PageHead, Pill, Stat, Trong,

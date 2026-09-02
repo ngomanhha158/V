@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { decide } from './actions'
 import { Button, Card, Field, Input, PageHead, Pill, Trong, ngayVN } from '@/components/ui'
 import { IcNguoi } from '@/components/icons'

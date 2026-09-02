@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { baoCao, docKy, tenTep } from '@/lib/xuat/bao-cao'
 import { dungWorkbook } from '@/lib/xuat/excel'
 import { layDong } from '@/lib/xuat/lay-du-lieu'
@@ -32,6 +32,12 @@ export async function GET(
     .from('projects').select('id, name').limit(1).maybeSingle()
   if (!project) return loi(404, 'Chưa có dự án nào trong hệ thống.')
 
+  // Ai xuất file này. Phải hỏi profiles chứ không đọc từ phiên: phiên chỉ mang
+  // id, còn dòng "Người xuất" trong file thì phải là thứ người đọc nhận ra.
+  // policy profile_read cho mỗi người đọc chính mình nên câu này luôn có kết quả.
+  const { data: toi } = await supabase
+    .from('profiles').select('full_name, email, phone').eq('id', user.id).maybeSingle()
+
   const { data: isStaff } = await supabase.rpc('is_staff', { p_project: project.id })
   if (!isStaff) return loi(403, 'Chỉ ban quản lý mới xuất được báo cáo.')
 
@@ -48,7 +54,7 @@ export async function GET(
     duAn: project.name,
     ky,
     chotLuc,
-    nguoiXuat: user.email ?? user.phone ?? user.id,
+    nguoiXuat: toi?.email ?? toi?.phone ?? toi?.full_name ?? user.id,
   })
 
   return new NextResponse(new Uint8Array(buf), {

@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import {
   FormThamDo, HangBinhLuan, KetQuaBQL, type BinhLuanBQL, type ThamDoBQL,
 } from './gop-y-bql'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { SoanThongBao } from './form'
 import { phatHanh, xoaThongBao } from './actions'
 import { Button, Card, CardHead, PageHead, Pill, Stat, Trong } from '@/components/ui'

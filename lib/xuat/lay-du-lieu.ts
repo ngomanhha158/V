@@ -1,4 +1,4 @@
-import type { createClient } from '@/lib/supabase/server'
+import type { createClient } from '@/lib/db/server'
 import { mocKy } from './bao-cao.ts'
 
 type Sb = Awaited<ReturnType<typeof createClient>>

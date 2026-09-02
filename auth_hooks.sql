@@ -1,5 +1,6 @@
--- CHỈ chạy trên Supabase — cần schema auth.users và các role anon/authenticated
--- (không có ở Postgres thuần, nên file này không nằm trong npm run verify).
+-- Cần schema auth.users và ba role anon/authenticated/service_role. Trên
+-- Postgres thuần thì railway/00_compat.sql dựng sẵn chúng, nên file này chạy
+-- được nguyên văn ở cả hai nơi và nằm trong `npm run verify:railway`.
 -- Chạy sau schema.sql và seed.sql.
 
 -- Tạo profiles tự động khi có user mới, nếu không FK unit_memberships.user_id sẽ gãy.

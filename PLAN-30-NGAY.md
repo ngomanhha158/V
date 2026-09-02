@@ -1,5 +1,12 @@
 # VBUILDING — KẾ HOẠCH THỰC THI 30 NGÀY
 
+> **Ghi chú 02/09/2026.** Đây là bản kế hoạch viết ngày 25/08, giữ nguyên làm
+> hồ sơ. Ngăn xếp đã đổi: hệ thống chạy trọn trên Railway, không còn Supabase —
+> Postgres + PostgREST + lớp đăng nhập tự viết, ảnh lưu trên Volume thay cho
+> Storage. Trạng thái hiện hành đọc ở `GO-LIVE.md` và `railway/GD1-runbook.sh`;
+> mọi dòng nhắc Supabase bên dưới là chuyện đã qua.
+
+
 **N1 = Thứ Hai 31/08/2026 · Go-live N29 = 28/09 · Kết thúc N30 = 29/09**
 Việc chạy trước ngay 25/08 (không chờ N1, không phụ thuộc quyết định nào): tạo Supabase/Vercel, apply `schema.sql`.
 Zalo OA/ZNS: **hoãn theo quyết định 25/08** — xem mục 3bis để biết hệ quả và hạn chót thật.

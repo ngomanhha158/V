@@ -1,8 +1,8 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
-import { Constants, type Database } from '@/lib/supabase/database.types'
+import { createClient } from '@/lib/db/server'
+import { Constants, type Database } from '@/lib/db/database.types'
 
 type UnitRole = Database['public']['Enums']['unit_role']
 

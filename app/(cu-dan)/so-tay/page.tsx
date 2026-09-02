@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { Card, Chip, Hop, Input, PageHead, Trong } from '@/components/ui'
 import { IcTim } from '@/components/icons'
 

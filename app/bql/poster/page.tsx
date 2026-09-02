@@ -1,7 +1,7 @@
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import QRCode from 'qrcode'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import { Card, CardHead, Hop, PageHead, Trong } from '@/components/ui'
 import { PrintButton } from './print-button'
 

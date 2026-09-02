@@ -1,7 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/db/server'
+import { createAdminClient } from '@/lib/db/admin'
 import { normalizeEmail, toE164VN } from '@/lib/phone'
 
 export type NguoiDungState = { error?: string; ok?: string }
@@ -25,7 +25,7 @@ const DAI_TOI_THIEU = 8
  * - Client của NGƯỜI ĐANG ĐĂNG NHẬP làm mọi thứ đụng vào dữ liệu khu: kiểm
  *   quyền, gán vai trò, đọc danh sách. Chốt is_bql_manager nằm trong SQL nên
  *   không thể quên gọi.
- * - Client service_role CHỈ làm đúng thứ mà PostgREST không làm được: tạo tài
+ * - Client service_role CHỈ làm đúng thứ mà không ai khác được làm: tạo tài
  *   khoản trong auth.users và đặt mật khẩu. Nó bỏ qua toàn bộ RLS, nên càng ít
  *   việc đi qua nó thì càng ít chỗ sai.
  *
@@ -53,16 +53,25 @@ async function thuocDuAn(
   return (data ?? []).some((r) => r.user_id === userId)
 }
 
-/** Lỗi của Admin API sang tiếng Việt. Nguyên văn tiếng Anh thì người trực ban
- *  không biết mình gõ trùng email hay hệ thống hỏng. */
-function dichLoiAdmin(msg: string): string {
-  const m = msg.toLowerCase()
-  if (m.includes('already been registered') || m.includes('already exists')
-      || m.includes('duplicate')) {
-    return 'Email hoặc số điện thoại này đã có tài khoản rồi.'
+/** Lỗi của Postgres sang tiếng Việt. Nguyên văn thì người trực ban không biết
+ *  mình gõ trùng email hay hệ thống hỏng.
+ *
+ *  Khớp theo MÃ chứ không theo chuỗi: chuỗi lỗi của Postgres đổi theo phiên bản
+ *  và theo locale của máy chủ, mã thì không. */
+function dichLoiAdmin(loi: { code?: string; message?: string } | null): string {
+  const ma = loi?.code ?? ''
+  const msg = loi?.message ?? 'không rõ nguyên nhân'
+  if (ma === '23505') return 'Email hoặc số điện thoại này đã có tài khoản rồi.'
+  if (ma === '23503') {
+    return 'Người này đang được gán vào căn hộ hoặc vào ban quản lý nên chưa gỡ được.'
   }
-  if (m.includes('password')) return `Mật khẩu chưa đạt yêu cầu: ${msg}`
-  if (m.includes('invalid') && m.includes('email')) return 'Địa chỉ email không hợp lệ.'
+  if (ma === '42883' || ma === '42P01') {
+    return 'Lớp đăng nhập chưa có trên database. Chạy railway/03_auth.sql rồi thử lại.'
+  }
+  if (ma === '42501') {
+    return 'Máy chủ không đủ quyền gọi hàm tạo tài khoản. Kiểm tra lại phần quyền '
+      + 'ở cuối railway/03_auth.sql.'
+  }
   return `Không tạo được tài khoản: ${msg}`
 }
 
@@ -96,24 +105,19 @@ export async function taoTaiKhoan(
 
   let admin
   try {
-    admin = createAdminClient()
-  } catch {
+    admin = await createAdminClient()
+  } catch (e) {
     // Nói thẳng ra là thiếu cấu hình chứ không để người trực ban tưởng mình gõ sai.
-    return { error: 'Máy chủ chưa cấu hình SUPABASE_SERVICE_ROLE_KEY nên chưa tạo được tài khoản.' }
+    return { error: `Máy chủ chưa cấu hình xong nên chưa tạo được tài khoản. ${(e as Error).message}` }
   }
 
-  // email_confirm/phone_confirm = true: bỏ qua bước gửi thư xác nhận. Đây là
-  // cả lý do màn này tồn tại — hạn thư mặc định 2/giờ cho cả dự án thì mời 24
-  // hộ mất nửa ngày, và hộ nào không nhận được thư là kẹt luôn.
-  const { data: created, error: loiTao } = await admin.auth.admin.createUser({
-    ...(email ? { email, email_confirm: true } : { phone: phone!, phone_confirm: true }),
-    password: matKhau,
-    user_metadata: { full_name: hoTen },
+  // Tài khoản do BQL tạo là đã xác nhận sẵn (auth_tao_nguoi_dung tự đặt
+  // xac_nhan_luc). Đây là cả lý do màn này tồn tại — bắt mỗi hộ chờ một lá thư
+  // xác nhận thì mời 24 hộ mất nửa ngày, và hộ nào không nhận được thư là kẹt.
+  const { data: uid, error: loiTao } = await admin.rpc('auth_tao_nguoi_dung', {
+    p_email: email ?? '', p_phone: phone ?? '', p_ho_ten: hoTen, p_mat_khau: matKhau,
   })
-  if (loiTao || !created?.user) {
-    return { error: dichLoiAdmin(loiTao?.message ?? 'không rõ nguyên nhân') }
-  }
-  const uid = created.user.id
+  if (loiTao || !uid) return { error: dichLoiAdmin(loiTao) }
 
   // Gán vai trò bằng client của NGƯỜI ĐANG ĐĂNG NHẬP, không phải admin client:
   // chốt is_bql_manager trong SQL vẫn phải áp cho thao tác này.
@@ -126,7 +130,7 @@ export async function taoTaiKhoan(
     // Tài khoản đã tạo nhưng chưa gắn vào đâu -> xóa đi. Để lại là một tài
     // khoản đăng nhập được mà không thuộc khu nào, không hiện trong danh sách
     // nên không ai gỡ, và chiếm mất email đó vĩnh viễn.
-    await admin.auth.admin.deleteUser(uid)
+    await admin.rpc('auth_xoa_nguoi_dung', { p_uid: uid })
     if (loiGan.code === '42501') {
       return { error: 'Không gán được: căn này đã có chủ hộ, hoặc bạn không đủ quyền. Tài khoản vừa tạo đã được hủy.' }
     }
@@ -158,12 +162,15 @@ export async function datLaiMatKhau(
 
   let admin
   try {
-    admin = createAdminClient()
-  } catch {
-    return { error: 'Máy chủ chưa cấu hình SUPABASE_SERVICE_ROLE_KEY nên chưa đổi được mật khẩu.' }
+    admin = await createAdminClient()
+  } catch (e) {
+    return { error: `Máy chủ chưa cấu hình xong nên chưa đổi được mật khẩu. ${(e as Error).message}` }
   }
-  const { error } = await admin.auth.admin.updateUserById(uid, { password: matKhau })
-  if (error) return { error: dichLoiAdmin(error.message) }
+  const { data: xong, error } = await admin.rpc('auth_dat_mat_khau', {
+    p_uid: uid, p_mat_khau: matKhau,
+  })
+  if (error) return { error: dichLoiAdmin(error) }
+  if (!xong) return { error: 'Không tìm thấy tài khoản này nữa. Tải lại danh sách.' }
 
   revalidatePath('/bql/nguoi-dung')
   return { ok: `Đã đặt lại mật khẩu cho ${hoTen || 'người dùng'}. Báo trực tiếp cho họ, đừng gửi qua nhóm chat chung.` }

@@ -1,54 +1,64 @@
-import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import type { Database } from '@/lib/supabase/database.types'
+import { doc, ky } from '@/lib/db/jwt'
+import { biMatJwt, PHIEN_GIA_HAN_GIAY, PHIEN_SONG_GIAY } from '@/lib/db/env'
+import { TEN_COOKIE, tuyChonCookie } from '@/lib/db/phien'
 
 export async function middleware(request: NextRequest) {
-  // Bản demo thoát ra TRƯỚC khi dựng client Supabase — hai lý do:
+  // Bản demo thoát ra TRƯỚC khi đọc bí mật ký token — hai lý do:
   // 1. /demo cố ý bỏ qua đăng nhập, không đá về /login.
-  // 2. Quan trọng hơn: createServerClient bên dưới đọc biến môi trường bằng
-  //    dấu `!`. Máy chưa cấu hình Supabase thì middleware ném lỗi và CẢ APP
-  //    trắng màn, kể cả trang demo. Thoát sớm ở đây để `npm run dev` xem được
-  //    giao diện mà không cần bất kỳ khóa nào.
+  // 2. Quan trọng hơn: biMatJwt() ném lỗi khi thiếu biến môi trường. Máy chưa
+  //    cấu hình thì middleware văng và CẢ APP trắng màn, kể cả trang demo.
+  //    Thoát sớm ở đây để `npm run dev` xem được giao diện mà không cần bất kỳ
+  //    khóa nào.
   // An toàn vì app/demo chỉ đọc dữ liệu giả cứng trong lib/demo/data.ts,
   // không có đường nào ra database thật.
   //
   // /api/webhook/* thoát ra ở ĐÚNG CHỖ NÀY vì cùng lý do (2), và vì một lý do
-  // nặng hơn: nó là đường tiền vào. Để nó đi qua supabase.auth.getUser() là
-  // buộc mỗi lần ngân hàng bắn giao dịch phải chờ một vòng gọi Supabase Auth —
-  // dịch vụ chẳng liên quan gì tới việc này. Auth trục trặc là webhook trả 5xx,
-  // nhà cung cấp retry vài lần rồi bỏ, và tiền của cư dân biến mất khỏi hệ
-  // thống. Chốt chặn của nó là bí mật dùng chung kiểm trong route handler.
+  // nặng hơn: nó là đường tiền vào. Chốt chặn của nó là bí mật dùng chung
+  // kiểm trong route handler, không phải phiên đăng nhập — ngân hàng bắn giao
+  // dịch sang thì làm gì có cookie nào.
   const duong = request.nextUrl.pathname
   if (duong.startsWith('/demo') || duong.startsWith('/api/webhook/')) {
     return NextResponse.next({ request })
   }
 
-  const response = NextResponse.next({ request })
-  const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    {
-      cookies: {
-        getAll: () => request.cookies.getAll(),
-        setAll: (list) => list.forEach(({ name, value, options }) =>
-          response.cookies.set(name, value, options)),
-      },
-    }
-  )
-  // Bắt buộc: refresh token hết hạn, nếu không Server Component sẽ thấy user đã logout.
-  const { data: { user } } = await supabase.auth.getUser()
+  const claims = await doc(request.cookies.get(TEN_COOKIE)?.value, biMatJwt())
 
-  const path = request.nextUrl.pathname
-  // /auth/confirm là đích của link trong email đăng nhập. Nó đến lúc người dùng
-  // CHƯA có phiên — đó là cả mục đích của nó. Không mở đường ở đây thì link
-  // email bị đá về /login và không ai đăng nhập được bằng link bao giờ.
-  // /api/health phải đi qua TRƯỚC vòng kiểm đăng nhập: Railway gọi nó không
-  // kèm cookie, bị đá về /login thì health check trượt và deploy không bao giờ
-  // xanh.
-  const congMo = path === '/login' || path.startsWith('/auth/')
-    || path === '/api/health'
-  if (!user && !congMo) {
-    return NextResponse.redirect(new URL('/login', request.url))
+  // Cổng mở:
+  //  • /login, /auth/*   — người chưa có phiên phải vào được, đó là cả mục đích
+  //  • /api/auth/*       — chính là mấy endpoint cấp phiên
+  //  • /api/health       — Railway gọi không kèm cookie; bị đá về /login thì
+  //                        health check trượt và deploy không bao giờ xanh
+  const congMo = duong === '/login' || duong.startsWith('/auth/')
+    || duong.startsWith('/api/auth/') || duong === '/api/health'
+
+  if (!claims) {
+    if (congMo) return NextResponse.next({ request })
+    // Cookie hỏng hoặc hết hạn thì DỌN luôn, đừng để nó nằm lại: một cookie
+    // chết mà còn đó là mỗi request đều tốn một lần kiểm chữ ký để rồi vứt đi,
+    // và người dùng thì thấy mình "đăng nhập rồi" cho tới lúc bấm vào đâu đó.
+    const di = NextResponse.redirect(new URL('/login', request.url))
+    if (request.cookies.has(TEN_COOKIE)) di.cookies.delete(TEN_COOKIE)
+    return di
+  }
+
+  // Đã đăng nhập mà vào /login thì đưa thẳng về nhà. Không có dòng này thì
+  // người đang dùng app bấm nhầm link cũ sẽ thấy màn đăng nhập và tưởng mình
+  // bị đá ra.
+  if (duong === '/login') {
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  const response = NextResponse.next({ request })
+
+  // Gia hạn trượt: còn dưới 7 ngày thì cấp token mới. Người dùng thường xuyên
+  // không bao giờ rơi ra, còn tài khoản bỏ quên thì vẫn hết hạn sau 30 ngày.
+  // Ký lại ở MỌI request là ký hàng nghìn lần một ngày cho cùng một người,
+  // nên chỉ ký khi sắp hết.
+  const conLai = claims.exp - Math.floor(Date.now() / 1000)
+  if (conLai < PHIEN_GIA_HAN_GIAY) {
+    const moi = await ky(claims.sub, claims.role, biMatJwt(), PHIEN_SONG_GIAY)
+    response.cookies.set(TEN_COOKIE, moi, tuyChonCookie(PHIEN_SONG_GIAY))
   }
   return response
 }

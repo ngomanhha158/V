@@ -7,7 +7,7 @@
 
 // Import tương đối (không dùng alias @/) để node --experimental-strip-types
 // chạy được test mà không cần thêm tsx vào devDependencies.
-import { Constants } from '../supabase/database.types.ts'
+import { Constants } from '../db/database.types.ts'
 
 export type UnitKind = (typeof Constants.public.Enums.unit_kind)[number]
 export type UnitState = (typeof Constants.public.Enums.unit_state)[number]

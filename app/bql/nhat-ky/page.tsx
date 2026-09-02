@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/db/server'
 import {
   docNguoi, docThayDoi, TEN_BANG, TEN_THAO_TAC, tenBang,
 } from '@/lib/nhat-ky'

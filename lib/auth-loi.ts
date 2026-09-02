@@ -1,90 +1,61 @@
 /**
- * Dịch lỗi của Supabase Auth sang tiếng Việt CÓ HÀNH ĐỘNG KÈM THEO.
+ * Thông điệp lỗi đăng nhập, CÓ HÀNH ĐỘNG KÈM THEO.
  *
- * Trước đây màn đăng nhập ném thẳng `error.message` ra giao diện. Cư dân nhìn
- * thấy "email rate limit exceeded" thì không hiểu gì, và quan trọng hơn là
- * không biết phải làm gì tiếp — nên họ bấm gửi lại, đốt thêm quota, rồi gọi
- * cho ban quản lý. Mỗi thông điệp ở đây phải trả lời được "vậy giờ tôi làm
- * gì": chờ bao lâu, bấm nút nào, hay gọi ai.
+ * Trước đây file này dịch mã lỗi của Supabase Auth. Giờ hệ thống tự cấp phiên
+ * nên trạng thái do chính mình đặt tên — nhưng nguyên tắc thì không đổi: mỗi
+ * câu phải trả lời được "vậy giờ tôi làm gì". Cư dân đọc "invalid credentials"
+ * thì không biết mình gõ sai mã hay sai mật khẩu, nên họ bấm lại vài lần rồi
+ * gọi cho ban quản lý.
  *
- * Khớp theo `code` trước (supabase-js mới có), lùi về khớp chuỗi cho bản cũ
- * và cho những lỗi chưa có mã.
+ * Danh sách trạng thái này khớp với railway/03_auth.sql. Thêm trạng thái ở SQL
+ * mà quên thêm ở đây thì người dùng nhận đúng cái chuỗi mã máy — có test chốt.
  */
+export type TrangThai =
+  | 'cho' | 'sai' | 'het_han' | 'qua_nhieu'
+  | 'sai_mat_khau' | 'chua_dat_mat_khau'
+  | 'khong_gui_duoc' | 'chua_co_sms' | 'mang' | 'la'
 
-type LoiAuth = { code?: string; message?: string; status?: number }
-
-/**
- * Cùng một mã lỗi, hai màn hình khác nhau thì câu trả lời khác nhau.
- * `invalid_credentials` lúc nhập mã nghĩa là gõ sai dãy số; lúc nhập mật khẩu
- * nghĩa là sai mật khẩu — bảo người ta "kiểm tra lại dãy số trong thư" khi họ
- * đang gõ mật khẩu thì vừa sai vừa làm họ đi tìm một bức thư không tồn tại.
- */
-export type BoiCanh = 'otp' | 'matkhau'
-
-/** "you can only request this after 47 seconds" -> 47 */
-function giaySauCho(msg: string): number | null {
-  const m = msg.match(/after (\d+) seconds?/i)
-  return m ? Number(m[1]) : null
+/** "47 giây", "3 phút" — làm tròn LÊN. Nói "2 phút" cho 121 giây rồi để người
+ *  ta bấm ở giây thứ 120 và lại bị chặn là hỏng đúng lúc họ đã kiên nhẫn. */
+export function doiCho(giay: number): string {
+  if (giay <= 90) return `${Math.max(1, Math.ceil(giay))} giây`
+  return `${Math.ceil(giay / 60)} phút`
 }
 
-export function dichLoiAuth(loi: LoiAuth | null | undefined, boiCanh: BoiCanh = 'otp'): string {
-  if (!loi) return 'Có lỗi không rõ. Thử lại giúp em.'
-  const ma = (loi.code ?? '').toLowerCase()
-  const msg = (loi.message ?? '').toLowerCase()
+const CAU: Record<TrangThai, string> = {
+  cho: '',   // ghép động ở dưới, cần số giây
 
-  // Hạn gửi thư của CẢ DỰ ÁN, không phải của riêng người này. Với SMTP mặc
-  // định của Supabase là 2 thư/giờ cho toàn hệ thống, nên người thứ ba đăng
-  // ký trong một giờ sẽ gặp — phải nói rõ là lỗi hệ thống, không phải lỗi họ.
-  if (ma === 'over_email_send_rate_limit' || msg.includes('email rate limit')) {
-    return 'Hệ thống đang tạm hết lượt gửi thư. Đây là giới hạn của hệ thống, '
-      + 'không phải do bạn nhập sai. Chờ khoảng một giờ rồi thử lại, hoặc đăng '
-      + 'nhập bằng mật khẩu nếu ban quản lý đã đặt cho bạn.'
+  sai: 'Mã không đúng. Kiểm tra lại dãy số trong thư — mã mới nhất mới là mã '
+    + 'dùng được, thư cũ bỏ qua.',
+
+  het_han: 'Mã đã hết hạn hoặc đã dùng rồi. Bấm gửi lại để nhận mã mới.',
+
+  qua_nhieu: 'Đã nhập sai quá nhiều lần nên hệ thống tạm khóa mã này. Chờ 10 '
+    + 'phút rồi xin mã mới, hoặc đăng nhập bằng mật khẩu nếu ban quản lý đã đặt '
+    + 'cho bạn.',
+
+  sai_mat_khau: 'Sai mật khẩu, hoặc tài khoản này chưa được đăng ký. Nhờ ban '
+    + 'quản lý đặt lại mật khẩu, hoặc chuyển sang nhận mã một lần.',
+
+  chua_dat_mat_khau: 'Tài khoản này chưa có mật khẩu. Đăng nhập bằng mã một '
+    + 'lần, rồi nhờ ban quản lý đặt mật khẩu nếu bạn muốn dùng cách này.',
+
+  khong_gui_duoc: 'Hệ thống không gửi được thư lúc này. Đây là trục trặc của '
+    + 'hệ thống, không phải do bạn nhập sai. Thử lại sau ít phút, hoặc đăng '
+    + 'nhập bằng mật khẩu.',
+
+  chua_co_sms: 'Hệ thống chưa gửi được tin nhắn SMS. Dùng địa chỉ email đã '
+    + 'đăng ký với ban quản lý, hoặc đăng nhập bằng mật khẩu.',
+
+  mang: 'Không kết nối được tới máy chủ. Kiểm tra mạng rồi thử lại.',
+
+  la: 'Có lỗi không rõ. Thử lại giúp em, nếu vẫn vậy thì báo ban quản lý.',
+}
+
+export function loiDangNhap(tt: string, giay = 0): string {
+  if (tt === 'cho') {
+    return `Vừa gửi rồi — chờ ${doiCho(giay)} nữa mới gửi lại được. `
+      + 'Kiểm tra cả hộp thư rác trong lúc chờ.'
   }
-
-  // Thời gian chờ giữa hai lần gửi cho cùng một địa chỉ.
-  const giay = giaySauCho(loi.message ?? '')
-  if (giay !== null || ma === 'over_request_rate_limit' || msg.includes('rate limit')) {
-    return giay !== null
-      ? `Vừa gửi rồi, chờ ${giay} giây nữa mới gửi lại được.`
-      : 'Bạn thao tác hơi nhanh. Chờ một chút rồi thử lại.'
-  }
-
-  if (ma === 'otp_expired' || msg.includes('expired') || msg.includes('invalid or has expired')) {
-    return 'Mã đã hết hạn hoặc đã dùng rồi. Bấm “Gửi lại mã” để nhận mã mới.'
-  }
-
-  if (ma === 'invalid_credentials' || msg.includes('invalid login credentials')
-      || msg.includes('token is invalid')) {
-    return boiCanh === 'matkhau'
-      ? 'Sai tài khoản hoặc mật khẩu. Nếu bạn chưa từng đặt mật khẩu thì chuyển '
-        + 'sang đăng nhập bằng mã, hoặc nhờ ban quản lý đặt lại.'
-      : 'Mã không đúng. Kiểm tra lại dãy số trong thư — mã mới nhất mới dùng được.'
-  }
-
-  // Tài khoản có mật khẩu nhưng email chưa được xác nhận: đăng nhập bằng mật
-  // khẩu sẽ bị chặn cho tới khi xác nhận, nên phải nói đúng chỗ tắc.
-  if (ma === 'email_not_confirmed' || msg.includes('email not confirmed')) {
-    return 'Tài khoản chưa xác nhận email nên chưa dùng mật khẩu được. '
-      + 'Đăng nhập bằng mã một lần để xác nhận, hoặc báo ban quản lý.'
-  }
-
-  if (ma === 'validation_failed' || ma === 'email_address_invalid'
-      || msg.includes('invalid email') || msg.includes('unable to validate email')) {
-    return 'Địa chỉ email không hợp lệ. Kiểm tra lại chính tả.'
-  }
-
-  if (ma === 'signup_disabled' || ma === 'otp_disabled'
-      || msg.includes('signups not allowed') || msg.includes('disabled')) {
-    return 'Hệ thống đang tạm khóa đăng ký. Liên hệ ban quản lý để được mở.'
-  }
-
-  // Lỗi mạng của trình duyệt, không phải lỗi từ máy chủ.
-  if (msg.includes('failed to fetch') || msg.includes('network')
-      || msg.includes('load failed')) {
-    return 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.'
-  }
-
-  // Không nhận ra thì trả nguyên văn, KHÔNG nuốt: một thông điệp lạ bằng
-  // tiếng Anh vẫn hơn "Có lỗi xảy ra" — ít nhất còn chụp màn hình gửi đi được.
-  return loi.message ?? 'Có lỗi không rõ. Thử lại giúp em.'
+  return CAU[tt as TrangThai] ?? CAU.la
 }
