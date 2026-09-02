@@ -706,3 +706,30 @@ export const VIEC_BAO_TRI = [
   { id: 'vbt-1', plan_id: 'bt-1', han: ngayThuong(-4) },
   { id: 'vbt-2', plan_id: 'bt-2', han: ngayThuong(6) },
 ]
+
+/** Thăm dò gắn vào thông báo đầu tiên của bản demo. */
+export const THAM_DO_DEMO = {
+  cau_hoi: 'Có nên lắp thêm camera hầm B2?',
+  lua_chon: ['Đồng ý', 'Không', 'Cần bàn thêm'],
+  kin: false,
+  dong_luc: null as string | null,
+  dem: [148, 61, 22],
+}
+
+export type BinhLuanDemo = {
+  id: number
+  body: string
+  created_at: string
+  an_luc: string | null
+  can: string
+  ten: string
+}
+
+export const BINH_LUAN_DEMO: BinhLuanDemo[] = [
+  { id: 1, body: 'Nên lắp cả lối thoát hiểm chứ không chỉ chỗ để xe.',
+    created_at: ngayGio(2, 3), an_luc: null, can: 'P1-15.02', ten: 'Vũ Thị Hạnh' },
+  { id: 2, body: 'Chi phí lấy từ quỹ nào? Đề nghị BQL công bố dự toán trước khi chốt.',
+    created_at: ngayGio(1, 8), an_luc: null, can: 'P2-08.05', ten: 'Phạm Hoàng Nam' },
+  { id: 3, body: '(nội dung đã ẩn)',
+    created_at: ngayGio(1, 9), an_luc: ngayGio(1, 10), can: 'P1-07.02', ten: 'Hoàng Thị Mai' },
+]

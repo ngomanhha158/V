@@ -125,6 +125,131 @@ export type Database = {
           },
         ]
       }
+      announcement_comments: {
+        Row: {
+          an_boi: string | null
+          an_luc: string | null
+          an_ly_do: string | null
+          announcement_id: string
+          author_id: string
+          body: string
+          created_at: string
+          id: number
+          unit_id: string | null
+        }
+        Insert: {
+          an_boi?: string | null
+          an_luc?: string | null
+          an_ly_do?: string | null
+          announcement_id: string
+          author_id: string
+          body: string
+          created_at?: string
+          id?: number
+          unit_id?: string | null
+        }
+        Update: {
+          an_boi?: string | null
+          an_luc?: string | null
+          an_ly_do?: string | null
+          announcement_id?: string
+          author_id?: string
+          body?: string
+          created_at?: string
+          id?: number
+          unit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_comments_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "announcement_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "announcement_comments_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      announcement_polls: {
+        Row: {
+          announcement_id: string
+          cau_hoi: string
+          created_at: string
+          dong_luc: string | null
+          kin: boolean
+          lua_chon: string[]
+        }
+        Insert: {
+          announcement_id: string
+          cau_hoi: string
+          created_at?: string
+          dong_luc?: string | null
+          kin?: boolean
+          lua_chon: string[]
+        }
+        Update: {
+          announcement_id?: string
+          cau_hoi?: string
+          created_at?: string
+          dong_luc?: string | null
+          kin?: boolean
+          lua_chon?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_polls_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: true
+            referencedRelation: "announcements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      announcement_votes: {
+        Row: {
+          bo_luc: string
+          chon: number
+          poll_id: string
+          unit_id: string
+          user_id: string
+        }
+        Insert: {
+          bo_luc?: string
+          chon: number
+          poll_id: string
+          unit_id: string
+          user_id: string
+        }
+        Update: {
+          bo_luc?: string
+          chon?: number
+          poll_id?: string
+          unit_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcement_votes_poll_id_fkey"
+            columns: ["poll_id"]
+            isOneToOne: false
+            referencedRelation: "announcement_polls"
+            referencedColumns: ["announcement_id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           actor_id: string | null
@@ -1360,6 +1485,14 @@ export type Database = {
       mo_ky_bao_tri: {
         Args: Record<PropertyKey, never>
         Returns: number
+      }
+      bo_phieu: {
+        Args: { p_chon: number; p_poll: string; p_unit: string }
+        Returns: undefined
+      }
+      ket_qua_tham_do: {
+        Args: { p_poll: string }
+        Returns: { chon: number; so_phieu: number }[]
       }
       is_bql_manager: { Args: { p_project: string }; Returns: boolean }
       is_staff: { Args: { p_project: string }; Returns: boolean }

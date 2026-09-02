@@ -173,3 +173,16 @@ grant select on audit_log to authenticated;
 -- Cấp đủ quyền ghi vì đây là bảng BQL tự quản lý — khác payments hay audit_log.
 grant select, insert, update, delete on maintenance_plans, maintenance_runs to authenticated;
 grant execute on function xong_bao_tri(uuid, text) to authenticated;
+
+-- Bình luận và thăm dò trên bảng tin.
+-- Cư dân VIẾT được bình luận nhưng KHÔNG sửa/xóa: sửa lời mình đã nói sau khi
+-- người khác trả lời là bẻ cong cả mạch hội thoại. Ẩn là quyền của BQL, và
+-- policy ac_bql đã chốt điều đó — grant update ở đây chưa đủ để cư dân sửa.
+grant select, insert, update on announcement_comments to authenticated;
+grant usage, select on sequence announcement_comments_id_seq to authenticated;
+grant select, insert, update, delete on announcement_polls to authenticated;
+grant select on announcement_votes to authenticated;
+-- KHÔNG cấp insert/update thẳng trên announcement_votes: bỏ phiếu đi qua
+-- bo_phieu() để một căn một phiếu và chốt "đã đóng" nằm ở một chỗ duy nhất.
+grant execute on function bo_phieu(uuid, uuid, int) to authenticated;
+grant execute on function ket_qua_tham_do(uuid) to authenticated;

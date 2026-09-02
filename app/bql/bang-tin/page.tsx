@@ -1,4 +1,7 @@
 import { redirect } from 'next/navigation'
+import {
+  FormThamDo, HangBinhLuan, KetQuaBQL, type BinhLuanBQL, type ThamDoBQL,
+} from './gop-y-bql'
 import { createClient } from '@/lib/supabase/server'
 import { SoanThongBao } from './form'
 import { phatHanh, xoaThongBao } from './actions'
@@ -34,6 +37,43 @@ export default async function BqlBangTin() {
   const list = ds ?? []
   const nhap = list.filter((a) => !a.published_at)
   const daPhatHanh = list.filter((a) => a.published_at)
+  const ids = list.map((a) => a.id)
+
+  const [thamDo, binhLuan, phieu] = ids.length
+    ? await Promise.all([
+      supabase.from('announcement_polls')
+        .select('announcement_id, cau_hoi, lua_chon, kin, dong_luc').in('announcement_id', ids),
+      supabase.from('announcement_comments')
+        .select('id, announcement_id, body, created_at, an_luc, an_ly_do, units(code), profiles(full_name)')
+        .in('announcement_id', ids).order('created_at'),
+      supabase.from('announcement_votes').select('poll_id, chon').in('poll_id', ids),
+    ])
+    : [{ data: [] }, { data: [] }, { data: [] }]
+
+  // Đếm ở đây chứ không gọi ket_qua_tham_do(): BQL xem được cả cuộc kín, mà
+  // gọi hàm cho từng thông báo là N vòng gọi cho một màn danh sách.
+  const demTheoPoll = new Map<string, number[]>()
+  for (const t of thamDo.data ?? []) demTheoPoll.set(t.announcement_id, new Array(t.lua_chon.length).fill(0))
+  for (const v of phieu.data ?? []) {
+    const d = demTheoPoll.get(v.poll_id)
+    if (d && v.chon >= 0 && v.chon < d.length) d[v.chon] += 1
+  }
+  const td = new Map((thamDo.data ?? []).map((t) => [t.announcement_id, {
+    ...t, dem: demTheoPoll.get(t.announcement_id) ?? [],
+  } as ThamDoBQL]))
+
+  const mot = <T,>(v: T | T[] | null | undefined): T | null =>
+    (Array.isArray(v) ? (v[0] ?? null) : (v ?? null))
+  const blTheoTb = new Map<string, BinhLuanBQL[]>()
+  for (const c of binhLuan.data ?? []) {
+    const arr = blTheoTb.get(c.announcement_id) ?? []
+    arr.push({
+      id: c.id, body: c.body, created_at: c.created_at,
+      an_luc: c.an_luc, an_ly_do: c.an_ly_do,
+      can: mot(c.units)?.code ?? null, ten: mot(c.profiles)?.full_name ?? null,
+    })
+    blTheoTb.set(c.announcement_id, arr)
+  }
 
   const phamVi = (a: (typeof list)[number]) =>
     a.unit_id ? `Căn ${a.units?.code ?? '—'}`
@@ -110,6 +150,25 @@ export default async function BqlBangTin() {
                 {/* Cố ý KHÔNG có nút sửa/xóa ở đây. Thông báo đã tới tay cư dân
                     thì sửa lại là viết lại lịch sử — ai đọc bản cũ vẫn nhớ bản
                     cũ. Sai thì đăng đính chính, để cả hai bản cùng tồn tại. */}
+
+                <div className="mt-2">
+                  {td.has(a.id)
+                    ? <KetQuaBQL td={td.get(a.id)!} />
+                    : <FormThamDo tb={a.id} />}
+                </div>
+
+                {(blTheoTb.get(a.id) ?? []).length > 0 && (
+                  <div className="mt-3 border-t border-line pt-2">
+                    <div className="text-[0.75rem] font-semibold tracking-wide text-faint uppercase">
+                      {(blTheoTb.get(a.id) ?? []).length} ý kiến
+                    </div>
+                    <ul className="divide-y divide-line">
+                      {(blTheoTb.get(a.id) ?? []).map((c) => (
+                        <HangBinhLuan key={c.id} c={c} />
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

@@ -1994,3 +1994,165 @@ begin
   update maintenance_plans set han_ke_tiep = v_han where id = v_plan.id;
   return v_han;
 end $fn$;
+
+-- ═══════════════ 12. BÌNH LUẬN VÀ THĂM DÒ TRÊN BẢNG TIN ═══════════════
+-- Thông báo đang là một chiều. Ý kiến cư dân vẫn nằm ở nhóm Zalo mà BQL không
+-- đọc hết được — và không lưu lại được để đối chiếu về sau.
+
+create table announcement_comments (
+  id              bigserial primary key,
+  announcement_id uuid not null references announcements(id) on delete cascade,
+  author_id       uuid not null references profiles(id) on delete cascade,
+  -- Căn của người viết, chốt tại lúc viết. Người đó có thể chuyển đi sau này,
+  -- nhưng bình luận vẫn phải đọc được là "căn nào nói câu này".
+  unit_id         uuid references units(id) on delete set null,
+  body            text not null check (length(btrim(body)) between 1 and 2000),
+  -- BQL ẨN chứ không XÓA. Xóa được là BQL xóa sạch lời chê mà không để lại dấu;
+  -- ẩn thì dòng vẫn còn, nhật ký kiểm toán vẫn ghi, và màn vẫn hiện "đã ẩn".
+  an_luc          timestamptz,
+  an_boi          uuid references profiles(id),
+  an_ly_do        text,
+  created_at      timestamptz not null default now()
+);
+create index on announcement_comments (announcement_id, created_at);
+
+create table announcement_polls (
+  -- unique: một thông báo một cuộc thăm dò. Hai cuộc trên cùng một thông báo là
+  -- người đọc không biết đang bỏ phiếu cho cái nào.
+  announcement_id uuid primary key references announcements(id) on delete cascade,
+  cau_hoi         text not null,
+  lua_chon        text[] not null check (array_length(lua_chon, 1) between 2 and 8),
+  -- Kín = giấu kết quả cho tới khi đóng. Hiện số đang chạy làm người bỏ sau
+  -- nghiêng theo số đông; nhưng giấu thì mất tính minh bạch. Để BQL chọn.
+  kin             boolean not null default false,
+  dong_luc        timestamptz,
+  created_at      timestamptz not null default now()
+);
+
+/*
+ * MỘT CĂN MỘT PHIẾU, không phải một người một phiếu.
+ *
+ * Đây là quyết định mô hình quan trọng nhất ở đây. Chung cư ra quyết định theo
+ * hộ: một căn có bốn người lớn đã đăng ký không được lấn phiếu căn chỉ có một.
+ * Khóa chính (poll_id, unit_id) làm điều đó thành bất biến của database chứ
+ * không phải một phép kiểm ở tầng app mà nhánh nào đó quên gọi.
+ *
+ * Đây là thăm dò KHÔNG chính thức trên bảng tin. Biểu quyết hội nghị nhà chung
+ * cư là chuyện khác — có trọng số theo diện tích, có biên bản — và là một tính
+ * năng riêng.
+ */
+create table announcement_votes (
+  poll_id   uuid not null references announcement_polls(announcement_id) on delete cascade,
+  unit_id   uuid not null references units(id) on delete cascade,
+  user_id   uuid not null references profiles(id) on delete cascade,
+  chon      int  not null check (chon >= 0),
+  bo_luc    timestamptz not null default now(),
+  primary key (poll_id, unit_id)
+);
+create index on announcement_votes (poll_id, chon);
+
+alter table announcement_comments enable row level security;
+alter table announcement_polls    enable row level security;
+alter table announcement_votes    enable row level security;
+
+/*
+ * Ai thấy thông báo thì thấy bình luận của thông báo đó — dùng lại đúng policy
+ * announcement_read qua một truy vấn con, không chép lại luật hiển thị. Chép
+ * lại là hai bộ luật, và sớm muộn sửa một bên quên bên kia.
+ *
+ * Bình luận đã ẩn: chỉ BQL còn thấy nội dung. Cư dân thấy dòng trống chỗ (màn
+ * hiện "đã ẩn") chứ không thấy bình luận biến mất không dấu vết.
+ */
+create policy ac_read on announcement_comments for select using (
+  announcement_id in (select id from announcements)
+);
+create policy ac_viet on announcement_comments for insert with check (
+  author_id = auth.uid()
+  and announcement_id in (select id from announcements)
+  and (unit_id is null or unit_id in (select current_unit_ids()))
+);
+-- Sửa/ẩn: BQL của dự án chứa thông báo đó. Cư dân KHÔNG sửa được lời mình đã
+-- nói — sửa sau khi người khác đã trả lời là bẻ cong cả mạch hội thoại.
+create policy ac_bql on announcement_comments for update using (
+  is_staff((select a.project_id from announcements a where a.id = announcement_id))
+) with check (
+  is_staff((select a.project_id from announcements a where a.id = announcement_id))
+);
+
+create policy ap_read on announcement_polls for select using (
+  announcement_id in (select id from announcements)
+);
+create policy ap_bql on announcement_polls for all using (
+  is_staff((select a.project_id from announcements a where a.id = announcement_id))
+) with check (
+  is_staff((select a.project_id from announcements a where a.id = announcement_id))
+);
+
+-- Phiếu: đọc được thì đếm được. Cuộc thăm dò KÍN che kết quả ở tầng hàm
+-- ket_qua_tham_do() chứ không ở tầng RLS — che bằng RLS thì chính người bỏ
+-- phiếu cũng không đọc lại được phiếu của mình.
+create policy av_read on announcement_votes for select using (
+  poll_id in (select announcement_id from announcement_polls)
+);
+create policy av_bo on announcement_votes for all using (
+  unit_id in (select current_unit_ids())
+) with check (
+  unit_id in (select current_unit_ids())
+);
+
+/*
+ * Bỏ phiếu, hoặc đổi phiếu đã bỏ.
+ *
+ * Đổi được cho tới khi đóng là CỐ Ý: người ta đọc bình luận rồi mới nghĩ lại,
+ * mà đó chính là lý do đặt thăm dò cạnh phần thảo luận. Khóa phiếu đầu tiên
+ * thì phần thảo luận chỉ còn để trang trí.
+ */
+create or replace function bo_phieu(p_poll uuid, p_unit uuid, p_chon int)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare v_poll announcement_polls;
+begin
+  select * into v_poll from announcement_polls where announcement_id = p_poll;
+  if not found then
+    raise exception 'Khong co cuoc tham do nay' using errcode = 'P0002';
+  end if;
+  if v_poll.dong_luc is not null and v_poll.dong_luc <= now() then
+    raise exception 'Cuoc tham do da dong' using errcode = '22023';
+  end if;
+  if p_chon < 0 or p_chon >= array_length(v_poll.lua_chon, 1) then
+    raise exception 'Lua chon khong hop le' using errcode = '22023';
+  end if;
+  if p_unit not in (select current_unit_ids()) then
+    raise exception 'Ban khong thuoc can ho nay' using errcode = '42501';
+  end if;
+
+  insert into announcement_votes (poll_id, unit_id, user_id, chon)
+  values (p_poll, p_unit, auth.uid(), p_chon)
+  on conflict (poll_id, unit_id)
+  do update set chon = excluded.chon, user_id = excluded.user_id, bo_luc = now();
+end $fn$;
+
+/*
+ * Kết quả: số phiếu theo từng lựa chọn.
+ *
+ * Cuộc KÍN chưa đóng thì chỉ BQL thấy số. Cư dân nhận về mảng rỗng — màn hiện
+ * "kết quả công bố khi đóng" chứ không hiện 0 phiếu, vì 0 phiếu là một con số
+ * sai chứ không phải một lời từ chối.
+ */
+create or replace function ket_qua_tham_do(p_poll uuid)
+returns table (chon int, so_phieu bigint)
+language plpgsql stable security definer set search_path = public as $fn$
+declare v_poll announcement_polls; v_project uuid;
+begin
+  select * into v_poll from announcement_polls where announcement_id = p_poll;
+  if not found then return; end if;
+  select a.project_id into v_project from announcements a where a.id = p_poll;
+
+  if v_poll.kin and (v_poll.dong_luc is null or v_poll.dong_luc > now())
+     and not is_staff(v_project) then
+    return;
+  end if;
+
+  return query
+    select v.chon, count(*)::bigint from announcement_votes v
+     where v.poll_id = p_poll group by v.chon;
+end $fn$;
