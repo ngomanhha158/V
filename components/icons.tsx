@@ -140,3 +140,6 @@ export const IcRa = (p: SVGProps<SVGSVGElement>) => (
 export const IcThe = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="9" cy="11" r="2" /><path d="M6.5 16c.6-1.3 1.5-2 2.5-2s1.9.7 2.5 2" /><path d="M15 10h4M15 13.5h4" /></I>
 )
+export const IcXe = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}><path d="M5 16.5V19a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1v-2.5" /><path d="M21.5 16.5V19a1 1 0 0 1-1 1H20a1 1 0 0 1-1-1v-2.5" /><path d="M3 16.5h18v-4l-1.6-4.2A2 2 0 0 0 17.5 7h-11a2 2 0 0 0-1.9 1.3L3 12.5z" /><circle cx="6.75" cy="14.25" r=".9" /><circle cx="17.25" cy="14.25" r=".9" /></I>
+)

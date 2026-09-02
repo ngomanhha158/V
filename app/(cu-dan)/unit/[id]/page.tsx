@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
 import { removeVehicle, removePet, updateMember } from './actions'
+import { docConTrong, docHanMuc, loiChoDoi, NHAN_TRANG_THAI, nhanLoai } from '@/lib/xe'
 import { AddVehicleForm, AddPetForm } from './forms'
 import { Button, Card, CardHead, Hop, Input, PageHead, Pill, Trong, ngayVN } from '@/components/ui'
 import { IcTrai } from '@/components/icons'
@@ -28,15 +29,16 @@ export default async function UnitProfile({ params }: { params: Promise<{ id: st
     .maybeSingle()
   if (!unit) notFound()
 
-  const [{ data: isManager }, { data: members }, { data: vehicles }, { data: pets }] = await Promise.all([
+  const [{ data: isManager }, { data: members }, { data: vehicles }, { data: pets }, { data: choDo }] = await Promise.all([
     db.rpc('is_unit_manager', { p_unit: id }),
     db
       .from('unit_memberships')
       .select('id, role, status, valid_from, valid_to, profiles!unit_memberships_user_id_fkey(full_name, phone)')
       .eq('unit_id', id)
       .order('role'),
-    db.from('unit_vehicles').select('id, plate, vehicle_type, card_no').eq('unit_id', id).order('plate'),
+    db.from('unit_vehicles').select('id, plate, loai, card_no, trang_thai').eq('unit_id', id).order('plate'),
     db.from('unit_pets').select('id, name, species, vaccinated_until').eq('unit_id', id).order('name'),
+    db.rpc('cho_do_cua_can', { p_unit: id }),
   ])
 
   const TT: Record<string, 'trung' | 'tot' | 'canh' | 'xau'> = {
@@ -129,28 +131,66 @@ export default async function UnitProfile({ params }: { params: Promise<{ id: st
           sub="BQL đọc được để đối chiếu đỗ xe sai, nhưng không sửa hộ"
           right={<span className="text-[0.8125rem] text-faint">{vehicles?.length ?? 0}</span>}
         />
+
+        {/* Hạn mức đứng TRƯỚC ô đăng ký. Người ta cần biết còn chỗ hay không
+            trước khi gõ biển số, chứ không phải gõ xong mới nhận một câu từ
+            chối. */}
+        {(choDo ?? []).length > 0 && (
+          <div className="divide-y divide-line border-b border-line">
+            {(choDo ?? []).map((c) => (
+              <div key={c.loai} className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-2.5">
+                <span className="text-[0.8125rem] font-medium text-muted">{nhanLoai(c.loai)}</span>
+                <span className="num text-[0.8125rem] text-ink">
+                  {docHanMuc(c.da_dung, c.moi_can, c.co_han_muc)}
+                  {c.co_han_muc && (
+                    <span className="text-faint">
+                      {' · '}{docConTrong(c.tong_cho, c.ca_toa_dang_dung)}
+                    </span>
+                  )}
+                  {c.hang_cho_ca_toa > 0 && (
+                    <span className="text-faint">{' · '}{c.hang_cho_ca_toa} xe đang chờ</span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {isManager && <div className="border-b border-line p-4"><AddVehicleForm unitId={id} /></div>}
         {!vehicles?.length ? (
           <div className="p-4"><Trong title="Chưa đăng ký xe nào" /></div>
         ) : (
           <ul className="divide-y divide-line">
-            {vehicles.map((v) => (
-              <li key={v.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <span className="num font-semibold text-ink">{v.plate}</span>
-                  <span className="ml-2 text-[0.8125rem] text-muted">
-                    {v.vehicle_type}
-                    {v.card_no && ` · thẻ ${v.card_no}`}
-                  </span>
-                </div>
-                {isManager && (
-                  <form action={removeVehicle.bind(null, id)}>
-                    <input type="hidden" name="id" value={v.id} />
-                    <Button co="sm" dang="nguy">Xóa</Button>
-                  </form>
-                )}
-              </li>
-            ))}
+            {vehicles.map((v) => {
+              const cho = (choDo ?? []).find((c) => c.loai === v.loai)
+              return (
+                <li key={v.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <span className="num font-semibold text-ink">{v.plate}</span>
+                    <span className="ml-2 text-[0.8125rem] text-muted">
+                      {nhanLoai(v.loai)}
+                      {v.card_no && ` · thẻ ${v.card_no}`}
+                    </span>
+                    {v.trang_thai !== 'da_duyet' && (
+                      <p className="mt-0.5 text-[0.75rem] leading-relaxed text-faint">
+                        {loiChoDoi(v.trang_thai, cho?.vi_tri_dau ?? 0)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Pill tone={v.trang_thai === 'da_duyet' ? 'tot' : 'canh'} cham={false}>
+                      {NHAN_TRANG_THAI[v.trang_thai] ?? v.trang_thai}
+                    </Pill>
+                    {isManager && (
+                      <form action={removeVehicle.bind(null, id)}>
+                        <input type="hidden" name="id" value={v.id} />
+                        <Button co="sm" dang="nguy">Xóa</Button>
+                      </form>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
       </Card>

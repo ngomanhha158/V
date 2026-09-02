@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react'
 import { Button, Field, Hop, Input, Pill, Select, vnd } from '@/components/ui'
+import { LOAI_XE, NHAN_LOAI } from '@/lib/xe'
 import { suaBieuPhi, themBieuPhi, xoaBieuPhi, type BieuPhiState } from './actions'
 
 export type BieuPhi = {
@@ -10,6 +11,7 @@ export type BieuPhi = {
   name: string
   unit_price: number | null
   calc_method: string
+  loai_xe?: string | null
 }
 
 const dauTien = { error: undefined, ok: undefined } satisfies BieuPhiState
@@ -29,6 +31,13 @@ export const CACH_TINH: Record<string, { nhan: string; nhanGia: string; giaiThic
     nhan: 'Theo chỉ số công tơ',
     nhanGia: 'đồng / đơn vị',
     giaiThich: 'Nhân với (chỉ số cuối − chỉ số đầu) của kỳ. Căn chưa ghi chỉ số sẽ không có dòng phí này.',
+  },
+  per_vehicle: {
+    nhan: 'Theo đầu xe',
+    nhanGia: 'đồng / xe / tháng',
+    giaiThich: 'Nhân với số xe ĐÃ ĐƯỢC CẤP CHỖ của căn. Xe đang xếp hàng chờ không '
+      + 'bị tính tiền — thu tiền một chỗ chưa có là thu sai. Căn không có xe thì '
+      + 'không có dòng phí này.',
   },
 }
 
@@ -89,6 +98,18 @@ export function FormThem({ dienTichMau }: { dienTichMau: number | null }) {
           <XemTruoc gia={gia} cach={cach} dienTichMau={dienTichMau} />
         </Field>
       </div>
+
+      {/* Bắt chọn loại xe, không để trống rồi ngầm hiểu là "tất cả": một khoản
+          "phí gửi ô tô" đếm luôn xe đạp thì mỗi hộ thừa vài trăm nghìn một
+          tháng, và chỉ lộ ra khi có người ngồi cộng lại hóa đơn. */}
+      {cach === 'per_vehicle' && (
+        <Field label="Tính cho loại xe nào" hint="Chỉ đếm xe đã được cấp chỗ trong hầm">
+          <Select name="loai_xe" required defaultValue="">
+            <option value="" disabled>— Chọn loại xe —</option>
+            {LOAI_XE.map((l) => <option key={l} value={l}>{NHAN_LOAI[l]}</option>)}
+          </Select>
+        </Field>
+      )}
 
       {s.error && <Hop tone="xau" title="Không thêm được">{s.error}</Hop>}
       {s.ok && <Hop tone="tot">{s.ok}</Hop>}
@@ -156,6 +177,14 @@ function Dong({ b, dienTichMau }: { b: BieuPhi; dienTichMau: number | null }) {
                 ))}
               </Select>
             </Field>
+            {cach === 'per_vehicle' && (
+              <Field label="Tính cho loại xe nào">
+                <Select name="loai_xe" required defaultValue={b.loai_xe ?? ''}>
+                  <option value="" disabled>— Chọn loại xe —</option>
+                  {LOAI_XE.map((l) => <option key={l} value={l}>{NHAN_LOAI[l]}</option>)}
+                </Select>
+              </Field>
+            )}
             <Field label={`Đơn giá (${CACH_TINH[cach]?.nhanGia})`}>
               <Input
                 name="unit_price" required inputMode="numeric" className="num"

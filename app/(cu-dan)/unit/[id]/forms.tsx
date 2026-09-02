@@ -1,5 +1,7 @@
 'use client'
 import { useActionState } from 'react'
+import { Button, Hop, Input, Select } from '@/components/ui'
+import { LOAI_XE, NHAN_LOAI } from '@/lib/xe'
 import { addVehicle, addPet, type FormState } from './actions'
 
 const empty: FormState = {}
@@ -7,17 +9,22 @@ const empty: FormState = {}
 export function AddVehicleForm({ unitId }: { unitId: string }) {
   const [state, action, busy] = useActionState(addVehicle.bind(null, unitId), empty)
   return (
-    <form action={action} className="space-y-2 rounded border p-3">
-      <div className="flex flex-wrap gap-2">
-        <input name="plate" placeholder="Biển số" required className="w-36 rounded border p-2" />
-        <input name="vehicle_type" placeholder="Loại xe" className="w-32 rounded border p-2" />
-        <input name="card_no" placeholder="Số thẻ" className="w-28 rounded border p-2" />
-        <button disabled={busy} className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-50">
-          {busy ? '…' : 'Thêm xe'}
-        </button>
+    <form action={action} className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Input name="plate" placeholder="Biển số" required className="num w-36" />
+        {/* Loại xe là Ô CHỌN chứ không phải ô gõ tự do: hạn mức đếm theo loại,
+            mà "ô tô" / "oto" / "Ô Tô" gõ tay thì không đếm chung được. */}
+        <Select name="loai" required defaultValue="" className="w-32">
+          <option value="" disabled>Loại xe</option>
+          {LOAI_XE.map((l) => <option key={l} value={l}>{NHAN_LOAI[l]}</option>)}
+        </Select>
+        <Input name="card_no" placeholder="Số thẻ" className="num w-28" />
+        <Button type="submit" co="sm" dang="chinh" disabled={busy}>
+          {busy ? 'Đang gửi…' : 'Đăng ký xe'}
+        </Button>
       </div>
-      {state.error && <p className="text-sm text-red-700">{state.error}</p>}
-      {state.ok && <p className="text-sm text-green-700">{state.ok}</p>}
+      {state.error && <Hop tone="xau">{state.error}</Hop>}
+      {state.ok && <Hop tone="tot">{state.ok}</Hop>}
     </form>
   )
 }
@@ -25,20 +32,20 @@ export function AddVehicleForm({ unitId }: { unitId: string }) {
 export function AddPetForm({ unitId }: { unitId: string }) {
   const [state, action, busy] = useActionState(addPet.bind(null, unitId), empty)
   return (
-    <form action={action} className="space-y-2 rounded border p-3">
-      <div className="flex flex-wrap gap-2">
-        <input name="name" placeholder="Tên" required className="w-32 rounded border p-2" />
-        <input name="species" placeholder="Loài (chó/mèo)" className="w-36 rounded border p-2" />
-        <label className="flex items-center gap-1 text-sm">
+    <form action={action} className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Input name="name" placeholder="Tên" required className="w-32" />
+        <Input name="species" placeholder="Loài (chó/mèo)" className="w-36" />
+        <label className="flex items-center gap-2 text-[0.8125rem] text-muted">
           Tiêm phòng đến
-          <input type="date" name="vaccinated_until" className="rounded border p-2" />
+          <Input type="date" name="vaccinated_until" className="num w-40" />
         </label>
-        <button disabled={busy} className="rounded bg-neutral-900 px-4 py-2 text-white disabled:opacity-50">
-          {busy ? '…' : 'Thêm'}
-        </button>
+        <Button type="submit" co="sm" dang="chinh" disabled={busy}>
+          {busy ? 'Đang gửi…' : 'Thêm'}
+        </Button>
       </div>
-      {state.error && <p className="text-sm text-red-700">{state.error}</p>}
-      {state.ok && <p className="text-sm text-green-700">{state.ok}</p>}
+      {state.error && <Hop tone="xau">{state.error}</Hop>}
+      {state.ok && <Hop tone="tot">{state.ok}</Hop>}
     </form>
   )
 }

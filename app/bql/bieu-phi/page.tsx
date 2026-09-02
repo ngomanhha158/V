@@ -15,7 +15,7 @@ export default async function BieuPhiPage() {
 
   const [{ data: rows, error }, { data: units }] = await Promise.all([
     db.from('fee_types')
-      .select('id, code, name, unit_price, calc_method')
+      .select('id, code, name, unit_price, calc_method, loai_xe')
       .eq('project_id', project.id).order('code'),
     db.from('units').select('area_m2'),
   ])

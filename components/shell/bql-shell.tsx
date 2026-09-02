@@ -5,7 +5,7 @@ import { ThemeToggle } from './theme-toggle'
 import { NutRa } from './nut-ra'
 import {
   IcBieuDo, IcCanHo, IcCheck, IcDoiSoat, IcHoaDon, IcLich, IcLoa, IcNguoi, IcNha, IcNhap, IcQR,
-  IcSach, IcSo, IcTaiVe, IcThe, IcTien, IcToaNha, IcYeuCau,
+  IcSach, IcSo, IcTaiVe, IcThe, IcTien, IcToaNha, IcXe, IcYeuCau,
 } from '@/components/icons'
 
 /** Nhãn nhóm. Ẩn trên điện thoại: hàng ngang không diễn đạt được phân cấp,
@@ -39,6 +39,7 @@ export function BqlShell({
       <NavDoc href={`${base}/bql/sla`} icon={<IcCheck />}>Cam kết thời gian</NavDoc>
       <NavDoc href={`${base}/bql/bao-tri`} icon={<IcLich />}>Bảo trì định kỳ</NavDoc>
       <NavDoc href={`${base}/quet`} icon={<IcThe />}>Quét thẻ cư dân</NavDoc>
+      <NavDoc href={`${base}/bql/bai-xe`} icon={<IcXe />}>Chỗ đỗ xe</NavDoc>
 
       <Muc nhan="Truyền thông" />
       <NavDoc href={`${base}/bql/bang-tin`} icon={<IcLoa />}>Bảng tin</NavDoc>
