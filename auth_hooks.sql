@@ -201,6 +201,8 @@ grant execute on function quet_khach(text, boolean)                           to
 grant execute on function so_ra_vao(uuid, date, date)                         to authenticated;
 grant execute on function ty_le_ho_dung_app(uuid)                             to authenticated;
 grant execute on function khach_trang_thai(khach_tham, timestamptz)           to authenticated;
+grant execute on function khach_an_han()                                      to authenticated;
+grant execute on function khach_cua_toi()                                     to authenticated;
 grant execute on function o_trong_du_an(uuid)                                 to authenticated;
 grant execute on function is_bqt(uuid)                                        to authenticated;
 grant execute on function quy_ghi_duoc(uuid)                                  to authenticated;

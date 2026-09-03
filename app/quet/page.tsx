@@ -27,7 +27,7 @@ export default async function Page() {
   return (
     <BqlShell>
     <div className="space-y-5">
-      <PageHead title="Quét thẻ cư dân" sub="Dùng app camera có sẵn trên điện thoại" />
+      <PageHead title="Quét mã ở cửa" sub="Thẻ cư dân và mã khách — dùng app camera có sẵn trên điện thoại" />
 
       {laNhanSu ? (
         <Hop tone="tot" title="Tài khoản này quét được">
@@ -59,6 +59,26 @@ export default async function Page() {
             hợp lệ, màn đỏ là không — và màn đỏ luôn nói rõ vì sao.
           </li>
         </ol>
+      </Card>
+
+      {/* Hai loại mã trông giống nhau trong máy camera nhưng xử lý khác nhau,
+          và bảo vệ là người phải biết điều đó TRƯỚC khi vào ca. */}
+      <Card>
+        <CardHead title="Hai loại mã, hai màn khác nhau" />
+        <div className="space-y-3 p-4 text-[0.875rem] leading-relaxed text-muted">
+          <p>
+            <strong className="text-ink">Thẻ cư dân</strong> — người đang sống ở
+            đây. Mã sống một phút, quét xong là xong,{' '}
+            <strong className="text-ink">không ghi vào sổ nào</strong>.
+          </p>
+          <p>
+            <strong className="text-ink">Mã khách</strong> — người ngoài được cư
+            dân mời. Màn quét hiện tên khách, căn được thăm và ai mời. Mở màn đó{' '}
+            <strong className="text-ink">chưa ghi gì cả</strong>: soi thử thoải
+            mái, chỉ khi bấm nút &ldquo;Ghi giờ VÀO&rdquo; mới vào sổ ra vào.
+            Lúc khách về, quét lại chính mã đó để ghi giờ ra.
+          </p>
+        </div>
       </Card>
 
       <Hop tone="trung" title="Hai điều cần nhớ">

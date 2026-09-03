@@ -1209,6 +1209,38 @@ export type Database = {
           },
         ]
       }
+      khach_tham: {
+        Row: {
+          id: string
+          project_id: string
+          unit_id: string
+          ho_ten: string
+          dien_thoai: string | null
+          ly_do: string | null
+          ma: string
+          hieu_luc_tu: string
+          hieu_luc_den: string
+          moi_boi: string | null
+          tao_luc: string
+          thu_hoi_luc: string | null
+          thu_hoi_boi: string | null
+          vao_luc: string | null
+          ra_luc: string | null
+          vao_boi: string | null
+          ra_boi: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "khach_tham_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quy_bao_tri: {
         Row: {
           project_id: string
@@ -1439,6 +1471,72 @@ export type Database = {
       duyet_xe_tiep: {
         Args: { p_building: string; p_loai: Database["public"]["Enums"]["loai_xe"] }
         Returns: { bien_so: string; can: string }[]
+      }
+      moi_khach: {
+        Args: {
+          p_unit: string
+          p_ho_ten: string
+          p_tu: string
+          p_den: string
+          p_dien_thoai?: string | null
+          p_ly_do?: string | null
+        }
+        Returns: { id: string; ma: string }[]
+      }
+      thu_hoi_khach: { Args: { p_id: string }; Returns: undefined }
+      khach_cua_toi: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          ho_ten: string
+          dien_thoai: string | null
+          ly_do: string | null
+          can: string
+          hieu_luc_tu: string
+          hieu_luc_den: string
+          vao_luc: string | null
+          ra_luc: string | null
+          trang_thai: string
+        }[]
+      }
+      quet_khach: {
+        Args: { p_ma: string; p_ghi?: boolean }
+        Returns: {
+          id: string | null
+          ho_ten: string | null
+          dien_thoai: string | null
+          ly_do: string | null
+          can: string | null
+          toa: string | null
+          nguoi_moi: string | null
+          hieu_luc_tu: string | null
+          hieu_luc_den: string | null
+          trang_thai: string
+          cho_vao: boolean
+          loi: string | null
+          vao_luc: string | null
+          ra_luc: string | null
+        }[]
+      }
+      so_ra_vao: {
+        Args: { p_project: string; p_tu: string; p_den: string }
+        Returns: {
+          id: string
+          ho_ten: string
+          dien_thoai: string | null
+          can: string
+          toa: string
+          nguoi_moi: string | null
+          hieu_luc_tu: string
+          hieu_luc_den: string
+          vao_luc: string | null
+          ra_luc: string | null
+          trang_thai: string
+        }[]
+      }
+      ty_le_ho_dung_app: {
+        Args: { p_project: string }
+        Returns: { tong_can: number; can_co_nguoi: number; ty_le: number }[]
       }
       is_bqt: { Args: { p_project: string }; Returns: boolean }
       o_trong_du_an: { Args: { p_project: string }; Returns: boolean }

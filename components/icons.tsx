@@ -119,6 +119,14 @@ export const IcTaiVe = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></I>
 )
 
+/** Người có dấu cộng: khách được mời vào, không phải cư dân. */
+export const IcKhach = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <circle cx="9" cy="8" r="3.2" /><path d="M3.5 20c0-3 2.5-5 5.5-5s5.5 2 5.5 5" />
+    <path d="M18 9v6M15 12h6" />
+  </I>
+)
+
 /** Két sắt: quỹ bảo trì là tiền để riêng, không phải dòng tiền chạy qua. */
 export const IcKet = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}>

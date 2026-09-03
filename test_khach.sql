@@ -179,6 +179,53 @@ begin
   exception when insufficient_privilege then null;
   end;
 
+  -- ── 9b. "Đang trong tòa" khác "quên quét ra" ──
+  -- Gộp hai cái làm một thì con số "N khách đang trong tòa" phình lên mãi cho
+  -- tới lúc không ai tin nó nữa: mỗi khách quên quét lúc về ở lại trong đó
+  -- vĩnh viễn.
+  perform set_config('test.uid', chu::text, true);
+  select id, ma into k4, ma4 from moi_khach(
+    u_a, 'Khach quen quet ra', now() - interval '9 hours', now() - interval '5 hours');
+  -- Đặt thẳng giờ vào thay vì gọi quet_khach: lượt này có cửa sổ đã đóng, mà
+  -- ngoài đời khách vào lúc cửa sổ còn mở rồi thời gian mới trôi qua. Không có
+  -- cách nào chờ 5 tiếng trong một bài test.
+  update khach_tham set vao_luc = hieu_luc_tu + interval '10 minutes' where id = k4;
+  perform set_config('test.uid', bv::text, true);
+  select trang_thai into r from so_ra_vao(p_k, (now() - interval '2 days')::date,
+                                          (now() + interval '1 day')::date)
+   where id = k4;
+  if r.trang_thai <> 'quen_quet_ra' then
+    raise exception 'FAIL 9e: het gio 5 tieng ma van bao %', r.trang_thai;
+  end if;
+  -- Nhưng vẫn quét được: bảo vệ gặp lại khách ở cửa phải ghi được giờ ra, chứ
+  -- không phải nhận màn đỏ cho một lượt vốn hợp lệ.
+  select * into r from quet_khach(ma4, true);
+  if not r.cho_vao then raise exception 'FAIL 9f: khong ghi duoc gio ra cho luot quen quet'; end if;
+  if r.ra_luc is null then raise exception 'FAIL 9g: quet lai ma khong ghi gio ra'; end if;
+
+  -- Còn trong ân hạn thì vẫn là "đang trong tòa", không vội kết luận là quên.
+  perform set_config('test.uid', chu::text, true);
+  select id, ma into k4, ma4 from moi_khach(
+    u_a, 'Khach o nan lai', now() - interval '3 hours', now() - interval '1 hour');
+  update khach_tham set vao_luc = hieu_luc_tu + interval '10 minutes' where id = k4;
+  perform set_config('test.uid', bv::text, true);
+  select * into r from so_ra_vao(p_k, (now() - interval '2 days')::date,
+                                 (now() + interval '1 day')::date) where id = k4;
+  if r.trang_thai <> 'trong_toa' then
+    raise exception 'FAIL 9h: moi qua gio 1 tieng da bao quen quet (%)', r.trang_thai;
+  end if;
+
+  -- ── 9c. Cư dân đọc danh sách của mình kèm trạng thái tính Ở SQL ──
+  perform set_config('test.uid', chu::text, true);
+  select count(*) into n from khach_cua_toi();
+  if n < 4 then raise exception 'FAIL 9i: khach_cua_toi chi tra ve % dong', n; end if;
+  select count(*) into n from khach_cua_toi() where trang_thai = 'quen_quet_ra';
+  -- Lượt trên đã được quét ra nên không còn quên nữa; con số này chỉ cần > = 0,
+  -- điều đáng kiểm là hàm KHÔNG trả về lượt của căn khác.
+  perform set_config('test.uid', hang_xom::text, true);
+  select count(*) into n from khach_cua_toi() where can = 'K1-12.04';
+  if n <> 0 then raise exception 'FAIL 9j: khach_cua_toi lo luot khach cua can khac'; end if;
+
   -- ── 10. Bảo vệ khu KHÁC không quét được ──
   perform set_config('test.uid', bv_x::text, true);
   begin

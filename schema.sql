@@ -3133,11 +3133,22 @@ create index if not exists khach_du_an_idx on khach_tham (project_id, hieu_luc_t
 -- Trạng thái SUY RA, không lưu. Lưu thì phải có ai đó chạy đi cập nhật lúc hết
 -- giờ, mà không ai chạy — nên cột đó sẽ nói "đang hiệu lực" cho một mã đã chết
 -- từ hôm kia.
+-- Ân hạn sau giờ hẹn trước khi coi một lượt chưa quét ra là QUÊN QUÉT. Khách ở
+-- nán lại nửa tiếng là chuyện thường; hai tiếng thì không.
+create or replace function khach_an_han() returns interval
+language sql immutable set search_path = public as $fn$ select interval '2 hours' $fn$;
+
 create or replace function khach_trang_thai(k khach_tham, bay timestamptz default now())
-returns text language sql immutable set search_path = public as $fn$
+returns text language sql stable set search_path = public as $fn$
   select case
     when k.thu_hoi_luc is not null then 'thu_hoi'
     when k.ra_luc  is not null     then 'da_ra'
+    -- "Đang trong tòa" và "quên quét ra" là HAI việc khác nhau, và gộp chúng là
+    -- con số "N khách đang trong tòa" phình lên mãi cho tới lúc không ai tin nó
+    -- nữa. Một lượt hẹn tới 18h mà 10h sáng hôm sau vẫn chưa quét ra thì gần
+    -- như chắc chắn là khách về rồi, không phải khách còn ở đây.
+    when k.vao_luc is not null and bay > k.hieu_luc_den + khach_an_han()
+                                   then 'quen_quet_ra'
     when k.vao_luc is not null     then 'trong_toa'
     when bay < k.hieu_luc_tu       then 'chua_toi_gio'
     when bay > k.hieu_luc_den      then 'het_han'
@@ -3247,7 +3258,9 @@ begin
   end if;
 
   v_tt := khach_trang_thai(k, v_bay);
-  v_cho := v_tt in ('dang_hieu_luc', 'trong_toa');
+  -- quen_quet_ra vẫn quét được: bảo vệ gặp lại khách ở cửa thì phải ghi được
+  -- giờ ra, chứ không phải nhận một màn đỏ cho một lượt vốn hợp lệ.
+  v_cho := v_tt in ('dang_hieu_luc', 'trong_toa', 'quen_quet_ra');
   v_loi := case v_tt
     when 'thu_hoi'      then 'Cư dân đã thu hồi lượt khách này'
     when 'chua_toi_gio' then 'Chưa tới giờ hẹn'
@@ -3279,6 +3292,23 @@ begin
       left join profiles p on p.id = k.moi_boi
      where u.id = k.unit_id;
 end $fn$;
+
+-- Danh sách khách của chính mình. Có hàm này để màn cư dân KHÔNG phải chép lại
+-- luật tính trạng thái sang TypeScript: hai bản chép tay của cùng một luật là
+-- hai bản sẽ lệch, và lệch ở đây nghĩa là cư dân thấy "đang hiệu lực" cho một
+-- mã mà bảo vệ quét ra màn đỏ.
+create or replace function khach_cua_toi()
+returns table (id uuid, ho_ten text, dien_thoai text, ly_do text, can text,
+               hieu_luc_tu timestamptz, hieu_luc_den timestamptz,
+               vao_luc timestamptz, ra_luc timestamptz, trang_thai text)
+language sql stable set search_path = public as $fn$
+  select k.id, k.ho_ten, k.dien_thoai, k.ly_do, u.code,
+         k.hieu_luc_tu, k.hieu_luc_den, k.vao_luc, k.ra_luc, khach_trang_thai(k)
+    from khach_tham k join units u on u.id = k.unit_id
+   where k.unit_id in (select current_unit_ids())
+   order by k.hieu_luc_tu desc
+   limit 50;
+$fn$;
 
 -- Sổ ra vào cho nhân sự: ai đang trong tòa, và ai chưa quét ra.
 create or replace function so_ra_vao(p_project uuid, p_tu date, p_den date)
