@@ -2844,3 +2844,235 @@ create policy phieu_thu_dong_read on phieu_thu_dong for select
 
 create trigger trg_audit_phieu_thu after insert or update or delete on phieu_thu
   for each row execute function ghi_nhat_ky('project_id');
+
+-- ═════════════════════ 16. QUỸ BẢO TRÌ 2% ═════════════════════
+-- Tiền 2% thu lúc bàn giao là TIỀN CỦA CƯ DÂN, luật bắt buộc để riêng một tài
+-- khoản và do BQT quyết chi. Hệ thống hiện gộp nó vào cùng một dòng tiền với
+-- phí quản lý, mà gộp rồi thì không còn cách nào chứng minh là chưa tiêu lẫn.
+--
+-- Đây là mục có rủi ro pháp lý nếu thiếu, nên nó là một SỔ RIÊNG chứ không phải
+-- một cờ đánh dấu trên bảng payments. Lọc theo loại phí thì hai pot tiền vẫn
+-- nằm chung một chỗ và vẫn cộng nhầm được — tách bạch mà vẫn dùng chung bảng
+-- là tách bạch trên lời nói.
+
+create table if not exists quy_bao_tri (
+  project_id     uuid primary key references projects(id) on delete cascade,
+  ngan_hang      text not null default '',
+  so_tai_khoan   text not null default '',
+  -- Số dư NGÂN HÀNG báo, và ngày của con số đó. Sổ khớp ngân hàng là điều duy
+  -- nhất chứng minh được quỹ còn nguyên; sổ tự nói sổ đúng thì không chứng
+  -- minh gì cả.
+  so_du_ngan_hang bigint,
+  doi_chieu_ngay  date,
+  cap_nhat_luc   timestamptz not null default clock_timestamp()
+);
+
+-- Dấu của so_tien: DƯƠNG là vào quỹ, ÂM là ra khỏi quỹ. Số dư vì thế là một
+-- phép sum() thẳng, không có cột số dư nào được lưu lại — một cột số dư là một
+-- con số có thể lệch khỏi chính những dòng đẻ ra nó, và lúc lệch thì không ai
+-- biết bên nào đúng.
+--
+-- Ràng buộc buộc DẤU khớp với LOẠI: không ghi được một khoản "chi" mà lại cộng
+-- tiền vào quỹ.
+create table if not exists quy_bao_tri_giao_dich (
+  id         uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  loai       text not null check (loai in ('so_du_dau','thu','lai','chi','dieu_chinh')),
+  ngay       date not null,
+  dien_giai  text not null,
+  so_tien    bigint not null,
+  -- Nghị quyết BQT. BẮT BUỘC với mọi khoản chi — đây là điều kiện của luật,
+  -- không phải quy trình nội bộ ai đó nghĩ ra, nên nó nằm ở ràng buộc database
+  -- chứ không nằm ở một phép kiểm trong app mà nhánh nào đó quên gọi.
+  nghi_quyet text,
+  ngay_nq    date,
+  ghi_chu    text,
+  -- Sửa sai bằng một dòng ĐẢO, không bằng UPDATE. Sổ quỹ mà sửa được thì con
+  -- số hôm nay không nói gì về con số hôm qua.
+  dao_cua    uuid references quy_bao_tri_giao_dich(id),
+  ghi_luc    timestamptz not null default clock_timestamp(),
+  ghi_boi    uuid references profiles(id),
+  constraint chi_phai_co_nghi_quyet check (
+    loai <> 'chi'
+    or (nghi_quyet is not null and btrim(nghi_quyet) <> '' and ngay_nq is not null)),
+  constraint dau_khop_loai check (
+    (loai in ('so_du_dau','thu','lai') and so_tien > 0)
+    or (loai = 'chi' and so_tien < 0)
+    or (loai = 'dieu_chinh' and so_tien <> 0))
+);
+create index if not exists quy_gd_idx on quy_bao_tri_giao_dich (project_id, ngay, ghi_luc);
+-- Hai dòng số dư đầu kỳ là nhân đôi cả quỹ.
+create unique index if not exists quy_so_du_dau_idx
+  on quy_bao_tri_giao_dich (project_id) where loai = 'so_du_dau';
+-- Một dòng chỉ được đảo một lần; đảo hai lần là cộng ngược thành thừa tiền.
+create unique index if not exists quy_dao_idx
+  on quy_bao_tri_giao_dich (dao_cua) where dao_cua is not null;
+
+-- "Người này có ở trong dự án không". SECURITY DEFINER để policy khỏi phụ thuộc
+-- vào việc người gọi có quyền đọc units/buildings hay không — buộc policy của
+-- quỹ đi vòng qua hai bảng khác là buộc nó hỏng mỗi khi quyền trên hai bảng đó
+-- đổi, vì một lý do chẳng liên quan gì tới quỹ.
+create or replace function o_trong_du_an(p_project uuid)
+returns boolean language sql stable security definer set search_path = public as $fn$
+  select exists (select 1 from units u join buildings b on b.id = u.building_id
+                  where b.project_id = p_project and u.id in (select current_unit_ids()));
+$fn$;
+
+create or replace function is_bqt(p_project uuid)
+returns boolean language sql stable security definer set search_path = public as $fn$
+  select exists (select 1 from staff_assignments
+                  where user_id = auth.uid() and project_id = p_project
+                    and is_active and role = 'bqt');
+$fn$;
+
+-- Ai GHI được sổ quỹ: trưởng BQL (người làm sổ sách hằng ngày) và BQT (người
+-- quyết chi). Không phải mọi nhân sự — bảo vệ và kỹ thuật cũng là is_staff.
+--
+-- Chốt chặn thật KHÔNG nằm ở quyền ghi mà ở chỗ mọi cư dân đều đọc được sổ
+-- này, và mọi khoản chi đều phải mang số nghị quyết. Siết quyền ghi xuống chỉ
+-- BQT thì sổ nằm trống — BQT là cư dân kiêm nhiệm, không ai ngồi nhập liệu —
+-- và một sổ trống thì không giám sát được gì.
+create or replace function quy_ghi_duoc(p_project uuid)
+returns boolean language sql stable security definer set search_path = public as $fn$
+  select is_bql_manager(p_project) or is_bqt(p_project);
+$fn$;
+
+-- DEFINER và KHÔNG cấp cho authenticated: nó bỏ qua RLS để quy_ghi kiểm được
+-- số dư trước khi cho chi. Cấp ra ngoài là một cửa đọc số dư quỹ của mọi dự án
+-- mà không qua policy nào. Màn hình lấy số dư ở cột luy_ke cuối của sổ.
+create or replace function quy_so_du(p_project uuid)
+returns bigint language sql stable security definer set search_path = public as $fn$
+  select coalesce(sum(so_tien), 0)::bigint
+    from quy_bao_tri_giao_dich where project_id = p_project;
+$fn$;
+
+-- p_so_tien luôn NHẬN VÀO SỐ DƯƠNG, kể cả khoản chi: bắt màn hình tự đổi dấu
+-- là sớm muộn có một chỗ quên, và quên dấu ở sổ quỹ nghĩa là khoản chi 96 triệu
+-- được ghi thành khoản thu 96 triệu.
+create or replace function quy_ghi(
+  p_project    uuid,
+  p_loai       text,
+  p_ngay       date,
+  p_dien_giai  text,
+  p_so_tien    bigint,
+  p_nghi_quyet text default null,
+  p_ngay_nq    date default null,
+  p_ghi_chu    text default null
+) returns uuid language plpgsql security definer set search_path = public as $fn$
+declare v uuid; v_dau bigint;
+begin
+  if not quy_ghi_duoc(p_project) then
+    raise exception 'Chi truong BQL hoac BQT moi ghi duoc so quy bao tri'
+      using errcode = '42501';
+  end if;
+  if p_loai not in ('so_du_dau','thu','lai','chi') then
+    raise exception 'Loai giao dich khong hop le: %', p_loai using errcode = '22023';
+  end if;
+  if p_so_tien is null or p_so_tien <= 0 then
+    raise exception 'So tien phai duong; loai giao dich quyet dinh dau' using errcode = '22023';
+  end if;
+  if coalesce(btrim(p_dien_giai), '') = '' then
+    raise exception 'Phai ghi dien giai' using errcode = '22023';
+  end if;
+
+  v_dau := case when p_loai = 'chi' then -p_so_tien else p_so_tien end;
+
+  -- Không cho quỹ âm. Quỹ bảo trì âm không phải một trạng thái tài chính, nó là
+  -- một lỗi nhập liệu hoặc một khoản chi vượt quỹ — cả hai đều phải dừng lại ở
+  -- đây chứ không được nằm trong sổ.
+  if quy_so_du(p_project) + v_dau < 0 then
+    raise exception 'Chi % nhung quy chi con %', p_so_tien, quy_so_du(p_project)
+      using errcode = '23514';
+  end if;
+
+  insert into quy_bao_tri_giao_dich
+    (project_id, loai, ngay, dien_giai, so_tien, nghi_quyet, ngay_nq, ghi_chu, ghi_boi)
+    values (p_project, p_loai, p_ngay, btrim(p_dien_giai), v_dau,
+            nullif(btrim(coalesce(p_nghi_quyet, '')), ''), p_ngay_nq,
+            nullif(btrim(coalesce(p_ghi_chu, '')), ''), auth.uid())
+    returning id into v;
+  return v;
+end $fn$;
+
+-- Ghi sai thì ĐẢO, không sửa. Dòng đảo mang dấu ngược lại và trỏ về dòng gốc,
+-- nên cả hai cùng nằm trong sổ và người đọc thấy được là đã có một lần sai —
+-- thứ mà một lệnh UPDATE lặng lẽ xóa mất.
+create or replace function quy_dao(p_gd uuid, p_ly_do text)
+returns uuid language plpgsql security definer set search_path = public as $fn$
+declare g quy_bao_tri_giao_dich; v uuid;
+begin
+  select * into g from quy_bao_tri_giao_dich where id = p_gd for update;
+  if not found then
+    raise exception 'Khong tim thay giao dich %', p_gd using errcode = '02000';
+  end if;
+  if not quy_ghi_duoc(g.project_id) then
+    raise exception 'Chi truong BQL hoac BQT moi dao duoc giao dich quy'
+      using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_ly_do), '') = '' then
+    raise exception 'Phai ghi ly do dao' using errcode = '22023';
+  end if;
+  if g.dao_cua is not null then
+    raise exception 'Khong dao duoc mot dong von da la dong dao' using errcode = '23514';
+  end if;
+
+  insert into quy_bao_tri_giao_dich
+    (project_id, loai, ngay, dien_giai, so_tien, dao_cua, ghi_chu, ghi_boi)
+    values (g.project_id, 'dieu_chinh', current_date,
+            'Đảo: ' || g.dien_giai, -g.so_tien, g.id, btrim(p_ly_do), auth.uid())
+    returning id into v;
+  return v;
+end $fn$;
+
+-- SECURITY INVOKER có chủ ý: để chính policy quy_gd_read lọc, thay vì chép lại
+-- luật "ai đọc được sổ" lần thứ hai vào đây. Hai bản chép tay của một luật quyền
+-- là hai bản sẽ lệch, và lệch ở đây nghĩa là màn hình mở ra đúng thứ RLS đã đóng.
+create or replace function quy_so_ke_toan(p_project uuid)
+returns table (id uuid, loai text, ngay date, dien_giai text, so_tien bigint,
+               nghi_quyet text, ngay_nq date, ghi_chu text,
+               da_dao boolean, la_dong_dao boolean, luy_ke bigint)
+language sql stable as $fn$
+  select g.id, g.loai, g.ngay, g.dien_giai, g.so_tien, g.nghi_quyet, g.ngay_nq, g.ghi_chu,
+         exists (select 1 from quy_bao_tri_giao_dich d where d.dao_cua = g.id),
+         g.dao_cua is not null,
+         sum(g.so_tien) over (order by g.ngay, g.ghi_luc, g.id
+                              rows between unbounded preceding and current row)::bigint
+    from quy_bao_tri_giao_dich g
+   where g.project_id = p_project
+   order by g.ngay, g.ghi_luc, g.id;
+$fn$;
+
+create or replace function quy_dat_doi_chieu(
+  p_project uuid, p_ngan_hang text, p_so_tk text, p_so_du bigint, p_ngay date
+) returns void language plpgsql security definer set search_path = public as $fn$
+begin
+  if not quy_ghi_duoc(p_project) then
+    raise exception 'Chi truong BQL hoac BQT moi dat duoc doi chieu quy'
+      using errcode = '42501';
+  end if;
+  insert into quy_bao_tri (project_id, ngan_hang, so_tai_khoan, so_du_ngan_hang, doi_chieu_ngay)
+    values (p_project, btrim(coalesce(p_ngan_hang, '')), btrim(coalesce(p_so_tk, '')), p_so_du, p_ngay)
+  on conflict (project_id) do update
+    set ngan_hang = excluded.ngan_hang, so_tai_khoan = excluded.so_tai_khoan,
+        so_du_ngan_hang = excluded.so_du_ngan_hang, doi_chieu_ngay = excluded.doi_chieu_ngay,
+        cap_nhat_luc = clock_timestamp();
+end $fn$;
+
+-- ── RLS ──
+-- MỌI CƯ DÂN ĐỌC ĐƯỢC CẢ SỔ, không lọc theo can_view_finance. Cờ đó nói về
+-- công nợ CỦA CĂN — chuyện riêng giữa người trong một hộ. Quỹ bảo trì là tiền
+-- chung của cả tòa, và công khai chính là cơ chế giám sát của tính năng này;
+-- che nó đi thì còn lại một cuốn sổ chỉ người giữ tiền đọc được.
+alter table quy_bao_tri            enable row level security;
+alter table quy_bao_tri_giao_dich  enable row level security;
+create policy quy_read on quy_bao_tri for select
+  using (is_staff(project_id) or o_trong_du_an(project_id));
+create policy quy_gd_read on quy_bao_tri_giao_dich for select
+  using (is_staff(project_id) or o_trong_du_an(project_id));
+-- Không policy ghi cho role nào: vào sổ quỹ chỉ qua quy_ghi / quy_dao / và
+-- quy_dat_doi_chieu, tất cả đều definer và đều kiểm quyền ở đầu hàm.
+
+create trigger trg_audit_quy after insert or update or delete on quy_bao_tri_giao_dich
+  for each row execute function ghi_nhat_ky('project_id');
+create trigger trg_audit_quy_tk after insert or update or delete on quy_bao_tri
+  for each row execute function ghi_nhat_ky('project_id');

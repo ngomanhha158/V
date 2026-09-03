@@ -115,6 +115,11 @@ grant select on payments to authenticated;
 -- được chạy tới. KHÔNG cấp insert/update/delete cho ai: một sổ chứng từ mà
 -- người cầm phiếu sửa được thì không còn là chứng từ.
 grant select on phieu_thu, phieu_thu_dong to authenticated;
+-- Quỹ bảo trì (§16). Cả sổ MỞ cho mọi cư dân trong dự án — công khai chính là
+-- cơ chế giám sát của tính năng này. quy_so_ke_toan chạy security invoker nên
+-- không có grant này thì hàm đó lỗi permission denied ngay cả với BQL.
+-- Không cấp insert/update/delete: vào sổ quỹ chỉ qua hàm definer.
+grant select on quy_bao_tri, quy_bao_tri_giao_dich to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
 grant insert, update, delete on announcements, documents to authenticated;
@@ -179,6 +184,16 @@ grant execute on function bql_gan_chu_ho_dau_tien(uuid, uuid)       to authentic
 grant execute on function huy_phieu_thu(uuid, text)                 to authenticated;
 grant execute on function kiem_lien_tuc_phieu_thu(uuid, date)       to authenticated;
 grant execute on function bql_so_phieu_thu(uuid, date)              to authenticated;
+-- Quỹ bảo trì (§16). quy_so_du KHÔNG cấp: nó là hàm definer bỏ qua RLS, dùng
+-- nội bộ trong quy_ghi để chặn chi vượt quỹ. Cấp ra ngoài là cửa đọc số dư quỹ
+-- của mọi dự án mà không qua policy nào.
+grant execute on function o_trong_du_an(uuid)                                 to authenticated;
+grant execute on function is_bqt(uuid)                                        to authenticated;
+grant execute on function quy_ghi_duoc(uuid)                                  to authenticated;
+grant execute on function quy_so_ke_toan(uuid)                                to authenticated;
+grant execute on function quy_ghi(uuid, text, date, text, bigint, text, date, text) to authenticated;
+grant execute on function quy_dao(uuid, text)                                 to authenticated;
+grant execute on function quy_dat_doi_chieu(uuid, text, text, bigint, date)   to authenticated;
 grant execute on function tien_chu(bigint)                          to authenticated;
 
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
