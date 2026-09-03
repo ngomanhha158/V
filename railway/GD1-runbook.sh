@@ -114,10 +114,10 @@ B5. Gắn Volume cho ảnh hỏng hóc, vào service `v`, mount tại:
     tiếp, lặng lẽ, và chỉ lộ ra lúc có người mở lại một yêu cầu cũ để đối chất.
 
 B6. Job nền. Ảnh Postgres của Railway không có pg_cron, nên cron.sql KHÔNG
-    dùng ở đây. Thay bằng 5 Cron Service, mỗi cái chạy đúng một dòng curl.
+    dùng ở đây. Thay bằng 6 Cron Service, mỗi cái chạy đúng một dòng curl.
 
     Đặt biến CRON_SECRET cho service `v` trước (openssl rand -base64 32), rồi
-    tạo 5 service từ image `curlimages/curl:latest`, mỗi service một lịch:
+    tạo 6 service từ image `curlimages/curl:latest`, mỗi service một lịch:
 
       Tên service            Lịch (UTC)      Đường
       cron-nhac-no           0 1 * * *       /api/cron/nhac-no
@@ -125,6 +125,10 @@ B6. Job nền. Ảnh Postgres của Railway không có pg_cron, nên cron.sql KH
       cron-thu-hoi           5 17 * * *      /api/cron/thu-hoi-thanh-vien
       cron-bao-tri           0 0 * * *       /api/cron/mo-ky-bao-tri
       cron-don-ma            0 20 * * *      /api/cron/don-ma-dang-nhap
+      cron-don-so-ra-vao     30 19 * * *     /api/cron/don-so-ra-vao
+
+    Việc cuối là hạn lưu 90 ngày của sổ ra vào khách. Quên đặt thì sổ giữ mãi —
+    tức là đúng cái mà màn Khách thăm đang hứa với cư dân là sẽ không làm.
 
     Start command của mỗi service (thay <đường> và dùng tên miền công khai của
     service `v`):

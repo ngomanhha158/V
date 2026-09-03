@@ -1484,6 +1484,7 @@ export type Database = {
         Returns: { id: string; ma: string }[]
       }
       thu_hoi_khach: { Args: { p_id: string }; Returns: undefined }
+      xoa_khach_cu: { Args: { p_giu_ngay?: number }; Returns: number }
       khach_cua_toi: {
         Args: Record<string, never>
         Returns: {
