@@ -1209,6 +1209,78 @@ export type Database = {
           },
         ]
       }
+      tien_ich: {
+        Row: {
+          id: string
+          project_id: string
+          ten: string
+          mo_ta: string | null
+          dia_diem: string | null
+          phi: number
+          toi_da_tuan: number
+          dat_truoc_ngay: number
+          dang_mo: boolean
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          ten: string
+          mo_ta?: string | null
+          dia_diem?: string | null
+          phi?: number
+          toi_da_tuan?: number
+          dat_truoc_ngay?: number
+          dang_mo?: boolean
+        }
+        Update: {
+          ten?: string
+          mo_ta?: string | null
+          dia_diem?: string | null
+          phi?: number
+          toi_da_tuan?: number
+          dat_truoc_ngay?: number
+          dang_mo?: boolean
+        }
+        Relationships: []
+      }
+      tien_ich_suat: {
+        Row: {
+          id: string
+          tien_ich_id: string
+          thu_tu: number
+          bat_dau: string
+          ket_thuc: string
+        }
+        Insert: {
+          id?: string
+          tien_ich_id: string
+          thu_tu: number
+          bat_dau: string
+          ket_thuc: string
+        }
+        Update: { thu_tu?: number; bat_dau?: string; ket_thuc?: string }
+        Relationships: []
+      }
+      dat_tien_ich: {
+        Row: {
+          id: string
+          project_id: string
+          tien_ich_id: string
+          suat_id: string
+          ngay: string
+          unit_id: string | null
+          dong_cua: boolean
+          ly_do: string | null
+          phi: number
+          dat_boi: string | null
+          dat_luc: string
+          huy_luc: string | null
+          huy_boi: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       khach_tham: {
         Row: {
           id: string
@@ -1471,6 +1543,30 @@ export type Database = {
       duyet_xe_tiep: {
         Args: { p_building: string; p_loai: Database["public"]["Enums"]["loai_xe"] }
         Returns: { bien_so: string; can: string }[]
+      }
+      tuan_cua: { Args: { p_ngay: string }; Returns: string }
+      dat_suat: { Args: { p_suat: string; p_ngay: string }; Returns: string }
+      huy_dat_suat: { Args: { p_id: string }; Returns: undefined }
+      dong_suat: { Args: { p_suat: string; p_ngay: string; p_ly_do: string }; Returns: string }
+      lich_tien_ich: {
+        Args: { p_tien_ich: string; p_tu: string; p_den: string }
+        Returns: {
+          ngay: string
+          suat_id: string
+          thu_tu: number
+          bat_dau: string
+          ket_thuc: string
+          dat_id: string | null
+          con_trong: boolean
+          cua_toi: boolean
+          dong_cua: boolean
+          ly_do: string | null
+          ma_can: string | null
+        }[]
+      }
+      con_suat_tuan: {
+        Args: { p_tien_ich: string; p_ngay: string }
+        Returns: { da_dat: number; toi_da: number; con_lai: number }[]
       }
       moi_khach: {
         Args: {

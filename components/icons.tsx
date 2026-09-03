@@ -119,6 +119,14 @@ export const IcTaiVe = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></I>
 )
 
+/** Lịch có dấu tích: khung giờ đã giữ chỗ, không phải một cái lịch để xem. */
+export const IcDatCho = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M4 6h16v14H4z" /><path d="M8 3v4M16 3v4M4 10h16" />
+    <path d="m9.5 14.5 1.5 1.5 3.5-3.5" />
+  </I>
+)
+
 /** Người có dấu cộng: khách được mời vào, không phải cư dân. */
 export const IcKhach = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}>
