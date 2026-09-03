@@ -3376,3 +3376,261 @@ create policy khach_read on khach_tham for select
 
 create trigger trg_audit_khach after insert or update or delete on khach_tham
   for each row execute function ghi_nhat_ky('project_id');
+
+-- ═════════════════════ 18. ĐẶT TIỆN ÍCH THEO KHUNG GIỜ ═════════════════════
+-- Gym, hồ bơi, sảnh sinh hoạt đang đặt qua Zalo. Trùng giờ thì cãi nhau, và BQL
+-- không có bằng chứng ai đặt trước.
+--
+-- CHỐNG TRÙNG GIỜ LÀ MỘT RÀNG BUỘC DATABASE, không phải một phép kiểm trong app.
+-- Đây là cả lý do tồn tại của tính năng: kiểm ở app thì hai người bấm cùng lúc
+-- vẫn lọt cả hai, và cái lọt đó xuất hiện đúng vào những khung giờ đắt nhất —
+-- tối thứ Bảy — nơi việc cãi nhau tốn kém nhất.
+--
+-- ĐẶT THEO SUẤT CÓ SẴN, không phải chọn giờ tự do. Hai lý do:
+--   · Suất rời rạc thì chống trùng là một unique index thường. Khoảng giờ tự do
+--     cần `exclude using gist` với btree_gist — thêm một extension vào schema.sql
+--     (tới giờ chưa cần cái nào) để đổi lấy một thứ mà tòa nhà không thật sự
+--     muốn: ai đó đặt 18:37–19:04 rồi phần còn lại của buổi tối thành vụn.
+--   · Suất cố định làm lịch đọc được bằng mắt: một ô là một suất, xanh hay đỏ.
+
+create table if not exists tien_ich (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  ten         text not null,
+  mo_ta       text,
+  dia_diem    text,
+  phi         bigint not null default 0 check (phi >= 0),
+  -- Hạn mức mỗi căn mỗi tuần. Không có nó thì một hộ đặt kín cả tháng tối thứ
+  -- Bảy, và những hộ còn lại quay về Zalo — cùng bài học với hạn mức chỗ đỗ xe.
+  toi_da_tuan int not null default 2 check (toi_da_tuan > 0),
+  -- Đặt trước tối đa bao nhiêu ngày. Không giới hạn thì lịch cả năm bị giữ chỗ
+  -- trong tuần đầu tiên bởi vài người nhanh tay.
+  dat_truoc_ngay int not null default 14 check (dat_truoc_ngay between 1 and 365),
+  dang_mo     boolean not null default true,
+  unique (project_id, ten)
+);
+
+create table if not exists tien_ich_suat (
+  id          uuid primary key default gen_random_uuid(),
+  tien_ich_id uuid not null references tien_ich(id) on delete cascade,
+  thu_tu      int  not null,
+  bat_dau     time not null,
+  ket_thuc    time not null,
+  unique (tien_ich_id, thu_tu),
+  constraint suat_thuan check (ket_thuc > bat_dau)
+);
+
+create table if not exists dat_tien_ich (
+  id          uuid primary key default gen_random_uuid(),
+  -- Phi chuẩn hóa có chủ ý, cùng lý do với audit_log: RLS và trigger ghi sổ đều
+  -- phải lọc theo dự án, mà đường từ đây tới projects đi qua hai bảng. Và dòng
+  -- ĐÓNG CỬA không có unit_id nào để lần theo — thiếu cột này thì mọi lần BQL
+  -- đóng suất đều rơi khỏi nhật ký kiểm toán.
+  project_id  uuid not null references projects(id) on delete cascade,
+  tien_ich_id uuid not null references tien_ich(id) on delete cascade,
+  suat_id     uuid not null references tien_ich_suat(id) on delete cascade,
+  ngay        date not null,
+  unit_id     uuid references units(id) on delete cascade,
+  -- BQL đóng suất để bảo trì: DÙNG LẠI chính bảng này thay vì dựng một bảng
+  -- "lịch đóng cửa" riêng. Một bảng thì chống trùng chỉ cần một index, còn hai
+  -- bảng thì phải nhớ hỏi cả hai — và sớm muộn có một đường quên hỏi.
+  dong_cua    boolean not null default false,
+  ly_do       text,
+  -- Phí CHÉP tại thời điểm đặt. BQL đổi bảng giá tháng sau không được làm đổi
+  -- số tiền của một suất người ta đã đặt và đã được báo giá.
+  phi         bigint not null default 0,
+  dat_boi     uuid references profiles(id),
+  dat_luc     timestamptz not null default clock_timestamp(),
+  huy_luc     timestamptz,
+  huy_boi     uuid references profiles(id),
+  constraint dong_cua_khong_co_can check (
+    (dong_cua and unit_id is null) or (not dong_cua and unit_id is not null))
+);
+-- ĐÂY LÀ CHỐT CHỐNG TRÙNG. Partial: suất đã hủy trả lại chỗ ngay, không giữ
+-- chỗ chết cho tới hết ngày.
+create unique index if not exists dat_tien_ich_khong_trung
+  on dat_tien_ich (suat_id, ngay) where huy_luc is null;
+create index if not exists dat_tien_ich_can_idx on dat_tien_ich (unit_id, ngay desc);
+create index if not exists dat_tien_ich_lich_idx on dat_tien_ich (tien_ich_id, ngay);
+
+-- Tuần tính từ THỨ HAI, theo lối Việt. date_trunc('week') của Postgres cũng bắt
+-- đầu từ thứ Hai nên hai bên khớp nhau; đừng đổi sang Chủ nhật mà không đổi cả
+-- câu chữ trên màn, vì "còn 1 suất tuần này" phải cùng nghĩa ở hai nơi.
+create or replace function tuan_cua(p_ngay date)
+returns date language sql immutable set search_path = public as $fn$
+  select date_trunc('week', p_ngay)::date;
+$fn$;
+
+create or replace function dat_suat(p_suat uuid, p_ngay date)
+returns uuid language plpgsql security definer set search_path = public as $fn$
+declare
+  s     tien_ich_suat;
+  t     tien_ich;
+  v_unit uuid;
+  v_dem int;
+  v_id  uuid;
+begin
+  select * into s from tien_ich_suat where id = p_suat;
+  if not found then
+    raise exception 'Khong tim thay suat %', p_suat using errcode = '02000';
+  end if;
+  select * into t from tien_ich where id = s.tien_ich_id;
+  if not t.dang_mo then
+    raise exception 'Tien ich % dang dong' , t.ten using errcode = '23514';
+  end if;
+
+  -- Căn ĐANG hiệu lực của người gọi. Người ở nhiều căn thì lấy căn nào cũng
+  -- được cho việc đếm hạn mức, nhưng phải là căn có thật — không thì hạn mức
+  -- không ràng buộc ai cả.
+  select unit_id into v_unit from unit_memberships
+   where user_id = auth.uid() and status = 'active'
+     and valid_from <= current_date
+     and (valid_to is null or valid_to >= current_date)
+   order by unit_id limit 1;
+  if v_unit is null then
+    raise exception 'Chi cu dan cua mot can moi dat duoc tien ich' using errcode = '42501';
+  end if;
+
+  if p_ngay < current_date then
+    raise exception 'Khong dat duoc suat da qua' using errcode = '22023';
+  end if;
+  if p_ngay > current_date + t.dat_truoc_ngay then
+    raise exception 'Chi dat truoc duoc % ngay', t.dat_truoc_ngay using errcode = '22023';
+  end if;
+
+  -- Đếm hạn mức TRƯỚC khi chạm vào chỗ trống. Ngược lại thì một hộ đã kín suất
+  -- vẫn cướp được chỗ rồi mới bị từ chối, và chỗ đó coi như mất của người khác.
+  select count(*) into v_dem from dat_tien_ich d
+    where d.unit_id = v_unit and d.tien_ich_id = t.id
+      and d.huy_luc is null and tuan_cua(d.ngay) = tuan_cua(p_ngay);
+  if v_dem >= t.toi_da_tuan then
+    raise exception 'Can nay da dat % suat % trong tuan, toi da %',
+      v_dem, t.ten, t.toi_da_tuan using errcode = '23514';
+  end if;
+
+  insert into dat_tien_ich (project_id, tien_ich_id, suat_id, ngay, unit_id, phi, dat_boi)
+    values (t.project_id, t.id, s.id, p_ngay, v_unit, t.phi, auth.uid())
+    returning id into v_id;
+  return v_id;
+end $fn$;
+
+create or replace function huy_dat_suat(p_id uuid)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare d dat_tien_ich; s tien_ich_suat; v_bat timestamptz;
+begin
+  select * into d from dat_tien_ich where id = p_id for update;
+  if not found then
+    raise exception 'Khong tim thay luot dat %', p_id using errcode = '02000';
+  end if;
+  if d.huy_luc is not null then
+    raise exception 'Luot nay da huy roi' using errcode = '23505';
+  end if;
+  if d.dong_cua then
+    if not is_staff(d.project_id) then
+      raise exception 'Chi BQL moi mo lai suat da dong' using errcode = '42501';
+    end if;
+  elsif d.unit_id not in (select current_unit_ids()) then
+    raise exception 'Chi nguoi trong can moi huy duoc luot dat cua can do'
+      using errcode = '42501';
+  end if;
+
+  -- Suất đã bắt đầu thì không hủy được. Hủy lúc đó chẳng trả lại chỗ cho ai
+  -- kịp dùng, mà lại xóa dấu vết là căn này đã giữ chỗ — tức là lách hạn mức.
+  select * into s from tien_ich_suat where id = d.suat_id;
+  v_bat := (d.ngay + s.bat_dau) at time zone 'Asia/Ho_Chi_Minh';
+  if now() >= v_bat then
+    raise exception 'Suat da bat dau, khong huy duoc nua' using errcode = '23514';
+  end if;
+
+  update dat_tien_ich set huy_luc = clock_timestamp(), huy_boi = auth.uid()
+   where id = p_id;
+end $fn$;
+
+create or replace function dong_suat(p_suat uuid, p_ngay date, p_ly_do text)
+returns uuid language plpgsql security definer set search_path = public as $fn$
+declare v_ti uuid; v_pj uuid; v_id uuid;
+begin
+  select tien_ich_id into v_ti from tien_ich_suat where id = p_suat;
+  if not found then
+    raise exception 'Khong tim thay suat %', p_suat using errcode = '02000';
+  end if;
+  select project_id into v_pj from tien_ich where id = v_ti;
+  if not is_staff(v_pj) then
+    raise exception 'Chi BQL moi dong duoc suat' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_ly_do), '') = '' then
+    raise exception 'Phai ghi ly do dong suat — cu dan nhin thay dong chu do'
+      using errcode = '22023';
+  end if;
+
+  insert into dat_tien_ich (project_id, tien_ich_id, suat_id, ngay, dong_cua, ly_do, dat_boi)
+    values (v_pj, v_ti, p_suat, p_ngay, true, btrim(p_ly_do), auth.uid())
+    returning id into v_id;
+  return v_id;
+end $fn$;
+
+-- Lịch: mỗi ô là một suất của một ngày, kèm ai đang giữ và vì sao không đặt được.
+-- Trả về CẢ Ô TRỐNG lẫn ô kín, vì màn hình cần vẽ hết lưới chứ không chỉ vẽ
+-- những chỗ đã có người.
+create or replace function lich_tien_ich(p_tien_ich uuid, p_tu date, p_den date)
+returns table (ngay date, suat_id uuid, thu_tu int, bat_dau time, ket_thuc time,
+               dat_id uuid, con_trong boolean, cua_toi boolean,
+               dong_cua boolean, ly_do text, ma_can text)
+language sql stable security definer set search_path = public as $fn$
+  select g.ngay::date, s.id, s.thu_tu, s.bat_dau, s.ket_thuc,
+         d.id, d.id is null,
+         coalesce(d.unit_id in (select current_unit_ids()), false),
+         coalesce(d.dong_cua, false), d.ly_do,
+         case when d.dong_cua then null
+              -- Cư dân KHÔNG thấy mã căn của người đặt: lịch chỉ cần nói ô này
+              -- đã kín. Ai đặt là chuyện của BQL khi có tranh chấp.
+              when is_staff(t.project_id) or d.unit_id in (select current_unit_ids())
+                then u.code end
+    from tien_ich t
+    join tien_ich_suat s on s.tien_ich_id = t.id
+    cross join generate_series(p_tu, p_den, interval '1 day') as g(ngay)
+    left join dat_tien_ich d
+           on d.suat_id = s.id and d.ngay = g.ngay::date and d.huy_luc is null
+    left join units u on u.id = d.unit_id
+   where t.id = p_tien_ich
+     and (is_staff(t.project_id) or o_trong_du_an(t.project_id))
+   order by g.ngay, s.thu_tu;
+$fn$;
+
+-- Còn mấy suất trong tuần. Con số này phải hiện TRƯỚC khi người ta chọn ô, chứ
+-- không phải hiện ra dưới dạng một lỗi sau khi đã chọn.
+create or replace function con_suat_tuan(p_tien_ich uuid, p_ngay date)
+returns table (da_dat int, toi_da int, con_lai int)
+language sql stable security definer set search_path = public as $fn$
+  select v.n, t.toi_da_tuan, greatest(t.toi_da_tuan - v.n, 0)
+    from tien_ich t
+    cross join lateral (
+      select count(*)::int as n from dat_tien_ich d
+       where d.tien_ich_id = t.id and d.huy_luc is null
+         and d.unit_id in (select current_unit_ids())
+         and tuan_cua(d.ngay) = tuan_cua(p_ngay)
+    ) v
+   where t.id = p_tien_ich;
+$fn$;
+
+-- ── RLS ──
+alter table tien_ich       enable row level security;
+alter table tien_ich_suat  enable row level security;
+alter table dat_tien_ich   enable row level security;
+create policy tien_ich_read on tien_ich for select
+  using (is_staff(project_id) or o_trong_du_an(project_id));
+create policy tien_ich_staff_write on tien_ich for all
+  using (is_staff(project_id)) with check (is_staff(project_id));
+create policy suat_read on tien_ich_suat for select
+  using (exists (select 1 from tien_ich t where t.id = tien_ich_suat.tien_ich_id));
+create policy suat_staff_write on tien_ich_suat for all
+  using (is_staff((select project_id from tien_ich where id = tien_ich_id)))
+  with check (is_staff((select project_id from tien_ich where id = tien_ich_id)));
+-- Cư dân đọc lượt đặt của CĂN MÌNH. Lịch chung đi qua lich_tien_ich(), nơi mã
+-- căn của người khác bị cắt đi — đọc thẳng bảng thì thấy hết ai đặt giờ nào,
+-- mà đó là một bảng lịch sinh hoạt của hàng xóm.
+create policy dat_read on dat_tien_ich for select
+  using (is_staff(project_id) or unit_id in (select current_unit_ids()));
+
+create trigger trg_audit_dat_tien_ich after insert or update or delete on dat_tien_ich
+  for each row execute function ghi_nhat_ky('project_id');

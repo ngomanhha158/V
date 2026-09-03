@@ -125,6 +125,11 @@ grant select on quy_bao_tri, quy_bao_tri_giao_dich to authenticated;
 -- qua Zalo, và họ phải mở lại xem được để gửi lần nữa. Không cấp ghi cho ai —
 -- mời / thu hồi / quét đều đi qua hàm definer.
 grant select on khach_tham to authenticated;
+-- Đặt tiện ích (§18). BQL sửa danh mục tiện ích và suất qua RLS (tien_ich_staff_write
+-- / suat_staff_write) nên cần quyền ghi ở tầng bảng; đặt/hủy suất thì đi qua hàm
+-- definer, nên dat_tien_ich chỉ cấp select.
+grant select, insert, update, delete on tien_ich, tien_ich_suat to authenticated;
+grant select on dat_tien_ich to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
 grant insert, update, delete on announcements, documents to authenticated;
@@ -202,6 +207,13 @@ grant execute on function so_ra_vao(uuid, date, date)                         to
 grant execute on function ty_le_ho_dung_app(uuid)                             to authenticated;
 grant execute on function khach_trang_thai(khach_tham, timestamptz)           to authenticated;
 grant execute on function khach_an_han()                                      to authenticated;
+-- Đặt tiện ích (§18).
+grant execute on function tuan_cua(date)                                      to authenticated;
+grant execute on function dat_suat(uuid, date)                                to authenticated;
+grant execute on function huy_dat_suat(uuid)                                  to authenticated;
+grant execute on function dong_suat(uuid, date, text)                         to authenticated;
+grant execute on function lich_tien_ich(uuid, date, date)                     to authenticated;
+grant execute on function con_suat_tuan(uuid, date)                           to authenticated;
 grant execute on function khach_cua_toi()                                     to authenticated;
 grant execute on function o_trong_du_an(uuid)                                 to authenticated;
 grant execute on function is_bqt(uuid)                                        to authenticated;
