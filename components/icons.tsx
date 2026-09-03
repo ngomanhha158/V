@@ -119,6 +119,14 @@ export const IcTaiVe = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></I>
 )
 
+/** Két sắt: quỹ bảo trì là tiền để riêng, không phải dòng tiền chạy qua. */
+export const IcKet = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M3 4h18v16H3z" /><circle cx="11" cy="12" r="3.2" />
+    <path d="M11 8.8V7M17 9v6" />
+  </I>
+)
+
 /** Tờ biên nhận: giấy có mép răng cưa ở đáy — hình dáng ai cũng nhận ra là
  *  cái cầm về sau khi trả tiền, khác với hóa đơn là cái đòi tiền. */
 export const IcPhieuThu = (p: SVGProps<SVGSVGElement>) => (

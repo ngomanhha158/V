@@ -1209,6 +1209,38 @@ export type Database = {
           },
         ]
       }
+      quy_bao_tri: {
+        Row: {
+          project_id: string
+          ngan_hang: string
+          so_tai_khoan: string
+          so_du_ngan_hang: number | null
+          doi_chieu_ngay: string | null
+          cap_nhat_luc: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      quy_bao_tri_giao_dich: {
+        Row: {
+          id: string
+          project_id: string
+          loai: string
+          ngay: string
+          dien_giai: string
+          so_tien: number
+          nghi_quyet: string | null
+          ngay_nq: string | null
+          ghi_chu: string | null
+          dao_cua: string | null
+          ghi_luc: string
+          ghi_boi: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       phieu_thu: {
         Row: {
           id: string
@@ -1407,6 +1439,49 @@ export type Database = {
       duyet_xe_tiep: {
         Args: { p_building: string; p_loai: Database["public"]["Enums"]["loai_xe"] }
         Returns: { bien_so: string; can: string }[]
+      }
+      is_bqt: { Args: { p_project: string }; Returns: boolean }
+      o_trong_du_an: { Args: { p_project: string }; Returns: boolean }
+      quy_ghi_duoc: { Args: { p_project: string }; Returns: boolean }
+      quy_ghi: {
+        Args: {
+          p_project: string
+          p_loai: string
+          p_ngay: string
+          p_dien_giai: string
+          p_so_tien: number
+          p_nghi_quyet?: string | null
+          p_ngay_nq?: string | null
+          p_ghi_chu?: string | null
+        }
+        Returns: string
+      }
+      quy_dao: { Args: { p_gd: string; p_ly_do: string }; Returns: string }
+      quy_dat_doi_chieu: {
+        Args: {
+          p_project: string
+          p_ngan_hang: string
+          p_so_tk: string
+          p_so_du: number
+          p_ngay: string
+        }
+        Returns: undefined
+      }
+      quy_so_ke_toan: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          loai: string
+          ngay: string
+          dien_giai: string
+          so_tien: number
+          nghi_quyet: string | null
+          ngay_nq: string | null
+          ghi_chu: string | null
+          da_dao: boolean
+          la_dong_dao: boolean
+          luy_ke: number
+        }[]
       }
       huy_phieu_thu: {
         Args: { p_phieu: string; p_ly_do: string }
