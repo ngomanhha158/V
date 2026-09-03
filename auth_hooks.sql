@@ -110,6 +110,26 @@ grant select on invoices, invoice_lines, announcements, notifications to authent
 -- lỏng gì thêm. Vẫn KHÔNG cấp insert/update/delete: ghi vào bảng tiền chỉ đi
 -- qua hàm definer.
 grant select on payments to authenticated;
+-- Sổ chứng từ (§15). Cư dân đọc phiếu của căn mình, BQL đọc cả dự án — hai
+-- chuyện đó do policy phieu_thu_read quyết, grant này chỉ mở cửa cho policy
+-- được chạy tới. KHÔNG cấp insert/update/delete cho ai: một sổ chứng từ mà
+-- người cầm phiếu sửa được thì không còn là chứng từ.
+grant select on phieu_thu, phieu_thu_dong to authenticated;
+-- Quỹ bảo trì (§16). Cả sổ MỞ cho mọi cư dân trong dự án — công khai chính là
+-- cơ chế giám sát của tính năng này. quy_so_ke_toan chạy security invoker nên
+-- không có grant này thì hàm đó lỗi permission denied ngay cả với BQL.
+-- Không cấp insert/update/delete: vào sổ quỹ chỉ qua hàm definer.
+grant select on quy_bao_tri, quy_bao_tri_giao_dich to authenticated;
+-- Khách thăm (§17). RLS (khach_read) lọc xuống căn của người đó, hoặc cả dự án
+-- nếu là nhân sự. Cột `ma` nằm trong bảng này: đó là mã cư dân gửi cho khách
+-- qua Zalo, và họ phải mở lại xem được để gửi lần nữa. Không cấp ghi cho ai —
+-- mời / thu hồi / quét đều đi qua hàm definer.
+grant select on khach_tham to authenticated;
+-- Đặt tiện ích (§18). BQL sửa danh mục tiện ích và suất qua RLS (tien_ich_staff_write
+-- / suat_staff_write) nên cần quyền ghi ở tầng bảng; đặt/hủy suất thì đi qua hàm
+-- definer, nên dat_tien_ich chỉ cấp select.
+grant select, insert, update, delete on tien_ich, tien_ich_suat to authenticated;
+grant select on dat_tien_ich to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
 grant insert, update, delete on announcements, documents to authenticated;
@@ -140,6 +160,7 @@ alter default privileges in schema public grant execute on functions to service_
 grant execute on function current_unit_ids()     to authenticated;
 grant execute on function is_staff(uuid)         to authenticated;
 grant execute on function is_unit_manager(uuid)  to authenticated;
+grant execute on function xem_duoc_tien_cua_can(uuid) to authenticated;
 grant execute on function can_see_profile(uuid)  to authenticated;
 grant execute on function building_project(uuid) to authenticated;
 grant execute on function unit_project(uuid)     to authenticated;
@@ -167,6 +188,41 @@ grant execute on function bql_danh_sach_nguoi_dung(uuid)      to authenticated;
 grant execute on function bql_gan_nhan_su(uuid, uuid, staff_role)   to authenticated;
 grant execute on function bql_ngung_nhan_su(uuid, uuid, staff_role) to authenticated;
 grant execute on function bql_gan_chu_ho_dau_tien(uuid, uuid)       to authenticated;
+-- Phiếu thu (§15). lap_phieu_thu KHÔNG cấp cho authenticated: nó cấp số chứng
+-- từ, gọi được là tự in phiếu cho một khoản tiền chưa từng về. Nó chỉ được gọi
+-- từ trong gach_no, mà gach_no cũng không cấp cho authenticated.
+grant execute on function huy_phieu_thu(uuid, text)                 to authenticated;
+grant execute on function kiem_lien_tuc_phieu_thu(uuid, date)       to authenticated;
+grant execute on function bql_so_phieu_thu(uuid, date)              to authenticated;
+-- Quỹ bảo trì (§16). quy_so_du KHÔNG cấp: nó là hàm definer bỏ qua RLS, dùng
+-- nội bộ trong quy_ghi để chặn chi vượt quỹ. Cấp ra ngoài là cửa đọc số dư quỹ
+-- của mọi dự án mà không qua policy nào.
+-- Khách thăm (§17). xoa_khach_cu KHÔNG cấp: nó là job nền, gọi bằng
+-- service_role qua /api/cron. Cấp cho authenticated là cho bất kỳ ai xóa sạch
+-- sổ ra vào bằng một lời gọi.
+grant execute on function moi_khach(uuid, text, timestamptz, timestamptz, text, text) to authenticated;
+grant execute on function thu_hoi_khach(uuid)                                 to authenticated;
+grant execute on function quet_khach(text, boolean)                           to authenticated;
+grant execute on function so_ra_vao(uuid, date, date)                         to authenticated;
+grant execute on function ty_le_ho_dung_app(uuid)                             to authenticated;
+grant execute on function khach_trang_thai(khach_tham, timestamptz)           to authenticated;
+grant execute on function khach_an_han()                                      to authenticated;
+-- Đặt tiện ích (§18).
+grant execute on function tuan_cua(date)                                      to authenticated;
+grant execute on function dat_suat(uuid, date)                                to authenticated;
+grant execute on function huy_dat_suat(uuid)                                  to authenticated;
+grant execute on function dong_suat(uuid, date, text)                         to authenticated;
+grant execute on function lich_tien_ich(uuid, date, date)                     to authenticated;
+grant execute on function con_suat_tuan(uuid, date)                           to authenticated;
+grant execute on function khach_cua_toi()                                     to authenticated;
+grant execute on function o_trong_du_an(uuid)                                 to authenticated;
+grant execute on function is_bqt(uuid)                                        to authenticated;
+grant execute on function quy_ghi_duoc(uuid)                                  to authenticated;
+grant execute on function quy_so_ke_toan(uuid)                                to authenticated;
+grant execute on function quy_ghi(uuid, text, date, text, bigint, text, date, text) to authenticated;
+grant execute on function quy_dao(uuid, text)                                 to authenticated;
+grant execute on function quy_dat_doi_chieu(uuid, text, text, bigint, date)   to authenticated;
+grant execute on function tien_chu(bigint)                          to authenticated;
 
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là

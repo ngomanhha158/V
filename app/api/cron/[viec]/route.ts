@@ -29,6 +29,9 @@ const VIEC = {
   'nhac-no': 'remind_unpaid_invoices',
   'mo-ky-bao-tri': 'mo_ky_bao_tri',
   'don-ma-dang-nhap': 'auth_don_ma',
+  // Hạn lưu 90 ngày của sổ ra vào (§17). Quên đặt lịch này thì sổ giữ mãi —
+  // tức là đúng cái mà tính năng khách thăm hứa với cư dân là sẽ không làm.
+  'don-so-ra-vao': 'xoa_khach_cu',
 } as const
 
 type Viec = keyof typeof VIEC

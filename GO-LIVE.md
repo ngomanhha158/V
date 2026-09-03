@@ -22,14 +22,21 @@ Không phải kế hoạch — là những gì đã kiểm và những gì còn 
 | Backup | GitHub Actions dump hằng ngày, gồm cả schema `auth` |
 | Lưu trữ ảnh | Volume của service `v`, phục vụ qua `/api/anh` — hỏi lại quyền từng lần xem |
 | Quyền `anon` | **Không có bảng nào** — request không JWT không đọc được gì |
-| Bộ test | 13 file SQL độc lập + cả ngăn xếp Railway + 142 test JS, xanh trên CI mỗi lần push |
-| Giao diện | 24 route, build sạch, sáng/tối |
+| Bộ test | 16 file SQL độc lập + cả ngăn xếp Railway + 202 test JS, xanh trên CI mỗi lần push |
+| Giao diện | 47 route thật (chưa kể bản demo), build sạch, sáng/tối |
 
-Ba job nền và giờ chạy (giờ VN):
+Sáu job nền và giờ chạy (giờ VN). Đặt thiếu một cái thì nó KHÔNG chạy và
+không có gì báo — bảng đối chiếu đầy đủ ở đầu `cron.sql` và bước 8 của
+`railway/GD1-runbook.sh`:
 
-- `expire-memberships` — 00:05 mỗi ngày, thu quyền hợp đồng hết hạn
-- `escalate-overdue-tickets` — 5 phút/lần, leo thang yêu cầu quá hạn SLA
-- `remind-unpaid-invoices` — 08:00 mỗi ngày, nhắc nợ T-3 / T-0 / T+3
+- `thu-hoi-thanh-vien` — 00:05 mỗi ngày, thu quyền hợp đồng hết hạn
+- `leo-thang-ticket` — 5 phút/lần, leo thang yêu cầu quá hạn SLA
+- `nhac-no` — 08:00 mỗi ngày, nhắc nợ T-3 / T-0 / T+3
+- `mo-ky-bao-tri` — 07:00 mỗi ngày, mở kỳ bảo trì tới hạn
+- `don-ma-dang-nhap` — 03:00 mỗi ngày, dọn mã đăng nhập đã hết hạn
+- `don-so-ra-vao` — 02:30 mỗi ngày, xóa lượt khách quá 90 ngày. **Đây là lời
+  hứa về hạn lưu mà màn Khách thăm nói với cư dân** — quên đặt lịch thì sổ ra
+  vào giữ mãi, đúng cái mà tính năng đó cam kết là sẽ không làm.
 
 ## Chưa go-live được — và vì sao
 

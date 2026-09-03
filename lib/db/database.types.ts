@@ -1209,6 +1209,196 @@ export type Database = {
           },
         ]
       }
+      tien_ich: {
+        Row: {
+          id: string
+          project_id: string
+          ten: string
+          mo_ta: string | null
+          dia_diem: string | null
+          phi: number
+          toi_da_tuan: number
+          dat_truoc_ngay: number
+          dang_mo: boolean
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          ten: string
+          mo_ta?: string | null
+          dia_diem?: string | null
+          phi?: number
+          toi_da_tuan?: number
+          dat_truoc_ngay?: number
+          dang_mo?: boolean
+        }
+        Update: {
+          ten?: string
+          mo_ta?: string | null
+          dia_diem?: string | null
+          phi?: number
+          toi_da_tuan?: number
+          dat_truoc_ngay?: number
+          dang_mo?: boolean
+        }
+        Relationships: []
+      }
+      tien_ich_suat: {
+        Row: {
+          id: string
+          tien_ich_id: string
+          thu_tu: number
+          bat_dau: string
+          ket_thuc: string
+        }
+        Insert: {
+          id?: string
+          tien_ich_id: string
+          thu_tu: number
+          bat_dau: string
+          ket_thuc: string
+        }
+        Update: { thu_tu?: number; bat_dau?: string; ket_thuc?: string }
+        Relationships: []
+      }
+      dat_tien_ich: {
+        Row: {
+          id: string
+          project_id: string
+          tien_ich_id: string
+          suat_id: string
+          ngay: string
+          unit_id: string | null
+          dong_cua: boolean
+          ly_do: string | null
+          phi: number
+          dat_boi: string | null
+          dat_luc: string
+          huy_luc: string | null
+          huy_boi: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      khach_tham: {
+        Row: {
+          id: string
+          project_id: string
+          unit_id: string
+          ho_ten: string
+          dien_thoai: string | null
+          ly_do: string | null
+          ma: string
+          hieu_luc_tu: string
+          hieu_luc_den: string
+          moi_boi: string | null
+          tao_luc: string
+          thu_hoi_luc: string | null
+          thu_hoi_boi: string | null
+          vao_luc: string | null
+          ra_luc: string | null
+          vao_boi: string | null
+          ra_boi: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "khach_tham_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quy_bao_tri: {
+        Row: {
+          project_id: string
+          ngan_hang: string
+          so_tai_khoan: string
+          so_du_ngan_hang: number | null
+          doi_chieu_ngay: string | null
+          cap_nhat_luc: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      quy_bao_tri_giao_dich: {
+        Row: {
+          id: string
+          project_id: string
+          loai: string
+          ngay: string
+          dien_giai: string
+          so_tien: number
+          nghi_quyet: string | null
+          ngay_nq: string | null
+          ghi_chu: string | null
+          dao_cua: string | null
+          ghi_luc: string
+          ghi_boi: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      phieu_thu: {
+        Row: {
+          id: string
+          project_id: string
+          so_phieu: string
+          ky: string
+          stt: number
+          unit_id: string
+          nguoi_nop: string
+          ma_can: string
+          tong_thu: number
+          hinh_thuc: string
+          bank_txn_id: string | null
+          nhan_luc: string
+          lap_luc: string
+          lap_boi: string | null
+          huy_luc: string | null
+          huy_boi: string | null
+          ly_do_huy: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "phieu_thu_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phieu_thu_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      phieu_thu_dong: {
+        Row: {
+          id: string
+          phieu_id: string
+          thu_tu: number
+          loai: string
+          dien_giai: string
+          so_tien: number
+          invoice_id: string | null
+          payment_id: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       bai_xe: {
         Row: {
           building_id: string
@@ -1353,6 +1543,163 @@ export type Database = {
       duyet_xe_tiep: {
         Args: { p_building: string; p_loai: Database["public"]["Enums"]["loai_xe"] }
         Returns: { bien_so: string; can: string }[]
+      }
+      tuan_cua: { Args: { p_ngay: string }; Returns: string }
+      dat_suat: { Args: { p_suat: string; p_ngay: string }; Returns: string }
+      huy_dat_suat: { Args: { p_id: string }; Returns: undefined }
+      dong_suat: { Args: { p_suat: string; p_ngay: string; p_ly_do: string }; Returns: string }
+      lich_tien_ich: {
+        Args: { p_tien_ich: string; p_tu: string; p_den: string }
+        Returns: {
+          ngay: string
+          suat_id: string
+          thu_tu: number
+          bat_dau: string
+          ket_thuc: string
+          dat_id: string | null
+          con_trong: boolean
+          cua_toi: boolean
+          dong_cua: boolean
+          ly_do: string | null
+          ma_can: string | null
+        }[]
+      }
+      con_suat_tuan: {
+        Args: { p_tien_ich: string; p_ngay: string }
+        Returns: { da_dat: number; toi_da: number; con_lai: number }[]
+      }
+      moi_khach: {
+        Args: {
+          p_unit: string
+          p_ho_ten: string
+          p_tu: string
+          p_den: string
+          p_dien_thoai?: string | null
+          p_ly_do?: string | null
+        }
+        Returns: { id: string; ma: string }[]
+      }
+      thu_hoi_khach: { Args: { p_id: string }; Returns: undefined }
+      xoa_khach_cu: { Args: { p_giu_ngay?: number }; Returns: number }
+      khach_cua_toi: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          ho_ten: string
+          dien_thoai: string | null
+          ly_do: string | null
+          can: string
+          hieu_luc_tu: string
+          hieu_luc_den: string
+          vao_luc: string | null
+          ra_luc: string | null
+          trang_thai: string
+        }[]
+      }
+      quet_khach: {
+        Args: { p_ma: string; p_ghi?: boolean }
+        Returns: {
+          id: string | null
+          ho_ten: string | null
+          dien_thoai: string | null
+          ly_do: string | null
+          can: string | null
+          toa: string | null
+          nguoi_moi: string | null
+          hieu_luc_tu: string | null
+          hieu_luc_den: string | null
+          trang_thai: string
+          cho_vao: boolean
+          loi: string | null
+          vao_luc: string | null
+          ra_luc: string | null
+        }[]
+      }
+      so_ra_vao: {
+        Args: { p_project: string; p_tu: string; p_den: string }
+        Returns: {
+          id: string
+          ho_ten: string
+          dien_thoai: string | null
+          can: string
+          toa: string
+          nguoi_moi: string | null
+          hieu_luc_tu: string
+          hieu_luc_den: string
+          vao_luc: string | null
+          ra_luc: string | null
+          trang_thai: string
+        }[]
+      }
+      ty_le_ho_dung_app: {
+        Args: { p_project: string }
+        Returns: { tong_can: number; can_co_nguoi: number; ty_le: number }[]
+      }
+      is_bqt: { Args: { p_project: string }; Returns: boolean }
+      o_trong_du_an: { Args: { p_project: string }; Returns: boolean }
+      quy_ghi_duoc: { Args: { p_project: string }; Returns: boolean }
+      quy_ghi: {
+        Args: {
+          p_project: string
+          p_loai: string
+          p_ngay: string
+          p_dien_giai: string
+          p_so_tien: number
+          p_nghi_quyet?: string | null
+          p_ngay_nq?: string | null
+          p_ghi_chu?: string | null
+        }
+        Returns: string
+      }
+      quy_dao: { Args: { p_gd: string; p_ly_do: string }; Returns: string }
+      quy_dat_doi_chieu: {
+        Args: {
+          p_project: string
+          p_ngan_hang: string
+          p_so_tk: string
+          p_so_du: number
+          p_ngay: string
+        }
+        Returns: undefined
+      }
+      quy_so_ke_toan: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          loai: string
+          ngay: string
+          dien_giai: string
+          so_tien: number
+          nghi_quyet: string | null
+          ngay_nq: string | null
+          ghi_chu: string | null
+          da_dao: boolean
+          la_dong_dao: boolean
+          luy_ke: number
+        }[]
+      }
+      huy_phieu_thu: {
+        Args: { p_phieu: string; p_ly_do: string }
+        Returns: Json
+      }
+      kiem_lien_tuc_phieu_thu: {
+        Args: { p_project: string; p_ky: string }
+        Returns: { thieu_stt: number }[]
+      }
+      bql_so_phieu_thu: {
+        Args: { p_project: string; p_ky: string }
+        Returns: {
+          id: string
+          so_phieu: string
+          stt: number
+          nhan_luc: string
+          lap_luc: string
+          ma_can: string
+          nguoi_nop: string
+          tong_thu: number
+          da_huy: boolean
+          ly_do_huy: string | null
+        }[]
       }
       dat_han_muc_bai_xe: {
         Args: {

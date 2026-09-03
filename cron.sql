@@ -15,6 +15,7 @@
 --   remind-unpaid-invoices    -> /api/cron/nhac-no              0 1 * * *
 --   mo-ky-bao-tri             -> /api/cron/mo-ky-bao-tri        0 0 * * *
 --   don-ma-dang-nhap          -> /api/cron/don-ma-dang-nhap     0 20 * * *
+--   don-so-ra-vao             -> /api/cron/don-so-ra-vao        30 19 * * *
 --
 -- Thêm job ở đây mà quên thêm lịch bên Railway thì nó KHÔNG chạy, và không có
 -- gì báo — đó là lý do bảng đối chiếu nằm ngay đầu file chứ không nằm trong

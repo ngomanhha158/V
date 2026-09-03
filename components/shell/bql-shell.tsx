@@ -5,7 +5,7 @@ import { ThemeToggle } from './theme-toggle'
 import { NutRa } from './nut-ra'
 import {
   IcBieuDo, IcCanHo, IcCheck, IcDoiSoat, IcHoaDon, IcLich, IcLoa, IcNguoi, IcNha, IcNhap, IcQR,
-  IcSach, IcSo, IcTaiVe, IcThe, IcTien, IcToaNha, IcXe, IcYeuCau,
+  IcDatCho, IcKet, IcKhach, IcPhieuThu, IcSach, IcSo, IcTaiVe, IcThe, IcTien, IcToaNha, IcXe, IcYeuCau,
 } from '@/components/icons'
 
 /** Nhãn nhóm. Ẩn trên điện thoại: hàng ngang không diễn đạt được phân cấp,
@@ -39,6 +39,8 @@ export function BqlShell({
       <NavDoc href={`${base}/bql/sla`} icon={<IcCheck />}>Cam kết thời gian</NavDoc>
       <NavDoc href={`${base}/bql/bao-tri`} icon={<IcLich />}>Bảo trì định kỳ</NavDoc>
       <NavDoc href={`${base}/quet`} icon={<IcThe />}>Quét thẻ cư dân</NavDoc>
+      <NavDoc href={`${base}/bql/so-ra-vao`} icon={<IcKhach />}>Sổ ra vào</NavDoc>
+      <NavDoc href={`${base}/bql/tien-ich`} icon={<IcDatCho />}>Tiện ích</NavDoc>
       <NavDoc href={`${base}/bql/bai-xe`} icon={<IcXe />}>Chỗ đỗ xe</NavDoc>
 
       <Muc nhan="Truyền thông" />
@@ -50,6 +52,8 @@ export function BqlShell({
       <NavDoc href={`${base}/bql/billing`} icon={<IcHoaDon />}>Hóa đơn</NavDoc>
       <NavDoc href={`${base}/bql/cong-no`} icon={<IcTien />}>Công nợ</NavDoc>
       <NavDoc href={`${base}/bql/doi-soat`} icon={<IcDoiSoat />}>Đối soát tiền về</NavDoc>
+      <NavDoc href={`${base}/bql/phieu-thu`} icon={<IcPhieuThu />}>Phiếu thu</NavDoc>
+      <NavDoc href={`${base}/bql/quy-bao-tri`} icon={<IcKet />}>Quỹ bảo trì 2%</NavDoc>
       <NavDoc href={`${base}/bql/xuat`} icon={<IcTaiVe />}>Xuất Excel</NavDoc>
 
       {/* Tòa nhà và import là việc DỰNG hệ thống, làm vài lần rồi thôi. Để

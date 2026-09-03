@@ -25,6 +25,23 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
     .select('id, description, quantity, unit_price, amount')
     .eq('invoice_id', id)
 
+  // Phiếu thu của CHÍNH hóa đơn này. Cư dân đi tìm biên nhận thì tìm ở đây —
+  // chỗ họ đang đứng khi nhớ ra là mình đã trả rồi — chứ không phải ở một mục
+  // riêng nào đó trong menu.
+  const { data: dongPhieu } = await db
+    .from('phieu_thu_dong')
+    .select('phieu_id, so_tien')
+    .eq('invoice_id', id)
+    .eq('loai', 'hoa_don')
+  const idPhieu = [...new Set((dongPhieu ?? []).map((d) => d.phieu_id))]
+  const { data: phieu } = idPhieu.length
+    ? await db
+        .from('phieu_thu')
+        .select('id, so_phieu, nhan_luc, tong_thu, huy_luc')
+        .in('id', idPhieu)
+        .order('nhan_luc')
+    : { data: [] }
+
   const conLai = inv.total_amount - inv.paid_amount
   const tre = conLai > 0 && String(inv.due_date) < new Date().toISOString().slice(0, 10)
   const bank = bankConfig()
@@ -114,6 +131,43 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
       {conLai <= 0 && (
         <Hop tone="tot" title="Hóa đơn đã thanh toán đủ">
           Không còn khoản nào phải trả cho kỳ này.
+        </Hop>
+      )}
+
+      {(phieu ?? []).length > 0 && (
+        <Card>
+          <CardHead
+            title="Phiếu thu"
+            sub="Chứng từ cho từng lần tiền về — mở ra để in hoặc lưu PDF"
+          />
+          <div className="divide-y divide-line">
+            {(phieu ?? []).map((f) => (
+              <Link
+                key={f.id}
+                href={`/phieu-thu/${f.id}`}
+                className={cx(
+                  'flex items-center justify-between gap-3 px-4 py-3 hover:bg-sunken',
+                  f.huy_luc && 'opacity-60',
+                )}
+              >
+                <div>
+                  <div className="num text-sm font-medium text-ink">{f.so_phieu}</div>
+                  <div className="mt-0.5 text-[0.75rem] text-faint">
+                    {ngayVN(String(f.nhan_luc).slice(0, 10))}
+                    {f.huy_luc && ' · đã hủy, tiền vẫn được ghi nhận'}
+                  </div>
+                </div>
+                <span className="num text-sm font-medium text-ink">{vnd(f.tong_thu)}</span>
+              </Link>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {conLai <= 0 && (phieu ?? []).length === 0 && (
+        <Hop tone="canh" title="Đã trả đủ nhưng chưa có phiếu thu">
+          Khoản tiền được ghi nhận trước khi hệ thống bắt đầu cấp số chứng từ,
+          hoặc BQL gạch tay ở nơi khác. Cần biên nhận thì báo BQL cấp bù.
         </Hop>
       )}
 
