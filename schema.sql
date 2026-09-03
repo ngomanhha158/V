@@ -344,16 +344,27 @@ alter table ticket_events enable row level security;
 create policy ticket_event_read on ticket_events for select
   using (exists (select 1 from tickets t where t.id = ticket_events.ticket_id));
 
--- Family member KHÔNG thấy công nợ trừ khi chủ hộ bật can_view_finance
+-- AI TRONG CĂN ĐƯỢC NHÌN TIỀN. Family member KHÔNG thấy công nợ trừ khi chủ hộ
+-- bật can_view_finance.
+--
+-- Một hàm chứ không phải chép tay ở mỗi bảng tiền: hóa đơn, dòng hóa đơn và
+-- phiếu thu đều hiện CÙNG một con số. Hai bản chép tay của cùng một luật là hai
+-- bản sẽ lệch, và lệch ở đây nghĩa là đóng cửa trước rồi để ngỏ cửa sau — người
+-- nhà không xem được hóa đơn vẫn đọc được phiếu thu của chính hóa đơn đó.
+--
+-- SECURITY DEFINER: policy chạy dưới quyền người đang truy vấn, mà cư dân không
+-- có quyền đọc unit_memberships của người khác trong căn.
+create or replace function xem_duoc_tien_cua_can(p_unit uuid)
+returns boolean language sql stable security definer set search_path = public as $fn$
+  select exists (select 1 from unit_memberships m
+                  where m.unit_id = p_unit and m.user_id = auth.uid()
+                    and m.status = 'active'
+                    and (m.valid_to is null or m.valid_to >= current_date)
+                    and (m.role in ('owner','authorized','tenant') or m.can_view_finance));
+$fn$;
+
 create policy invoice_read on invoices for select
-  using (
-    is_staff(project_id)
-    or exists (select 1 from unit_memberships m
-                where m.unit_id = invoices.unit_id and m.user_id = auth.uid()
-                  and m.status = 'active'
-                  and (m.valid_to is null or m.valid_to >= current_date)
-                  and (m.role in ('owner','authorized','tenant') or m.can_view_finance))
-  );
+  using (is_staff(project_id) or xem_duoc_tien_cua_can(unit_id));
 
 create policy membership_read on unit_memberships for select
   using (user_id = auth.uid() or unit_id in (select current_unit_ids()));
@@ -1254,6 +1265,8 @@ declare
   v_hd    record;
   v_tra   bigint;
   v_so_hd int := 0;
+  v_phieu uuid;
+  v_so_phieu text;
 begin
   -- for update: hai webhook cùng căn bắn song song thì đứa sau xếp hàng đợi,
   -- không cùng đọc một paid_amount cũ rồi cùng cộng vào.
@@ -1307,9 +1320,18 @@ begin
          con_du = v_con
    where id = p_txn;
 
+  -- Phiếu thu lập NGAY TẠI ĐÂY, trong cùng transaction (§15). Để app gọi thêm
+  -- một lượt sau khi gạch xong thì có hai đường: lượt đó hỏng, hoặc webhook gọi
+  -- gach_no mà không gọi tiếp — và cư dân chuyển khoản xong không có chứng từ,
+  -- đúng cái vấn đề cần giải. Cùng transaction còn giữ dãy số kín: gạch hỏng
+  -- thì số phiếu cuốn theo.
+  v_phieu := lap_phieu_thu(p_txn);
+  select so_phieu into v_so_phieu from phieu_thu where id = v_phieu;
+
   return jsonb_build_object(
     'txn_id', p_txn, 'trang_thai', 'da_khop', 'so_hoa_don', v_so_hd,
-    'da_gach', t.amount - v_con, 'con_du', v_con);
+    'da_gach', t.amount - v_con, 'con_du', v_con,
+    'phieu_thu', v_phieu, 'so_phieu', v_so_phieu);
 end $fn$;
 
 -- Cửa vào của webhook. CHỈ service_role gọi được (không cấp cho authenticated):
@@ -2553,3 +2575,272 @@ end $fn$;
 -- fee_types.loai_xe nói loại nào được đếm — để trống là đếm tất cả, thường
 -- không phải điều người ta muốn, nên màn biểu phí bắt chọn.
 alter table fee_types add column if not exists loai_xe loai_xe;
+
+-- ═════════════════════ 15. PHIẾU THU ĐIỆN TỬ ═════════════════════
+-- Cư dân chuyển khoản xong không có gì cầm tay, và kế toán không có số chứng
+-- từ nào để tra khi đối chiếu. Hóa đơn nói "phải trả bao nhiêu"; phiếu thu nói
+-- "đã nhận bao nhiêu, vào ngày nào, mang số mấy". Hai chứng từ khác nhau.
+--
+-- ĐIỀU KIỆN CỦA MỘT SỐ CHỨNG TỪ: liên tục, không đứt quãng trong kỳ. Kiểm toán
+-- hỏi thẳng câu đó, và một lỗ trống trong dãy số là câu hỏi "phiếu PT-2609-0137
+-- đâu rồi" mà không ai trả lời được.
+--
+-- Vì thế KHÔNG dùng sequence. `nextval()` cố ý nằm ngoài transaction để hai
+-- lệnh insert song song khỏi chờ nhau — hệ quả trực tiếp là transaction nào
+-- rollback vẫn tiêu mất số nó đã lấy, để lại đúng cái lỗ trống trên. Đổi lại
+-- bằng một dòng đếm có khóa: phiếu thu mỗi tháng vài trăm cái, xếp hàng ở đây
+-- không tốn gì, mà dãy số thì kín.
+create table if not exists phieu_thu_dem (
+  project_id uuid not null references projects(id) on delete cascade,
+  ky         date not null,               -- ngày đầu tháng LẬP PHIẾU
+  so_cuoi    int  not null default 0,
+  primary key (project_id, ky)
+);
+
+-- ĐÁNH SỐ THEO NGÀY LẬP PHIẾU, KHÔNG THEO NGÀY TIỀN VỀ. Webhook về muộn là
+-- chuyện thường: tiền ngày 31/08 mà giao dịch bắn tới ngày 02/09. Đánh theo
+-- ngày tiền về thì phải chèn một số vào giữa dãy tháng 8 đã in xong và đã đưa
+-- cho cư dân — tức là hoặc trùng số, hoặc phải đánh lại cả dãy. Ngày tiền về
+-- vẫn ghi nguyên trong `bank_transactions.paid_at` và hiện trên phiếu.
+create table if not exists phieu_thu (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  so_phieu    text not null,              -- PT-2609-0184
+  ky          date not null,
+  stt         int  not null,              -- thứ tự trong kỳ; có cột này mới dò được chỗ đứt
+  unit_id     uuid not null references units(id),
+  -- Chép tên tại thời điểm lập, không join lúc đọc. Chứng từ đã đưa cho người
+  -- ta thì về sau đổi chủ hộ, đổi tên trong hồ sơ đều không được làm chữ trên
+  -- phiếu tự đổi theo. Một tờ phiếu thu tự viết lại chính nó không phải chứng từ.
+  nguoi_nop   text not null default '',
+  ma_can      text not null default '',
+  tong_thu    bigint not null check (tong_thu > 0),
+  hinh_thuc   text not null default 'chuyen_khoan'
+              check (hinh_thuc in ('chuyen_khoan','tien_mat')),
+  bank_txn_id uuid references bank_transactions(id) on delete set null,
+  nhan_luc    timestamptz not null,       -- ngày tiền thật sự về
+  lap_luc     timestamptz not null default clock_timestamp(),
+  lap_boi     uuid references profiles(id),
+  -- HỦY chứ không XÓA, và số KHÔNG được dùng lại. Xóa một dòng là tạo ra đúng
+  -- cái lỗ trống mà cả thiết kế trên kia dựng ra để tránh; cấp lại số đã hủy là
+  -- hai tờ giấy khác nhau mang cùng một số.
+  huy_luc     timestamptz,
+  huy_boi     uuid references profiles(id),
+  ly_do_huy   text,
+  unique (project_id, so_phieu),
+  unique (project_id, ky, stt),
+  constraint huy_phai_co_ly_do check ((huy_luc is null) = (ly_do_huy is null))
+);
+create index if not exists phieu_thu_can_idx on phieu_thu (unit_id, nhan_luc desc);
+create index if not exists phieu_thu_ky_idx  on phieu_thu (project_id, ky, stt);
+create unique index if not exists phieu_thu_txn_idx
+  on phieu_thu (bank_txn_id) where huy_luc is null and bank_txn_id is not null;
+
+-- `loai`:
+--   hoa_don   — một hóa đơn được gạch bằng chính lần thu này
+--   chi_tiet  — dòng phí bên trong hóa đơn đó, KHÔNG cộng vào tổng
+--   nop_truoc — tiền về nhiều hơn số nợ, phần chưa gạch vào đâu
+create table if not exists phieu_thu_dong (
+  id         uuid primary key default gen_random_uuid(),
+  phieu_id   uuid not null references phieu_thu(id) on delete cascade,
+  thu_tu     int  not null,
+  loai       text not null check (loai in ('hoa_don','chi_tiet','nop_truoc')),
+  dien_giai  text not null,
+  so_tien    bigint not null check (so_tien >= 0),
+  invoice_id uuid references invoices(id) on delete set null,
+  payment_id uuid references payments(id) on delete set null,
+  unique (phieu_id, thu_tu)
+);
+
+create or replace function tien_chu(p bigint)
+returns text language sql immutable set search_path = public as $fn$
+  select replace(to_char(p, 'FM999,999,999,999'), ',', '.') || 'đ';
+$fn$;
+
+-- ─────────────────────────── LẬP PHIẾU ───────────────────────────
+-- Gọi trong CÙNG transaction với gach_no. Đó là cả điểm mấu chốt: lệnh gạch nợ
+-- hỏng và rollback thì số phiếu vừa cấp cũng cuốn theo, dãy số vẫn kín.
+create or replace function lap_phieu_thu(p_txn uuid)
+returns uuid language plpgsql security definer set search_path = public as $fn$
+declare
+  t       bank_transactions;
+  v_ky    date;
+  v_stt   int;
+  v_so    text;
+  v_phieu uuid;
+  v_nguoi text;
+  v_ma    text;
+  v_tt    int    := 0;
+  v_tong  bigint := 0;
+  r       record;
+  l       record;
+begin
+  select * into t from bank_transactions where id = p_txn;
+  if not found then
+    raise exception 'Khong tim thay giao dich %', p_txn using errcode = '02000';
+  end if;
+  if t.unit_id is null then
+    raise exception 'Giao dich chua gach vao can nao thi chua lap duoc phieu thu'
+      using errcode = '22023';
+  end if;
+
+  -- MỘT LẦN TIỀN VỀ MỘT PHIẾU. Webhook bắn lại, hay BQL bấm gạch thêm lần nữa,
+  -- đều không được đẻ ra số chứng từ thứ hai cho cùng một khoản tiền.
+  select id into v_phieu from phieu_thu
+   where bank_txn_id = p_txn and huy_luc is null;
+  if found then return v_phieu; end if;
+
+  select u.code into v_ma from units u where u.id = t.unit_id;
+  select p.full_name into v_nguoi
+    from unit_memberships m join profiles p on p.id = m.user_id
+   where m.unit_id = t.unit_id and m.status = 'active'
+     and m.role in ('owner','authorized')
+     and (m.valid_to is null or m.valid_to >= current_date)
+   order by (m.role = 'owner') desc, m.valid_from
+   limit 1;
+
+  v_ky := date_trunc('month', current_date)::date;
+  insert into phieu_thu_dem (project_id, ky, so_cuoi) values (t.project_id, v_ky, 1)
+    on conflict (project_id, ky)
+    do update set so_cuoi = phieu_thu_dem.so_cuoi + 1
+    returning so_cuoi into v_stt;
+  v_so := 'PT-' || to_char(v_ky, 'YYMM') || '-' || lpad(v_stt::text, 4, '0');
+
+  insert into phieu_thu (project_id, so_phieu, ky, stt, unit_id, nguoi_nop, ma_can,
+                         tong_thu, hinh_thuc, bank_txn_id, nhan_luc, lap_boi)
+    values (t.project_id, v_so, v_ky, v_stt, t.unit_id,
+            coalesce(v_nguoi, ''), coalesce(v_ma, ''),
+            t.amount, 'chuyen_khoan', t.id, t.paid_at, auth.uid())
+    returning id into v_phieu;
+
+  for r in
+    select p.id as payment_id, p.amount, i.id as invoice_id, i.period,
+           i.total_amount, i.paid_amount
+      from payments p join invoices i on i.id = p.invoice_id
+     where p.bank_txn_id = p_txn
+     order by i.due_date, i.period
+  loop
+    v_tt   := v_tt + 1;
+    v_tong := v_tong + r.amount;
+    insert into phieu_thu_dong (phieu_id, thu_tu, loai, dien_giai, so_tien,
+                                invoice_id, payment_id)
+      values (v_phieu, v_tt, 'hoa_don',
+              'Hóa đơn kỳ ' || to_char(r.period, 'MM/YYYY')
+              || case when r.amount >= r.total_amount then ''
+                      when r.paid_amount >= r.total_amount
+                        then ' — trả nốt phần còn thiếu'
+                      else ' — trả một phần, còn thiếu '
+                           || tien_chu(r.total_amount - r.paid_amount) end,
+              r.amount, r.invoice_id, r.payment_id);
+
+    -- Chi tiết từng khoản phí CHỈ khi chính lần thu này trả trọn hóa đơn. Trả
+    -- một phần thì không có câu trả lời thật cho "tiền này vào phí nào": chia
+    -- 900.000đ cho ba dòng phí là bịa ra một phép phân bổ mà kế toán không ký
+    -- được. Khi đó phiếu nói đúng cái nó biết — trả một phần, còn thiếu bao
+    -- nhiêu — và im lặng về phần nó không biết.
+    if r.amount >= r.total_amount then
+      for l in select description, amount from invoice_lines
+                where invoice_id = r.invoice_id order by amount desc, description
+      loop
+        v_tt := v_tt + 1;
+        insert into phieu_thu_dong (phieu_id, thu_tu, loai, dien_giai, so_tien, invoice_id)
+          values (v_phieu, v_tt, 'chi_tiet', l.description, l.amount, r.invoice_id);
+      end loop;
+    end if;
+  end loop;
+
+  -- Tiền về nhiều hơn nợ. Phiếu vẫn ghi đủ số ngân hàng báo chứ không chỉ ghi
+  -- phần gạch được: cư dân đối chiếu tờ phiếu với app ngân hàng của họ, hai con
+  -- số lệch nhau là họ tưởng mình bị thu thiếu.
+  if t.con_du > 0 then
+    v_tt   := v_tt + 1;
+    v_tong := v_tong + t.con_du;
+    insert into phieu_thu_dong (phieu_id, thu_tu, loai, dien_giai, so_tien)
+      values (v_phieu, v_tt, 'nop_truoc', 'Nộp trước, chưa gạch vào hóa đơn nào', t.con_du);
+  end if;
+
+  -- Phiếu không cân thì không được phép tồn tại. Đây là chốt tự kiểm: nếu vòng
+  -- lặp trên sót một dòng payments, lỗi nổ ngay lúc lập chứ không nằm im tới
+  -- lúc kế toán cộng tay ra số khác.
+  if v_tong <> t.amount then
+    raise exception 'Phieu thu % khong can: tong dong = %, tien ve = %',
+      v_so, v_tong, t.amount using errcode = '23514';
+  end if;
+
+  return v_phieu;
+end $fn$;
+
+-- Hủy phiếu KHÔNG đụng vào tiền. Phiếu là chứng từ, tiền là tiền: ghi sai căn
+-- thì hủy phiếu rồi gạch lại cho đúng căn, còn tiền vẫn đã về tài khoản. Gộp
+-- hai việc vào một nút là một cú bấm nhầm xóa mất một khoản thu có thật.
+create or replace function huy_phieu_thu(p_phieu uuid, p_ly_do text)
+returns jsonb language plpgsql security definer set search_path = public as $fn$
+declare v uuid; v_so text; v_pj uuid;
+begin
+  select id, so_phieu, project_id into v, v_so, v_pj
+    from phieu_thu where id = p_phieu for update;
+  if not found then
+    raise exception 'Khong tim thay phieu thu %', p_phieu using errcode = '02000';
+  end if;
+  if not is_staff(v_pj) then
+    raise exception 'Chi BQL huy duoc phieu thu' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_ly_do), '') = '' then
+    raise exception 'Phai ghi ly do huy' using errcode = '22023';
+  end if;
+
+  update phieu_thu
+     set huy_luc = clock_timestamp(), huy_boi = auth.uid(), ly_do_huy = btrim(p_ly_do)
+   where id = p_phieu and huy_luc is null;
+  if not found then
+    raise exception 'Phieu % da huy roi', v_so using errcode = '23505';
+  end if;
+  return jsonb_build_object('id', p_phieu, 'so_phieu', v_so, 'da_huy', true);
+end $fn$;
+
+-- Câu hỏi đầu tiên của kiểm toán, trả lời bằng một lời gọi. Dãy đúng thì trả về
+-- RỖNG; có dòng nào là có số chứng từ biến mất khỏi sổ.
+create or replace function kiem_lien_tuc_phieu_thu(p_project uuid, p_ky date)
+returns table (thieu_stt int)
+language sql stable security definer set search_path = public as $fn$
+  select s.i
+    from phieu_thu_dem d, generate_series(1, d.so_cuoi) as s(i)
+   where d.project_id = p_project and d.ky = date_trunc('month', p_ky)::date
+     and not exists (select 1 from phieu_thu p
+                      where p.project_id = d.project_id and p.ky = d.ky and p.stt = s.i)
+   order by s.i;
+$fn$;
+
+create or replace function bql_so_phieu_thu(p_project uuid, p_ky date)
+returns table (id uuid, so_phieu text, stt int, nhan_luc timestamptz, lap_luc timestamptz,
+               ma_can text, nguoi_nop text, tong_thu bigint,
+               da_huy boolean, ly_do_huy text)
+language sql stable security definer set search_path = public as $fn$
+  select p.id, p.so_phieu, p.stt, p.nhan_luc, p.lap_luc, p.ma_can, p.nguoi_nop,
+         p.tong_thu, (p.huy_luc is not null), p.ly_do_huy
+    from phieu_thu p
+   where p.project_id = p_project
+     and p.ky = date_trunc('month', p_ky)::date
+     and is_staff(p_project)
+   order by p.stt;
+$fn$;
+
+-- ── RLS ──
+-- Phiếu thu hiện đúng những con số của hóa đơn, nên nó dùng LẠI luật của hóa
+-- đơn (xem_duoc_tien_cua_can) chứ không viết luật riêng. Viết riêng là mở một
+-- cửa sau vào cùng dữ liệu đó.
+alter table phieu_thu      enable row level security;
+alter table phieu_thu_dong enable row level security;
+create policy phieu_thu_read on phieu_thu for select
+  using (is_staff(project_id) or xem_duoc_tien_cua_can(unit_id));
+create policy phieu_thu_dong_read on phieu_thu_dong for select
+  using (exists (select 1 from phieu_thu p where p.id = phieu_thu_dong.phieu_id));
+
+-- KHÔNG force row level security, cùng lý do như bank_transactions và audit_log:
+-- force áp cả lên chủ bảng, mà lap_phieu_thu chạy security definer đúng dưới
+-- quyền chủ bảng — bật lên là hàm tự chặn chính nó và mọi lần gạch nợ đều hỏng.
+-- Không có policy INSERT/UPDATE/DELETE nào cho bất kỳ role nào: sổ chứng từ chỉ
+-- được viết bởi hàm definer.
+
+create trigger trg_audit_phieu_thu after insert or update or delete on phieu_thu
+  for each row execute function ghi_nhat_ky('project_id');

@@ -110,6 +110,11 @@ grant select on invoices, invoice_lines, announcements, notifications to authent
 -- lỏng gì thêm. Vẫn KHÔNG cấp insert/update/delete: ghi vào bảng tiền chỉ đi
 -- qua hàm definer.
 grant select on payments to authenticated;
+-- Sổ chứng từ (§15). Cư dân đọc phiếu của căn mình, BQL đọc cả dự án — hai
+-- chuyện đó do policy phieu_thu_read quyết, grant này chỉ mở cửa cho policy
+-- được chạy tới. KHÔNG cấp insert/update/delete cho ai: một sổ chứng từ mà
+-- người cầm phiếu sửa được thì không còn là chứng từ.
+grant select on phieu_thu, phieu_thu_dong to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
 grant insert, update, delete on announcements, documents to authenticated;
@@ -140,6 +145,7 @@ alter default privileges in schema public grant execute on functions to service_
 grant execute on function current_unit_ids()     to authenticated;
 grant execute on function is_staff(uuid)         to authenticated;
 grant execute on function is_unit_manager(uuid)  to authenticated;
+grant execute on function xem_duoc_tien_cua_can(uuid) to authenticated;
 grant execute on function can_see_profile(uuid)  to authenticated;
 grant execute on function building_project(uuid) to authenticated;
 grant execute on function unit_project(uuid)     to authenticated;
@@ -167,6 +173,13 @@ grant execute on function bql_danh_sach_nguoi_dung(uuid)      to authenticated;
 grant execute on function bql_gan_nhan_su(uuid, uuid, staff_role)   to authenticated;
 grant execute on function bql_ngung_nhan_su(uuid, uuid, staff_role) to authenticated;
 grant execute on function bql_gan_chu_ho_dau_tien(uuid, uuid)       to authenticated;
+-- Phiếu thu (§15). lap_phieu_thu KHÔNG cấp cho authenticated: nó cấp số chứng
+-- từ, gọi được là tự in phiếu cho một khoản tiền chưa từng về. Nó chỉ được gọi
+-- từ trong gach_no, mà gach_no cũng không cấp cho authenticated.
+grant execute on function huy_phieu_thu(uuid, text)                 to authenticated;
+grant execute on function kiem_lien_tuc_phieu_thu(uuid, date)       to authenticated;
+grant execute on function bql_so_phieu_thu(uuid, date)              to authenticated;
+grant execute on function tien_chu(bigint)                          to authenticated;
 
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là
