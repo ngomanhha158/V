@@ -197,4 +197,21 @@ h1, h2, h3 { line-height: 1.25; letter-spacing: -0.018em; }
 @media print {
   .no-print { display: none !important; }
   body { background: #fff; }
+
+  /* Ép về bảng màu SÁNG khi in, bất kể người dùng đang để nền tối. Chỉ đổi nền
+     giấy sang trắng mà giữ nguyên chữ màu sáng là in ra một tờ trắng tinh —
+     và người ta chỉ biết sau khi máy in đã chạy xong. */
+  :root, :root[data-theme="dark"] {
+    color-scheme: light;
+    --c-canvas: #fff; --c-surface: #fff; --c-raised: #fff; --c-sunken: #f2f4f7;
+    --c-line: #d3d8e0; --c-line-firm: #98a2b3;
+    --c-ink: #101828; --c-muted: #344054; --c-faint: #475467;
+    --c-brand: #1d4ed8; --c-brand-deep: #1d4ed8;
+    --c-brand-soft: #fff; --c-brand-line: #c7dbfe; --c-on-brand: #fff;
+    --c-ok: #067647; --c-ok-soft: #fff; --c-ok-line: #abefc6;
+    --c-warn: #b54708; --c-warn-soft: #fff; --c-warn-line: #fedf89;
+    --c-bad: #b42318; --c-bad-soft: #fff; --c-bad-line: #fecdc9;
+  }
+  /* Chứng từ không được cắt ngang giữa hai trang giấy. */
+  .giay { break-inside: avoid; box-shadow: none !important; }
 }

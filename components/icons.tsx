@@ -119,6 +119,15 @@ export const IcTaiVe = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></I>
 )
 
+/** Tờ biên nhận: giấy có mép răng cưa ở đáy — hình dáng ai cũng nhận ra là
+ *  cái cầm về sau khi trả tiền, khác với hóa đơn là cái đòi tiền. */
+export const IcPhieuThu = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M5 3h14v16.5l-2.3-1.4-2.35 1.4-2.35-1.4-2.35 1.4L7.3 18.1 5 19.5z" />
+    <path d="M9 8h6M9 12h4" />
+  </I>
+)
+
 /** Danh sách có dấu tích: sổ ghi việc đã xảy ra, không phải việc sắp làm. */
 export const IcSo = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}>

@@ -1209,6 +1209,60 @@ export type Database = {
           },
         ]
       }
+      phieu_thu: {
+        Row: {
+          id: string
+          project_id: string
+          so_phieu: string
+          ky: string
+          stt: number
+          unit_id: string
+          nguoi_nop: string
+          ma_can: string
+          tong_thu: number
+          hinh_thuc: string
+          bank_txn_id: string | null
+          nhan_luc: string
+          lap_luc: string
+          lap_boi: string | null
+          huy_luc: string | null
+          huy_boi: string | null
+          ly_do_huy: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "phieu_thu_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phieu_thu_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      phieu_thu_dong: {
+        Row: {
+          id: string
+          phieu_id: string
+          thu_tu: number
+          loai: string
+          dien_giai: string
+          so_tien: number
+          invoice_id: string | null
+          payment_id: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       bai_xe: {
         Row: {
           building_id: string
@@ -1353,6 +1407,29 @@ export type Database = {
       duyet_xe_tiep: {
         Args: { p_building: string; p_loai: Database["public"]["Enums"]["loai_xe"] }
         Returns: { bien_so: string; can: string }[]
+      }
+      huy_phieu_thu: {
+        Args: { p_phieu: string; p_ly_do: string }
+        Returns: Json
+      }
+      kiem_lien_tuc_phieu_thu: {
+        Args: { p_project: string; p_ky: string }
+        Returns: { thieu_stt: number }[]
+      }
+      bql_so_phieu_thu: {
+        Args: { p_project: string; p_ky: string }
+        Returns: {
+          id: string
+          so_phieu: string
+          stt: number
+          nhan_luc: string
+          lap_luc: string
+          ma_can: string
+          nguoi_nop: string
+          tong_thu: number
+          da_huy: boolean
+          ly_do_huy: string | null
+        }[]
       }
       dat_han_muc_bai_xe: {
         Args: {
