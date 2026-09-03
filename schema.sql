@@ -3076,3 +3076,273 @@ create trigger trg_audit_quy after insert or update or delete on quy_bao_tri_gia
   for each row execute function ghi_nhat_ky('project_id');
 create trigger trg_audit_quy_tk after insert or update or delete on quy_bao_tri
   for each row execute function ghi_nhat_ky('project_id');
+
+-- ═════════════════════ 17. KHÁCH THĂM & SỔ RA VÀO ═════════════════════
+-- Bảo vệ đang ghi sổ giấy: không tra được ai vào lúc nào, và cư dân phải xuống
+-- tận sảnh đón khách. Đây là tính năng đứng trên thẻ cư dân — cùng một máy quét,
+-- cùng một thói quen ở cửa.
+--
+-- SỔ RA VÀO NÀY CHỈ GHI KHÁCH, KHÔNG GHI CƯ DÂN. Đó là giới hạn có chủ ý: một
+-- bảng lần-lượt-ai-đi-qua-cửa-nào của người ĐANG SỐNG ở đây là dữ liệu theo dõi
+-- đường đi hằng ngày của họ, và nó không cần thiết cho việc gì mà cuốn sổ giấy
+-- hiện tại đang làm. Sổ giấy ở sảnh cũng chỉ ghi khách.
+--
+-- Ở PR thẻ cư dân đã nói sẽ không dựng bảng ghi lượt quét như tác dụng phụ, mà
+-- làm riêng, có chính sách lưu trữ và nói với cư dân là có. Đây là chỗ đó.
+
+create table if not exists khach_tham (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  unit_id     uuid not null references units(id) on delete cascade,
+  ho_ten      text not null,
+  dien_thoai  text,
+  ly_do       text,
+  -- MÃ LƯU NGUYÊN VĂN, khác hẳn mã đăng nhập ở railway/03_auth.sql (băm rồi mới
+  -- lưu). Lý do khác nhau nằm ở chỗ mã này KHÔNG PHẢI là chứng thực:
+  --   · mã đăng nhập TỰ NÓ cấp một phiên — ai đọc được bảng là đăng nhập được;
+  --   · mã khách chỉ đưa cho một con người ở cửa xem, và người đó nhìn thấy mặt
+  --     khách, hỏi tên, quyết định cho vào hay không.
+  -- Đổi lại được thứ mà băm không cho: cư dân mở lại mã đã tạo để gửi lần nữa
+  -- qua Zalo. Băm thì mỗi lần gửi lại là một mã mới, và cái mã đã gửi buổi sáng
+  -- chết ngay lúc người ta bấm "gửi lại" lúc trưa — hỏng đúng vào ca thường gặp
+  -- nhất. RLS bên dưới khóa cột này lại còn đúng người trong căn và nhân sự.
+  ma          text not null unique,
+  hieu_luc_tu  timestamptz not null,
+  hieu_luc_den timestamptz not null,
+  moi_boi     uuid references profiles(id),
+  tao_luc     timestamptz not null default clock_timestamp(),
+  -- Thu hồi: cư dân đổi ý, hoặc mã lỡ gửi nhầm người.
+  thu_hoi_luc timestamptz,
+  thu_hoi_boi uuid references profiles(id),
+  -- Sổ ra vào. KHÔNG bịa giờ ra: khách quên quét lúc về là chuyện thường, và
+  -- một giờ ra đoán bừa còn tệ hơn một ô trống — ô trống thì ai đọc cũng biết
+  -- là không biết.
+  vao_luc     timestamptz,
+  ra_luc      timestamptz,
+  vao_boi     uuid references profiles(id),
+  ra_boi      uuid references profiles(id),
+  constraint hieu_luc_thuan check (hieu_luc_den > hieu_luc_tu),
+  -- Cửa sổ hiệu lực không được dài vô hạn: một mã sống ba tháng thì nó không
+  -- còn là giấy mời khách nữa, nó là chìa khóa.
+  constraint hieu_luc_khong_qua_dai check (hieu_luc_den <= hieu_luc_tu + interval '7 days'),
+  constraint ra_sau_vao check (ra_luc is null or vao_luc is null or ra_luc >= vao_luc)
+);
+create index if not exists khach_can_idx on khach_tham (unit_id, hieu_luc_tu desc);
+create index if not exists khach_du_an_idx on khach_tham (project_id, hieu_luc_tu desc);
+
+-- Trạng thái SUY RA, không lưu. Lưu thì phải có ai đó chạy đi cập nhật lúc hết
+-- giờ, mà không ai chạy — nên cột đó sẽ nói "đang hiệu lực" cho một mã đã chết
+-- từ hôm kia.
+create or replace function khach_trang_thai(k khach_tham, bay timestamptz default now())
+returns text language sql immutable set search_path = public as $fn$
+  select case
+    when k.thu_hoi_luc is not null then 'thu_hoi'
+    when k.ra_luc  is not null     then 'da_ra'
+    when k.vao_luc is not null     then 'trong_toa'
+    when bay < k.hieu_luc_tu       then 'chua_toi_gio'
+    when bay > k.hieu_luc_den      then 'het_han'
+    else 'dang_hieu_luc'
+  end;
+$fn$;
+
+-- Cư dân trong căn mời khách. KHÔNG bắt chủ hộ duyệt từng lượt: người thuê đang
+-- ở đó mà mời bạn tới chơi cũng phải chờ chủ nhà ở tỉnh khác bấm duyệt thì họ
+-- quay lại cách cũ — gọi điện xuống sảnh. Ai mời thì ghi tên người đó, và chủ
+-- hộ thu hồi được bất kỳ mã nào của căn mình.
+create or replace function moi_khach(
+  p_unit uuid, p_ho_ten text, p_tu timestamptz, p_den timestamptz,
+  p_dien_thoai text default null, p_ly_do text default null
+) returns table (id uuid, ma text) language plpgsql security definer set search_path = public as $fn$
+declare v_id uuid; v_ma text; v_pj uuid;
+begin
+  if not exists (select 1 from unit_memberships m
+                  where m.unit_id = p_unit and m.user_id = auth.uid()
+                    and m.status = 'active'
+                    and (m.valid_to is null or m.valid_to >= current_date)) then
+    raise exception 'Chi nguoi trong can moi moi duoc khach' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_ho_ten), '') = '' then
+    raise exception 'Phai ghi ten khach — bao ve doi chieu bang ten' using errcode = '22023';
+  end if;
+
+  select b.project_id into v_pj from units u join buildings b on b.id = u.building_id
+   where u.id = p_unit;
+
+  -- 32 byte ngẫu nhiên, base64url. Không có dấu chấm nên doc() của lib/db/jwt.ts
+  -- từ chối ngay ở bước đếm phần; dài 43 ký tự nên docThe() cũng từ chối. Ba
+  -- loại mã của hệ thống phân biệt nhau bằng HÌNH DẠNG, không bằng quy ước tên.
+  -- Hai uuid v4 ghép lại = 32 byte, ~244 bit ngẫu nhiên. Không dùng
+  -- gen_random_bytes() vì hàm đó thuộc pgcrypto, mà schema.sql tới giờ chưa cần
+  -- extension nào — thêm một cái vào đây là thêm một bước phải nhớ ở mọi nơi
+  -- dựng lại database, để đổi lấy đúng con số ngẫu nhiên mà gen_random_uuid()
+  -- đã cho. encode/decode là hàm lõi.
+  v_ma := translate(
+    encode(decode(replace(gen_random_uuid()::text, '-', '')
+                  || replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'),
+    '+/=', '-_');
+
+  insert into khach_tham (project_id, unit_id, ho_ten, dien_thoai, ly_do, ma,
+                          hieu_luc_tu, hieu_luc_den, moi_boi)
+    values (v_pj, p_unit, btrim(p_ho_ten),
+            nullif(btrim(coalesce(p_dien_thoai, '')), ''),
+            nullif(btrim(coalesce(p_ly_do, '')), ''),
+            v_ma, p_tu, p_den, auth.uid())
+    returning khach_tham.id into v_id;
+  return query select v_id, v_ma;
+end $fn$;
+
+create or replace function thu_hoi_khach(p_id uuid)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare v_unit uuid;
+begin
+  select unit_id into v_unit from khach_tham where id = p_id;
+  if not found then
+    raise exception 'Khong tim thay luot khach %', p_id using errcode = '02000';
+  end if;
+  if not exists (select 1 from unit_memberships m
+                  where m.unit_id = v_unit and m.user_id = auth.uid()
+                    and m.status = 'active'
+                    and (m.valid_to is null or m.valid_to >= current_date)) then
+    raise exception 'Chi nguoi trong can moi thu hoi duoc' using errcode = '42501';
+  end if;
+  -- Khách đã vào tòa rồi thì thu hồi mã không đuổi được người ra. Nói thẳng
+  -- thay vì để cư dân tưởng mình vừa làm được một việc.
+  if exists (select 1 from khach_tham where id = p_id and vao_luc is not null and ra_luc is null) then
+    raise exception 'Khach da vao toa; thu hoi ma khong dua duoc ho ra, bao bao ve'
+      using errcode = '23514';
+  end if;
+  update khach_tham set thu_hoi_luc = clock_timestamp(), thu_hoi_boi = auth.uid()
+   where id = p_id and thu_hoi_luc is null;
+end $fn$;
+
+-- Bảo vệ quét mã. Trả về ĐỦ thứ cần để quyết định ở cửa, và lý do khi từ chối —
+-- một màn chỉ hiện "không hợp lệ" thì bảo vệ không biết nên gọi cho ai.
+create or replace function quet_khach(p_ma text, p_ghi boolean default false)
+returns table (id uuid, ho_ten text, dien_thoai text, ly_do text,
+               can text, toa text, nguoi_moi text,
+               hieu_luc_tu timestamptz, hieu_luc_den timestamptz,
+               trang_thai text, cho_vao boolean, loi text,
+               vao_luc timestamptz, ra_luc timestamptz)
+language plpgsql security definer set search_path = public as $fn$
+declare k khach_tham; v_tt text; v_cho boolean; v_loi text; v_bay timestamptz := now();
+begin
+  -- Kiểm quyền TRƯỚC khi tra mã. Để sau thì hàm trả lời khác nhau ở hai ca —
+  -- mã có thật thì báo lỗi quyền, mã bịa thì báo 'khong_co' — và cái khác nhau
+  -- đó biến hàm thành máy dò xem một mã có tồn tại hay không.
+  if not exists (select 1 from staff_assignments
+                  where user_id = auth.uid() and is_active) then
+    raise exception 'Chi nhan su moi quet duoc ma khach' using errcode = '42501';
+  end if;
+
+  select * into k from khach_tham where ma = p_ma;
+  if not found then
+    return query select null::uuid, null::text, null::text, null::text, null::text, null::text,
+                        null::text, null::timestamptz, null::timestamptz,
+                        'khong_co'::text, false, 'Mã không có trong hệ thống'::text,
+                        null::timestamptz, null::timestamptz;
+    return;
+  end if;
+  if not is_staff(k.project_id) then
+    raise exception 'Chi nhan su cua dung du an moi quet duoc' using errcode = '42501';
+  end if;
+
+  v_tt := khach_trang_thai(k, v_bay);
+  v_cho := v_tt in ('dang_hieu_luc', 'trong_toa');
+  v_loi := case v_tt
+    when 'thu_hoi'      then 'Cư dân đã thu hồi lượt khách này'
+    when 'chua_toi_gio' then 'Chưa tới giờ hẹn'
+    when 'het_han'      then 'Đã quá giờ hẹn'
+    when 'da_ra'        then 'Lượt này đã ra khỏi tòa, mã dùng xong rồi'
+    else null end;
+
+  -- p_ghi = false là XEM THỬ. Bảo vệ soi mã trước khi mở cửa mà lần soi đó đã
+  -- ghi giờ vào thì sổ ghi sai giờ, và ghi cả những lượt cuối cùng không vào.
+  if p_ghi and v_cho then
+    -- Đủ điều kiện cột ở mệnh đề where: hàm này có tham số OUT trùng tên với
+    -- cột, và Postgres coi `vao_luc is null` trần là mơ hồ.
+    if k.vao_luc is null then
+      update khach_tham set vao_luc = clock_timestamp(), vao_boi = auth.uid()
+       where khach_tham.id = k.id and khach_tham.vao_luc is null;
+    else
+      update khach_tham set ra_luc = clock_timestamp(), ra_boi = auth.uid()
+       where khach_tham.id = k.id and khach_tham.ra_luc is null;
+    end if;
+    select * into k from khach_tham where khach_tham.id = k.id;
+    v_tt := khach_trang_thai(k, v_bay);
+  end if;
+
+  return query
+    select k.id, k.ho_ten, k.dien_thoai, k.ly_do, u.code, b.name,
+           p.full_name, k.hieu_luc_tu, k.hieu_luc_den, v_tt, v_cho, v_loi,
+           k.vao_luc, k.ra_luc
+      from units u join buildings b on b.id = u.building_id
+      left join profiles p on p.id = k.moi_boi
+     where u.id = k.unit_id;
+end $fn$;
+
+-- Sổ ra vào cho nhân sự: ai đang trong tòa, và ai chưa quét ra.
+create or replace function so_ra_vao(p_project uuid, p_tu date, p_den date)
+returns table (id uuid, ho_ten text, dien_thoai text, can text, toa text,
+               nguoi_moi text, hieu_luc_tu timestamptz, hieu_luc_den timestamptz,
+               vao_luc timestamptz, ra_luc timestamptz, trang_thai text)
+language sql stable security definer set search_path = public as $fn$
+  select k.id, k.ho_ten, k.dien_thoai, u.code, b.name, p.full_name,
+         k.hieu_luc_tu, k.hieu_luc_den, k.vao_luc, k.ra_luc, khach_trang_thai(k)
+    from khach_tham k
+    join units u on u.id = k.unit_id
+    join buildings b on b.id = u.building_id
+    left join profiles p on p.id = k.moi_boi
+   where k.project_id = p_project
+     and is_staff(p_project)
+     and k.hieu_luc_tu >= p_tu::timestamptz
+     and k.hieu_luc_tu <  (p_den + 1)::timestamptz
+   order by coalesce(k.vao_luc, k.hieu_luc_tu) desc;
+$fn$;
+
+-- ĐIỀU KIỆN VẬN HÀNH mà kế hoạch tháng 1 đã đặt: dưới 50% hộ dùng app thì bảo
+-- vệ vẫn phải giữ sổ giấy song song. Con số đó phải hiện ra chứ không nằm trong
+-- một tài liệu — người trực ban là người quyết định có bỏ sổ giấy hay không.
+create or replace function ty_le_ho_dung_app(p_project uuid)
+returns table (tong_can int, can_co_nguoi int, ty_le numeric)
+language sql stable security definer set search_path = public as $fn$
+  with c as (
+    select u.id,
+           exists (select 1 from unit_memberships m
+                    where m.unit_id = u.id and m.status = 'active'
+                      and (m.valid_to is null or m.valid_to >= current_date)) as co
+      from units u join buildings b on b.id = u.building_id
+     where b.project_id = p_project
+  )
+  select count(*)::int, count(*) filter (where co)::int,
+         case when count(*) = 0 then 0
+              else round(100.0 * count(*) filter (where co) / count(*), 1) end
+    from c;
+$fn$;
+
+-- ── LƯU BAO LÂU ──
+-- Sổ ra vào là dữ liệu về người ngoài tới thăm ai, lúc nào. Giữ mãi thì nó thành
+-- một kho hồ sơ quan hệ của cư dân mà không ai xin phép để lập. 90 ngày đủ dài
+-- cho mọi việc cuốn sổ giấy đang phục vụ (tra lại một sự cố, một tranh chấp) và
+-- đủ ngắn để nó không thành kho đó. Con số này viết ở đây và nói ra trên màn
+-- của cư dân, không giấu trong tài liệu.
+create or replace function xoa_khach_cu(p_giu_ngay int default 90)
+returns int language plpgsql security definer set search_path = public as $fn$
+declare n int;
+begin
+  delete from khach_tham
+   where hieu_luc_den < now() - make_interval(days => p_giu_ngay);
+  get diagnostics n = row_count;
+  return n;
+end $fn$;
+
+-- ── RLS ──
+alter table khach_tham enable row level security;
+-- Cư dân đọc lượt khách của CĂN MÌNH (kể cả người nhà: mời khách không phải
+-- chuyện tiền nong, nên can_view_finance không dính dáng gì ở đây). Nhân sự đọc
+-- cả dự án — đó chính là cuốn sổ ra vào.
+create policy khach_read on khach_tham for select
+  using (is_staff(project_id) or unit_id in (select current_unit_ids()));
+-- Không policy ghi: mời / thu hồi / quét đều đi qua hàm definer.
+
+create trigger trg_audit_khach after insert or update or delete on khach_tham
+  for each row execute function ghi_nhat_ky('project_id');

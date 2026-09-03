@@ -120,6 +120,11 @@ grant select on phieu_thu, phieu_thu_dong to authenticated;
 -- không có grant này thì hàm đó lỗi permission denied ngay cả với BQL.
 -- Không cấp insert/update/delete: vào sổ quỹ chỉ qua hàm definer.
 grant select on quy_bao_tri, quy_bao_tri_giao_dich to authenticated;
+-- Khách thăm (§17). RLS (khach_read) lọc xuống căn của người đó, hoặc cả dự án
+-- nếu là nhân sự. Cột `ma` nằm trong bảng này: đó là mã cư dân gửi cho khách
+-- qua Zalo, và họ phải mở lại xem được để gửi lần nữa. Không cấp ghi cho ai —
+-- mời / thu hồi / quét đều đi qua hàm definer.
+grant select on khach_tham to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
 grant insert, update, delete on announcements, documents to authenticated;
@@ -187,6 +192,15 @@ grant execute on function bql_so_phieu_thu(uuid, date)              to authentic
 -- Quỹ bảo trì (§16). quy_so_du KHÔNG cấp: nó là hàm definer bỏ qua RLS, dùng
 -- nội bộ trong quy_ghi để chặn chi vượt quỹ. Cấp ra ngoài là cửa đọc số dư quỹ
 -- của mọi dự án mà không qua policy nào.
+-- Khách thăm (§17). xoa_khach_cu KHÔNG cấp: nó là job nền, gọi bằng
+-- service_role qua /api/cron. Cấp cho authenticated là cho bất kỳ ai xóa sạch
+-- sổ ra vào bằng một lời gọi.
+grant execute on function moi_khach(uuid, text, timestamptz, timestamptz, text, text) to authenticated;
+grant execute on function thu_hoi_khach(uuid)                                 to authenticated;
+grant execute on function quet_khach(text, boolean)                           to authenticated;
+grant execute on function so_ra_vao(uuid, date, date)                         to authenticated;
+grant execute on function ty_le_ho_dung_app(uuid)                             to authenticated;
+grant execute on function khach_trang_thai(khach_tham, timestamptz)           to authenticated;
 grant execute on function o_trong_du_an(uuid)                                 to authenticated;
 grant execute on function is_bqt(uuid)                                        to authenticated;
 grant execute on function quy_ghi_duoc(uuid)                                  to authenticated;
