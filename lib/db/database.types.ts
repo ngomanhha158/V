@@ -1209,6 +1209,30 @@ export type Database = {
           },
         ]
       }
+      kien_hang: {
+        Row: {
+          id: string
+          project_id: string
+          unit_id: string
+          loai: string
+          nha_van_chuyen: string | null
+          ma_van_don: string | null
+          vi_tri: string | null
+          ghi_chu: string | null
+          nhan_luc: string
+          nhan_boi: string | null
+          tra_luc: string | null
+          tra_boi: string | null
+          nguoi_lay: string | null
+          ten_nguoi_lay: string | null
+          huy_luc: string | null
+          huy_boi: string | null
+          ly_do_huy: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       tien_ich: {
         Row: {
           id: string

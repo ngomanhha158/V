@@ -119,6 +119,13 @@ export const IcTaiVe = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></I>
 )
 
+/** Thùng carton có băng dán: kiện hàng đang chờ ở quầy. */
+export const IcKien = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5z" /><path d="M3 8.5 12 13l9-4.5M12 13v7" />
+  </I>
+)
+
 /** Lịch có dấu tích: khung giờ đã giữ chỗ, không phải một cái lịch để xem. */
 export const IcDatCho = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}>
