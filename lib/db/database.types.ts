@@ -1581,6 +1581,51 @@ export type Database = {
       }
       thu_hoi_khach: { Args: { p_id: string }; Returns: undefined }
       xoa_khach_cu: { Args: { p_giu_ngay?: number }; Returns: number }
+      nhac_kien_hang: { Args: Record<string, never>; Returns: number }
+      nhan_loai_kien: { Args: { p: string }; Returns: string }
+      kien_han_ngay: { Args: Record<string, never>; Returns: number }
+      nhan_kien_hang: {
+        Args: {
+          p_unit: string
+          p_loai?: string
+          p_nha_van_chuyen?: string | null
+          p_ma_van_don?: string | null
+          p_vi_tri?: string | null
+          p_ghi_chu?: string | null
+        }
+        Returns: string
+      }
+      giao_kien_hang: { Args: { p_kien: string; p_nguoi: string }; Returns: Json }
+      huy_kien_hang: { Args: { p_kien: string; p_ly_do: string }; Returns: undefined }
+      kien_dang_giu: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          can: string
+          toa: string
+          loai: string
+          nhan_luc: string
+          vi_tri: string | null
+          nha_van_chuyen: string | null
+          ma_van_don: string | null
+          so_ngay: number
+        }[]
+      }
+      kien_cua_toi: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          can: string
+          loai: string
+          nhan_luc: string
+          vi_tri: string | null
+          nha_van_chuyen: string | null
+          tra_luc: string | null
+          ten_nguoi_lay: string | null
+          ly_do_huy: string | null
+          trang_thai: string
+        }[]
+      }
       khach_cua_toi: {
         Args: Record<string, never>
         Returns: {

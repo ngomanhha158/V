@@ -3634,3 +3634,264 @@ create policy dat_read on dat_tien_ich for select
 
 create trigger trg_audit_dat_tien_ich after insert or update or delete on dat_tien_ich
   for each row execute function ghi_nhat_ky('project_id');
+
+-- ═════════════════════ 19. NHẬN HÀNG HỘ ═════════════════════
+-- Bảo vệ giữ hộ hàng chục kiện mỗi ngày và không ai ký nhận. Mất hàng là tranh
+-- cãi không có bằng chứng — mà cãi nhau về một kiện hàng 200 nghìn thì tốn của
+-- cả tòa nhiều hơn giá kiện hàng đó rất nhiều.
+--
+-- ĐIỂM MẤU CHỐT KHÔNG PHẢI LÚC NHẬN, MÀ LÚC TRẢ. "Đã nhận một kiện cho căn
+-- P1-12.04" thì cuốn sổ giấy cũng ghi được. Thứ sổ giấy không làm được là chứng
+-- minh ĐÃ TRAO CHO AI: chữ ký nguệch ngoạc của một người không rõ tên. Ở đây
+-- người lấy được xác định bằng chính THẺ CƯ DÂN đã dựng ở §13 — bảo vệ quét
+-- thẻ, hệ thống ghi lại đúng con người đó.
+
+create table if not exists kien_hang (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  unit_id     uuid not null references units(id) on delete cascade,
+  loai        text not null default 'kien_nho'
+              check (loai in ('phong_bi','kien_nho','thung_lon','hang_lanh')),
+  nha_van_chuyen text,
+  ma_van_don  text,
+  vi_tri      text,                    -- 'quầy lễ tân', 'tủ A3'
+  ghi_chu     text,
+  nhan_luc    timestamptz not null default clock_timestamp(),
+  nhan_boi    uuid references profiles(id),
+  -- Bàn giao. `nguoi_lay` là uuid của CƯ DÂN, lấy từ thẻ đã quét; `ten_nguoi_lay`
+  -- chép lại tên ngay lúc đó vì hồ sơ bàn giao đã lập thì đổi tên trong hồ sơ về
+  -- sau không được làm đổi chữ trên biên bản.
+  tra_luc     timestamptz,
+  tra_boi     uuid references profiles(id),
+  nguoi_lay   uuid references profiles(id),
+  ten_nguoi_lay text,
+  -- Trả về người gửi, hoặc kiện hỏng phải bỏ.
+  huy_luc     timestamptz,
+  huy_boi     uuid references profiles(id),
+  ly_do_huy   text,
+  constraint tra_thi_phai_co_nguoi check (
+    (tra_luc is null) = (nguoi_lay is null)),
+  constraint huy_phai_co_ly_do check (
+    (huy_luc is null) = (ly_do_huy is null)),
+  -- Một kiện không thể vừa trao vừa hủy.
+  constraint khong_vua_tra_vua_huy check (tra_luc is null or huy_luc is null)
+);
+create index if not exists kien_hang_can_idx on kien_hang (unit_id, nhan_luc desc);
+create index if not exists kien_hang_cho_idx on kien_hang (project_id, nhan_luc)
+  where tra_luc is null and huy_luc is null;
+
+create or replace function kien_trang_thai(k kien_hang)
+returns text language sql immutable set search_path = public as $fn$
+  select case
+    when k.huy_luc is not null then 'da_huy'
+    when k.tra_luc is not null then 'da_lay'
+    else 'dang_giu'
+  end;
+$fn$;
+
+-- Bao lâu thì một kiện chưa lấy trở thành vấn đề của quầy lễ tân.
+create or replace function kien_han_ngay() returns int
+language sql immutable set search_path = public as $fn$ select 3 $fn$;
+
+-- ────────────────────────────── BẢO VỆ NHẬN KIỆN ─────────────────────────────
+create or replace function nhan_kien_hang(
+  p_unit uuid, p_loai text default 'kien_nho',
+  p_nha_van_chuyen text default null, p_ma_van_don text default null,
+  p_vi_tri text default null, p_ghi_chu text default null
+) returns uuid language plpgsql security definer set search_path = public as $fn$
+declare v_pj uuid; v_id uuid; v_ma text; r record;
+begin
+  select b.project_id into v_pj from units u join buildings b on b.id = u.building_id
+   where u.id = p_unit;
+  if v_pj is null then
+    raise exception 'Khong tim thay can ho %', p_unit using errcode = '02000';
+  end if;
+  if not is_staff(v_pj) then
+    raise exception 'Chi nhan su moi ghi nhan kien hang' using errcode = '42501';
+  end if;
+
+  select u.code into v_ma from units u where u.id = p_unit;
+
+  insert into kien_hang (project_id, unit_id, loai, nha_van_chuyen, ma_van_don,
+                         vi_tri, ghi_chu, nhan_boi)
+    values (v_pj, p_unit, coalesce(nullif(btrim(p_loai), ''), 'kien_nho'),
+            nullif(btrim(coalesce(p_nha_van_chuyen, '')), ''),
+            nullif(btrim(coalesce(p_ma_van_don, '')), ''),
+            nullif(btrim(coalesce(p_vi_tri, '')), ''),
+            nullif(btrim(coalesce(p_ghi_chu, '')), ''),
+            auth.uid())
+    returning id into v_id;
+
+  -- BÁO NGAY cho mọi người đang ở trong căn. Không báo thì kiện nằm ở quầy tới
+  -- lúc cư dân tình cờ đi qua — và cả tính năng chỉ còn là một cuốn sổ đẹp hơn.
+  for r in
+    select m.user_id from unit_memberships m
+     where m.unit_id = p_unit and m.status = 'active'
+       and m.valid_from <= current_date
+       and (m.valid_to is null or m.valid_to >= current_date)
+  loop
+    insert into notifications (user_id, kind, ref_id, title, body)
+      values (r.user_id, 'kien_hang', v_id,
+              'Có hàng gửi ở quầy',
+              'Lễ tân đang giữ một ' || nhan_loai_kien(coalesce(p_loai,'kien_nho'))
+              || ' cho căn ' || coalesce(v_ma, '')
+              || coalesce(' · ' || nullif(btrim(coalesce(p_vi_tri,'')), ''), '')
+              || '. Mang theo điện thoại để bảo vệ quét thẻ khi tới lấy.');
+  end loop;
+
+  return v_id;
+end $fn$;
+
+-- Nhãn tiếng Việt dùng CHUNG cho thông báo (sinh ở SQL) và màn hình (sinh ở
+-- TypeScript). Hai bản chép tay thì thông báo gọi "thùng lớn" còn màn hình gọi
+-- "kiện to", và cư dân ra quầy hỏi một thứ không có trong sổ.
+create or replace function nhan_loai_kien(p text)
+returns text language sql immutable set search_path = public as $fn$
+  select case p
+    when 'phong_bi'  then 'phong bì'
+    when 'kien_nho'  then 'kiện nhỏ'
+    when 'thung_lon' then 'thùng lớn'
+    when 'hang_lanh' then 'hàng lạnh'
+    else p end;
+$fn$;
+
+-- ─────────────────────── BẢO VỆ TRAO KIỆN, CÓ QUÉT THẺ ───────────────────────
+-- p_nguoi là uuid ĐỌC ĐƯỢC TỪ THẺ đã quét, không phải tên gõ tay. Đây là cả lý
+-- do tính năng này đứng sau thẻ cư dân: chữ ký nguệch ngoạc trên sổ giấy không
+-- chứng minh được ai, còn dòng này thì có.
+create or replace function giao_kien_hang(p_kien uuid, p_nguoi uuid)
+returns jsonb language plpgsql security definer set search_path = public as $fn$
+declare k kien_hang; v_ten text;
+begin
+  select * into k from kien_hang where id = p_kien for update;
+  if not found then
+    raise exception 'Khong tim thay kien hang %', p_kien using errcode = '02000';
+  end if;
+  if not is_staff(k.project_id) then
+    raise exception 'Chi nhan su moi trao duoc kien hang' using errcode = '42501';
+  end if;
+  if k.huy_luc is not null then
+    raise exception 'Kien nay da huy' using errcode = '23514';
+  end if;
+  if k.tra_luc is not null then
+    raise exception 'Kien nay da trao roi' using errcode = '23505';
+  end if;
+
+  -- Người cầm thẻ PHẢI đang ở trong đúng căn của kiện. Thẻ hợp lệ của căn khác
+  -- không lấy được hàng căn này — đó chính là ca mà sổ giấy không chặn nổi.
+  select p.full_name into v_ten
+    from unit_memberships m join profiles p on p.id = m.user_id
+   where m.unit_id = k.unit_id and m.user_id = p_nguoi and m.status = 'active'
+     and m.valid_from <= current_date
+     and (m.valid_to is null or m.valid_to >= current_date);
+  if not found then
+    raise exception 'The nay khong thuoc can co kien hang' using errcode = '42501';
+  end if;
+
+  update kien_hang
+     set tra_luc = clock_timestamp(), tra_boi = auth.uid(),
+         nguoi_lay = p_nguoi, ten_nguoi_lay = coalesce(v_ten, '')
+   where id = p_kien;
+
+  return jsonb_build_object('id', p_kien, 'nguoi_lay', p_nguoi, 'ten', v_ten);
+end $fn$;
+
+create or replace function huy_kien_hang(p_kien uuid, p_ly_do text)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare k kien_hang;
+begin
+  select * into k from kien_hang where id = p_kien for update;
+  if not found then
+    raise exception 'Khong tim thay kien hang %', p_kien using errcode = '02000';
+  end if;
+  if not is_staff(k.project_id) then
+    raise exception 'Chi nhan su moi huy duoc kien hang' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_ly_do), '') = '' then
+    raise exception 'Phai ghi ly do — cu dan doc duoc dong chu nay' using errcode = '22023';
+  end if;
+  -- Kiện ĐÃ TRAO thì không hủy được. Hủy sau khi trao là xóa mất chính dòng
+  -- chứng minh đã trao cho ai, tức là xóa bằng chứng.
+  if k.tra_luc is not null then
+    raise exception 'Kien da trao roi, khong huy duoc' using errcode = '23514';
+  end if;
+  if k.huy_luc is not null then
+    raise exception 'Kien nay da huy roi' using errcode = '23505';
+  end if;
+
+  update kien_hang set huy_luc = clock_timestamp(), huy_boi = auth.uid(),
+                       ly_do_huy = btrim(p_ly_do)
+   where id = p_kien;
+end $fn$;
+
+-- Quầy lễ tân: đang giữ những gì, và cái nào để lâu quá.
+create or replace function kien_dang_giu(p_project uuid)
+returns table (id uuid, can text, toa text, loai text, nhan_luc timestamptz,
+               vi_tri text, nha_van_chuyen text, ma_van_don text, so_ngay int)
+language sql stable security definer set search_path = public as $fn$
+  select k.id, u.code, b.name, k.loai, k.nhan_luc, k.vi_tri,
+         k.nha_van_chuyen, k.ma_van_don,
+         extract(day from now() - k.nhan_luc)::int
+    from kien_hang k
+    join units u on u.id = k.unit_id
+    join buildings b on b.id = u.building_id
+   where k.project_id = p_project and k.tra_luc is null and k.huy_luc is null
+     and is_staff(p_project)
+   order by k.nhan_luc;
+$fn$;
+
+create or replace function kien_cua_toi()
+returns table (id uuid, can text, loai text, nhan_luc timestamptz, vi_tri text,
+               nha_van_chuyen text, tra_luc timestamptz, ten_nguoi_lay text,
+               ly_do_huy text, trang_thai text)
+language sql stable set search_path = public as $fn$
+  select k.id, u.code, k.loai, k.nhan_luc, k.vi_tri, k.nha_van_chuyen,
+         k.tra_luc, k.ten_nguoi_lay, k.ly_do_huy, kien_trang_thai(k)
+    from kien_hang k join units u on u.id = k.unit_id
+   where k.unit_id in (select current_unit_ids())
+   order by k.nhan_luc desc
+   limit 100;
+$fn$;
+
+-- Job nền: nhắc lại kiện để quá hạn. Nhắc MỘT LẦN mỗi ngày cho mỗi kiện, không
+-- nhắc lại cái đã nhắc hôm nay — cư dân nhận ba thông báo giống nhau trong một
+-- buổi sáng thì lần sau họ tắt thông báo, và mất luôn cả những cái quan trọng.
+create or replace function nhac_kien_hang()
+returns int language plpgsql security definer set search_path = public as $fn$
+declare n int := 0; r record;
+begin
+  for r in
+    select k.id, k.unit_id, k.loai, u.code, m.user_id
+      from kien_hang k
+      join units u on u.id = k.unit_id
+      join unit_memberships m on m.unit_id = k.unit_id and m.status = 'active'
+       and m.valid_from <= current_date
+       and (m.valid_to is null or m.valid_to >= current_date)
+     where k.tra_luc is null and k.huy_luc is null
+       and k.nhan_luc < now() - make_interval(days => kien_han_ngay())
+       and not exists (
+         select 1 from notifications t
+          where t.user_id = m.user_id and t.kind = 'kien_hang_qua_han'
+            and t.ref_id = k.id and t.created_at > now() - interval '20 hours')
+  loop
+    insert into notifications (user_id, kind, ref_id, title, body)
+      values (r.user_id, 'kien_hang_qua_han', r.id,
+              'Hàng để quá ' || kien_han_ngay() || ' ngày chưa lấy',
+              'Một ' || nhan_loai_kien(r.loai) || ' cho căn ' || r.code
+              || ' vẫn đang ở quầy. Quầy lễ tân không phải kho — lấy sớm giúp.');
+    n := n + 1;
+  end loop;
+  return n;
+end $fn$;
+
+-- ── RLS ──
+alter table kien_hang enable row level security;
+-- Cư dân đọc kiện của CĂN MÌNH, kể cả người nhà: nhận hàng hộ không phải chuyện
+-- tiền nong nên can_view_finance không dính dáng gì ở đây.
+create policy kien_read on kien_hang for select
+  using (is_staff(project_id) or unit_id in (select current_unit_ids()));
+-- Không policy ghi: nhận / trao / hủy đều đi qua hàm definer, và cả ba đều kiểm
+-- is_staff ở đầu hàm.
+
+create trigger trg_audit_kien after insert or update or delete on kien_hang
+  for each row execute function ghi_nhat_ky('project_id');

@@ -129,6 +129,8 @@ grant select on khach_tham to authenticated;
 -- / suat_staff_write) nên cần quyền ghi ở tầng bảng; đặt/hủy suất thì đi qua hàm
 -- definer, nên dat_tien_ich chỉ cấp select.
 grant select, insert, update, delete on tien_ich, tien_ich_suat to authenticated;
+-- Nhận hàng hộ (§19). Chỉ select: nhận / trao / hủy đều đi qua hàm definer.
+grant select on kien_hang to authenticated;
 grant select on dat_tien_ich to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
@@ -208,6 +210,17 @@ grant execute on function ty_le_ho_dung_app(uuid)                             to
 grant execute on function khach_trang_thai(khach_tham, timestamptz)           to authenticated;
 grant execute on function khach_an_han()                                      to authenticated;
 -- Đặt tiện ích (§18).
+-- Nhận hàng hộ (§19). nhac_kien_hang KHÔNG cấp: nó là job nền, gọi bằng
+-- service_role qua /api/cron — cấp cho authenticated là cho bất kỳ ai bắn
+-- thông báo tới toàn bộ cư dân đang có hàng ở quầy.
+grant execute on function kien_trang_thai(kien_hang)                          to authenticated;
+grant execute on function kien_han_ngay()                                     to authenticated;
+grant execute on function nhan_loai_kien(text)                                to authenticated;
+grant execute on function nhan_kien_hang(uuid, text, text, text, text, text)  to authenticated;
+grant execute on function giao_kien_hang(uuid, uuid)                          to authenticated;
+grant execute on function huy_kien_hang(uuid, text)                           to authenticated;
+grant execute on function kien_dang_giu(uuid)                                 to authenticated;
+grant execute on function kien_cua_toi()                                      to authenticated;
 grant execute on function tuan_cua(date)                                      to authenticated;
 grant execute on function dat_suat(uuid, date)                                to authenticated;
 grant execute on function huy_dat_suat(uuid)                                  to authenticated;

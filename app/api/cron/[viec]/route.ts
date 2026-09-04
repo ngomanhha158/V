@@ -32,6 +32,9 @@ const VIEC = {
   // Hạn lưu 90 ngày của sổ ra vào (§17). Quên đặt lịch này thì sổ giữ mãi —
   // tức là đúng cái mà tính năng khách thăm hứa với cư dân là sẽ không làm.
   'don-so-ra-vao': 'xoa_khach_cu',
+  // Nhắc kiện hàng để quá hạn ở quầy (§19). Hàm tự chống nhắc trùng trong 20
+  // tiếng, nên chạy nhiều lần một ngày cũng không spam cư dân.
+  'nhac-kien-hang': 'nhac_kien_hang',
 } as const
 
 type Viec = keyof typeof VIEC
