@@ -3895,3 +3895,236 @@ create policy kien_read on kien_hang for select
 
 create trigger trg_audit_kien after insert or update or delete on kien_hang
   for each row execute function ghi_nhat_ky('project_id');
+
+-- ═════════════════════ 20. CHỐT SỔ BÀN GIAO ═════════════════════
+-- Đổi đơn vị quản lý là lúc dễ mất tiền nhất: không ai chốt được TẠI THỜI ĐIỂM
+-- BÀN GIAO ai nợ bao nhiêu. Bên ra đi nói "lúc tôi bàn giao chỉ nợ chừng này",
+-- bên nhận nói "tôi nhận về đã thấy nhiều hơn", và không có tờ giấy nào ở giữa.
+--
+-- SỐ LIỆU ĐÓNG BĂNG, KHÔNG TÍNH LẠI. Đây là cả lý do tồn tại của bảng này. Một
+-- "biên bản bàn giao" dựng bằng truy vấn sống thì tháng sau có người trả tiền
+-- là con số của ngày 30/09 tự đổi — bên ra đi bị quy trách nhiệm cho khoản tiền
+-- về sau, hoặc được ghi công cho khoản chưa bao giờ về. Cùng một bài học với
+-- tên người nộp trên phiếu thu và giá suất tiện ích: chứng từ đã lập thì thế
+-- giới đổi không được làm nó đổi theo.
+--
+-- Và công nợ tính THEO MỐC, không lấy invoices.paid_amount. Cột đó là số hôm
+-- nay; chốt sổ cần số của ngày chốt, nên phải cộng lại từ payments có paid_at
+-- trước mốc. Lấy paid_amount thì cùng một mốc chốt hai lần ra hai kết quả.
+
+create table if not exists chot_ban_giao (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  ngay_chot   date not null,
+  ghi_chu     text,
+  -- ── số liệu đóng băng ──
+  so_can          int    not null,
+  so_can_no       int    not null,
+  tong_phai_thu   bigint not null,
+  qua_han_90      bigint not null,
+  quy_bao_tri     bigint not null,
+  quy_doi_chieu   bigint,
+  quy_doi_chieu_ngay date,
+  -- Neo vào nhật ký kiểm toán: "những con số này ứng với sổ tính tới bút toán
+  -- số N". Không có neo thì bản chốt chỉ là một tờ giấy nói về quá khứ mà không
+  -- gắn được vào bất cứ thứ gì kiểm chứng lại được.
+  audit_den   bigint,
+  lap_luc     timestamptz not null default clock_timestamp(),
+  lap_boi     uuid references profiles(id),
+  -- ── hai bên ký ──
+  ky_bql_luc  timestamptz, ky_bql_boi uuid references profiles(id),
+  ky_bqt_luc  timestamptz, ky_bqt_boi uuid references profiles(id),
+  huy_luc     timestamptz, huy_boi uuid references profiles(id), ly_do_huy text,
+  -- Một mốc chốt một bản. Hai bản cho cùng ngày là hai con số khác nhau cùng
+  -- tự xưng là sự thật của ngày đó.
+  unique (project_id, ngay_chot),
+  constraint huy_phai_co_ly_do check ((huy_luc is null) = (ly_do_huy is null)),
+  constraint ky_bql_du_doi check ((ky_bql_luc is null) = (ky_bql_boi is null)),
+  constraint ky_bqt_du_doi check ((ky_bqt_luc is null) = (ky_bqt_boi is null)),
+  -- MỘT NGƯỜI KHÔNG KÝ ĐƯỢC CẢ HAI BÊN. Ký cả hai thì "hai bên ký" chỉ còn là
+  -- một người tự xác nhận với chính mình, và cả cơ chế mất nghĩa.
+  constraint hai_ben_hai_nguoi check (
+    ky_bql_boi is null or ky_bqt_boi is null or ky_bql_boi <> ky_bqt_boi)
+);
+
+create table if not exists chot_ban_giao_can (
+  id        uuid primary key default gen_random_uuid(),
+  chot_id   uuid not null references chot_ban_giao(id) on delete cascade,
+  unit_id   uuid references units(id) on delete set null,
+  -- Chép mã căn: bên nhận đọc bản chốt sau khi bàn giao xong, lúc đó mã căn có
+  -- thể đã đổi trong hệ thống mà tờ biên bản thì không được đổi theo.
+  ma_can    text   not null,
+  phai_thu  bigint not null,
+  qua_han_90 bigint not null,
+  hoa_don_cu_nhat date
+);
+create index if not exists chot_can_idx on chot_ban_giao_can (chot_id, phai_thu desc);
+
+-- Công nợ của một dự án TÍNH TỚI MỘT MỐC. Tách riêng để hàm lập chốt và màn
+-- xem trước dùng chung đúng một phép tính — hai bản chép tay thì màn xem trước
+-- hiện một con số còn biên bản in ra một con số khác.
+create or replace function cong_no_toi_moc(p_project uuid, p_moc date)
+returns table (unit_id uuid, ma_can text, phai_thu bigint, qua_han_90 bigint,
+               hoa_don_cu_nhat date)
+language sql stable security definer set search_path = public as $fn$
+  with hd as (
+    select i.id, i.unit_id, i.due_date, i.total_amount,
+           coalesce((select sum(p.amount) from payments p
+                      where p.invoice_id = i.id and p.paid_at < (p_moc + 1)::timestamptz), 0) as da_tra
+      from invoices i
+      join units u on u.id = i.unit_id
+      join buildings b on b.id = u.building_id
+     where b.project_id = p_project
+       and i.status in ('issued','partial','paid')
+       and i.period <= p_moc
+  )
+  select u.id, u.code,
+         sum(greatest(hd.total_amount - hd.da_tra, 0))::bigint,
+         sum(case when hd.due_date < p_moc - 90
+                  then greatest(hd.total_amount - hd.da_tra, 0) else 0 end)::bigint,
+         min(hd.due_date) filter (where hd.total_amount > hd.da_tra)
+    from hd join units u on u.id = hd.unit_id
+   group by u.id, u.code
+  having sum(greatest(hd.total_amount - hd.da_tra, 0)) > 0
+   order by 3 desc;
+$fn$;
+
+create or replace function lap_chot_ban_giao(
+  p_project uuid, p_ngay date, p_ghi_chu text default null
+) returns uuid language plpgsql security definer set search_path = public as $fn$
+declare v_id uuid; v_tong bigint; v_qh bigint; v_dem int; v_can int; r record;
+begin
+  if not (is_bql_manager(p_project) or is_bqt(p_project)) then
+    raise exception 'Chi truong BQL hoac BQT moi lap duoc chot so ban giao'
+      using errcode = '42501';
+  end if;
+  if p_ngay > current_date then
+    raise exception 'Khong chot so cho mot ngay chua toi' using errcode = '22023';
+  end if;
+
+  select count(*)::int into v_can
+    from units u join buildings b on b.id = u.building_id
+   where b.project_id = p_project;
+
+  select coalesce(sum(phai_thu), 0), coalesce(sum(qua_han_90), 0), count(*)::int
+    into v_tong, v_qh, v_dem
+    from cong_no_toi_moc(p_project, p_ngay);
+
+  insert into chot_ban_giao (
+    project_id, ngay_chot, ghi_chu, so_can, so_can_no, tong_phai_thu, qua_han_90,
+    quy_bao_tri, quy_doi_chieu, quy_doi_chieu_ngay, audit_den, lap_boi)
+  values (
+    p_project, p_ngay, nullif(btrim(coalesce(p_ghi_chu, '')), ''),
+    v_can, v_dem, v_tong, v_qh,
+    quy_so_du(p_project),
+    (select so_du_ngan_hang from quy_bao_tri where project_id = p_project),
+    (select doi_chieu_ngay from quy_bao_tri where project_id = p_project),
+    (select max(id) from audit_log where project_id = p_project),
+    auth.uid())
+  returning id into v_id;
+
+  for r in select * from cong_no_toi_moc(p_project, p_ngay) loop
+    insert into chot_ban_giao_can (chot_id, unit_id, ma_can, phai_thu,
+                                   qua_han_90, hoa_don_cu_nhat)
+      values (v_id, r.unit_id, r.ma_can, r.phai_thu, r.qua_han_90, r.hoa_don_cu_nhat);
+  end loop;
+
+  return v_id;
+end $fn$;
+
+-- Ký. Bên nào ký thì suy ra từ VAI TRÒ của người gọi, không cho tự chọn: cho
+-- chọn thì trưởng BQL ký hộ ô của BQT là xong, và "hai bên ký" thành một bên.
+create or replace function ky_chot_ban_giao(p_chot uuid)
+returns text language plpgsql security definer set search_path = public as $fn$
+declare c chot_ban_giao; v_ben text;
+begin
+  select * into c from chot_ban_giao where id = p_chot for update;
+  if not found then
+    raise exception 'Khong tim thay ban chot %', p_chot using errcode = '02000';
+  end if;
+  if c.huy_luc is not null then
+    raise exception 'Ban chot nay da huy' using errcode = '23514';
+  end if;
+
+  if is_bqt(c.project_id) then v_ben := 'bqt';
+  elsif is_bql_manager(c.project_id) then v_ben := 'bql';
+  else
+    raise exception 'Chi truong BQL hoac BQT moi ky duoc' using errcode = '42501';
+  end if;
+
+  if v_ben = 'bql' then
+    if c.ky_bql_luc is not null then
+      raise exception 'Ben BQL da ky roi' using errcode = '23505';
+    end if;
+    update chot_ban_giao set ky_bql_luc = clock_timestamp(), ky_bql_boi = auth.uid()
+     where id = p_chot;
+  else
+    if c.ky_bqt_luc is not null then
+      raise exception 'Ben BQT da ky roi' using errcode = '23505';
+    end if;
+    update chot_ban_giao set ky_bqt_luc = clock_timestamp(), ky_bqt_boi = auth.uid()
+     where id = p_chot;
+  end if;
+  return v_ben;
+end $fn$;
+
+-- Hủy CHỈ khi chưa đủ hai chữ ký. Đủ hai chữ ký rồi thì bản chốt là một thỏa
+-- thuận đã ký giữa hai bên — bỏ nó bằng một nút bấm của một bên là xóa chữ ký
+-- của bên kia.
+create or replace function huy_chot_ban_giao(p_chot uuid, p_ly_do text)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare c chot_ban_giao;
+begin
+  select * into c from chot_ban_giao where id = p_chot for update;
+  if not found then
+    raise exception 'Khong tim thay ban chot %', p_chot using errcode = '02000';
+  end if;
+  if not (is_bql_manager(c.project_id) or is_bqt(c.project_id)) then
+    raise exception 'Chi truong BQL hoac BQT moi huy duoc' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_ly_do), '') = '' then
+    raise exception 'Phai ghi ly do huy' using errcode = '22023';
+  end if;
+  if c.huy_luc is not null then
+    raise exception 'Ban chot nay da huy roi' using errcode = '23505';
+  end if;
+  if c.ky_bql_luc is not null and c.ky_bqt_luc is not null then
+    raise exception 'Hai ben da ky, khong huy duoc — lap ban chot moi neu can sua'
+      using errcode = '23514';
+  end if;
+
+  update chot_ban_giao set huy_luc = clock_timestamp(), huy_boi = auth.uid(),
+                           ly_do_huy = btrim(p_ly_do)
+   where id = p_chot;
+end $fn$;
+
+create or replace function chot_ban_giao_ds(p_project uuid)
+returns table (id uuid, ngay_chot date, so_can int, so_can_no int,
+               tong_phai_thu bigint, qua_han_90 bigint, quy_bao_tri bigint,
+               quy_doi_chieu bigint, audit_den bigint, lap_luc timestamptz,
+               ky_bql_luc timestamptz, ky_bqt_luc timestamptz,
+               huy_luc timestamptz, ly_do_huy text, ghi_chu text)
+language sql stable security definer set search_path = public as $fn$
+  select c.id, c.ngay_chot, c.so_can, c.so_can_no, c.tong_phai_thu, c.qua_han_90,
+         c.quy_bao_tri, c.quy_doi_chieu, c.audit_den, c.lap_luc,
+         c.ky_bql_luc, c.ky_bqt_luc, c.huy_luc, c.ly_do_huy, c.ghi_chu
+    from chot_ban_giao c
+   where c.project_id = p_project and is_staff(p_project)
+   order by c.ngay_chot desc;
+$fn$;
+
+-- ── RLS ──
+-- Bản chốt bàn giao là số liệu tài chính của cả tòa và là thứ cư dân có quyền
+-- đọc — cùng lý do với quỹ bảo trì: công khai chính là cơ chế giám sát. Nhưng
+-- CHI TIẾT TỪNG CĂN thì không: đó là công nợ của hàng xóm.
+alter table chot_ban_giao     enable row level security;
+alter table chot_ban_giao_can enable row level security;
+create policy chot_read on chot_ban_giao for select
+  using (is_staff(project_id) or o_trong_du_an(project_id));
+create policy chot_can_read on chot_ban_giao_can for select
+  using (exists (select 1 from chot_ban_giao c
+                  where c.id = chot_ban_giao_can.chot_id and is_staff(c.project_id))
+         or unit_id in (select current_unit_ids()));
+
+create trigger trg_audit_chot after insert or update or delete on chot_ban_giao
+  for each row execute function ghi_nhat_ky('project_id');

@@ -131,6 +131,10 @@ grant select on khach_tham to authenticated;
 grant select, insert, update, delete on tien_ich, tien_ich_suat to authenticated;
 -- Nhận hàng hộ (§19). Chỉ select: nhận / trao / hủy đều đi qua hàm definer.
 grant select on kien_hang to authenticated;
+-- Chốt sổ bàn giao (§20). Cư dân đọc được BẢN CHỐT (số liệu chung của cả tòa,
+-- công khai là cơ chế giám sát) nhưng RLS chot_can_read chỉ cho họ thấy dòng
+-- của CĂN MÌNH trong phần chi tiết — công nợ hàng xóm không phải việc của họ.
+grant select on chot_ban_giao, chot_ban_giao_can to authenticated;
 grant select on dat_tien_ich to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
@@ -213,6 +217,12 @@ grant execute on function khach_an_han()                                      to
 -- Nhận hàng hộ (§19). nhac_kien_hang KHÔNG cấp: nó là job nền, gọi bằng
 -- service_role qua /api/cron — cấp cho authenticated là cho bất kỳ ai bắn
 -- thông báo tới toàn bộ cư dân đang có hàng ở quầy.
+-- Chốt sổ bàn giao (§20).
+grant execute on function cong_no_toi_moc(uuid, date)                         to authenticated;
+grant execute on function lap_chot_ban_giao(uuid, date, text)                 to authenticated;
+grant execute on function ky_chot_ban_giao(uuid)                              to authenticated;
+grant execute on function huy_chot_ban_giao(uuid, text)                       to authenticated;
+grant execute on function chot_ban_giao_ds(uuid)                              to authenticated;
 grant execute on function kien_trang_thai(kien_hang)                          to authenticated;
 grant execute on function kien_han_ngay()                                     to authenticated;
 grant execute on function nhan_loai_kien(text)                                to authenticated;
