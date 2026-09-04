@@ -4128,3 +4128,340 @@ create policy chot_can_read on chot_ban_giao_can for select
 
 create trigger trg_audit_chot after insert or update or delete on chot_ban_giao
   for each row execute function ghi_nhat_ky('project_id');
+
+-- ═════════════════════ 21. BIỂU QUYẾT HỘI NGHỊ NHÀ CHUNG CƯ ═════════════════
+-- Hội nghị nhà chung cư cần đủ tỷ lệ dự họp TÍNH THEO DIỆN TÍCH, và quyết định
+-- thông qua cũng tính theo diện tích. Kiểm phiếu giấy cho 468 căn mất cả ngày
+-- và luôn bị nghi ngờ.
+--
+-- KHÁC HẲN thăm dò ở bảng tin (§12): ở đó MỘT CĂN MỘT PHIẾU, ở đây phiếu CÓ
+-- TRỌNG SỐ theo diện tích. Dùng nhầm luật của bên kia cho bên này là ra một kết
+-- quả sai mà nhìn vẫn rất hợp lý.
+--
+-- HAI NGƯỠNG KHÁC NHAU, đừng gộp:
+--   · đủ điều kiện họp — bao nhiêu % DIỆN TÍCH TOÀN KHU đã bỏ phiếu;
+--   · thông qua        — bao nhiêu % DIỆN TÍCH ĐÃ BỎ PHIẾU tán thành.
+-- Gộp hai cái là lỗi kinh điển của kiểm phiếu tay, và nó cho ra một con số
+-- không có nghĩa gì cả.
+
+create table if not exists bieu_quyet (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  tieu_de     text not null,
+  noi_dung    text,
+  -- Ngưỡng lưu THEO TỪNG CUỘC, không hằng số trong code: nghị quyết khác nhau
+  -- đòi tỷ lệ khác nhau, và luật thì sửa.
+  nguong_du_hop   numeric(5,2) not null default 50 check (nguong_du_hop > 0 and nguong_du_hop <= 100),
+  nguong_thong_qua numeric(5,2) not null default 50 check (nguong_thong_qua > 0 and nguong_thong_qua <= 100),
+  -- Tổng diện tích ĐÓNG BĂNG lúc mở. BQL sửa diện tích giữa chừng thì mẫu số
+  -- không được đổi theo — kết quả đổi qua đêm là thứ không ai giải thích nổi ở
+  -- hội nghị.
+  tong_dien_tich numeric(12,2) not null,
+  so_can      int not null,
+  mo_luc      timestamptz not null default clock_timestamp(),
+  mo_boi      uuid references profiles(id),
+  dong_luc    timestamptz,
+  dong_boi    uuid references profiles(id),
+  -- Kết quả chốt lúc đóng, không tính lại về sau.
+  kq_dien_tich_bo_phieu numeric(12,2),
+  kq_tan_thanh          numeric(12,2),
+  kq_khong_tan_thanh    numeric(12,2),
+  kq_trang              numeric(12,2),
+  kq_du_hop   boolean,
+  kq_thong_qua boolean,
+  huy_luc     timestamptz, huy_boi uuid references profiles(id), ly_do_huy text,
+  constraint huy_phai_co_ly_do check ((huy_luc is null) = (ly_do_huy is null))
+);
+
+-- Danh sách căn ĐÓNG BĂNG lúc mở: mã căn và diện tích tại thời điểm đó. Có bảng
+-- này thì kết quả kiểm lại được sau nhiều năm, kể cả khi căn đã tách/gộp/đổi mã.
+create table if not exists bieu_quyet_can (
+  id          uuid primary key default gen_random_uuid(),
+  bieu_quyet_id uuid not null references bieu_quyet(id) on delete cascade,
+  unit_id     uuid references units(id) on delete set null,
+  ma_can      text not null,
+  dien_tich   numeric(8,2) not null check (dien_tich > 0),
+  unique (bieu_quyet_id, unit_id)
+);
+
+create table if not exists phieu_bieu_quyet (
+  id          uuid primary key default gen_random_uuid(),
+  bieu_quyet_id uuid not null references bieu_quyet(id) on delete cascade,
+  unit_id     uuid not null references units(id) on delete cascade,
+  y_kien      text not null check (y_kien in ('tan_thanh','khong_tan_thanh','trang')),
+  -- Diện tích CHÉP từ danh sách đã đóng băng, không đọc lại units.area_m2.
+  dien_tich   numeric(8,2) not null,
+  bo_boi      uuid references profiles(id),
+  bo_luc      timestamptz not null default clock_timestamp(),
+  -- Phiếu KHÔNG sửa được. Bỏ nhầm thì BQT hủy phiếu kèm lý do rồi căn bỏ lại —
+  -- có tên người hủy trong sổ, thay vì một lần đổi ý lặng lẽ mà về sau không ai
+  -- phân biệt được với "phiếu của tôi bị ai đó đổi".
+  huy_luc     timestamptz, huy_boi uuid references profiles(id), ly_do_huy text,
+  constraint huy_phai_co_ly_do check ((huy_luc is null) = (ly_do_huy is null))
+);
+-- MỘT CĂN MỘT PHIẾU CÒN HIỆU LỰC.
+create unique index if not exists phieu_bq_mot_can
+  on phieu_bieu_quyet (bieu_quyet_id, unit_id) where huy_luc is null;
+
+-- ─────────────────────────────── MỞ CUỘC ────────────────────────────────────
+create or replace function mo_bieu_quyet(
+  p_project uuid, p_tieu_de text, p_noi_dung text default null,
+  p_nguong_du_hop numeric default 50, p_nguong_thong_qua numeric default 50
+) returns uuid language plpgsql security definer set search_path = public as $fn$
+declare v_id uuid; v_thieu int; v_tong numeric; v_can int; r record;
+begin
+  if not (is_bql_manager(p_project) or is_bqt(p_project)) then
+    raise exception 'Chi truong BQL hoac BQT moi mo duoc bieu quyet' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_tieu_de), '') = '' then
+    raise exception 'Phai co tieu de — cu dan bo phieu cho mot cau hoi khong ten thi phieu do vo nghia'
+      using errcode = '22023';
+  end if;
+
+  -- CHẶN Ở ĐÂY, KHÔNG CHẶN Ở MÀN HÌNH. Thiếu diện tích một căn là mẫu số sai,
+  -- và mọi tỷ lệ tính ra đều tranh cãi được. Kế hoạch tháng 1 ghi rõ: 468 căn
+  -- của dự án thật đều chưa có diện tích — mở biểu quyết lúc đó là hỏng cả
+  -- cuộc họp chứ không phải hỏng một màn hình.
+  select count(*)::int into v_thieu
+    from units u join buildings b on b.id = u.building_id
+   where b.project_id = p_project and coalesce(u.area_m2, 0) <= 0;
+  if v_thieu > 0 then
+    raise exception '% can chua co dien tich; nhap du roi moi mo bieu quyet duoc', v_thieu
+      using errcode = '22023';
+  end if;
+
+  select coalesce(sum(u.area_m2), 0), count(*)::int into v_tong, v_can
+    from units u join buildings b on b.id = u.building_id
+   where b.project_id = p_project;
+  if v_can = 0 then
+    raise exception 'Chua co can ho nao' using errcode = '22023';
+  end if;
+
+  insert into bieu_quyet (project_id, tieu_de, noi_dung, nguong_du_hop,
+                          nguong_thong_qua, tong_dien_tich, so_can, mo_boi)
+    values (p_project, btrim(p_tieu_de), nullif(btrim(coalesce(p_noi_dung,'')), ''),
+            p_nguong_du_hop, p_nguong_thong_qua, v_tong, v_can, auth.uid())
+    returning id into v_id;
+
+  for r in
+    select u.id, u.code, u.area_m2
+      from units u join buildings b on b.id = u.building_id
+     where b.project_id = p_project
+  loop
+    insert into bieu_quyet_can (bieu_quyet_id, unit_id, ma_can, dien_tich)
+      values (v_id, r.id, r.code, r.area_m2);
+  end loop;
+
+  return v_id;
+end $fn$;
+
+-- ─────────────────────────────── BỎ PHIẾU ───────────────────────────────────
+-- CHỦ SỞ HỮU hoặc người được ủy quyền, KHÔNG phải người thuê hay người nhà.
+-- Biểu quyết việc của tòa nhà là quyền của chủ sở hữu; cho người thuê bỏ phiếu
+-- là một nghị quyết bị bác ngay khi có ai đó soi lại.
+create or replace function bo_phieu_bieu_quyet(p_bq uuid, p_unit uuid, p_y_kien text)
+returns uuid language plpgsql security definer set search_path = public as $fn$
+declare b bieu_quyet; v_dt numeric; v_id uuid;
+begin
+  select * into b from bieu_quyet where id = p_bq;
+  if not found then
+    raise exception 'Khong tim thay cuoc bieu quyet %', p_bq using errcode = '02000';
+  end if;
+  if b.huy_luc is not null then
+    raise exception 'Cuoc bieu quyet nay da huy' using errcode = '23514';
+  end if;
+  if b.dong_luc is not null then
+    raise exception 'Cuoc bieu quyet da dong' using errcode = '23514';
+  end if;
+  if p_y_kien not in ('tan_thanh','khong_tan_thanh','trang') then
+    raise exception 'Y kien khong hop le: %', p_y_kien using errcode = '22023';
+  end if;
+
+  if not exists (select 1 from unit_memberships m
+                  where m.unit_id = p_unit and m.user_id = auth.uid()
+                    and m.status = 'active' and m.role in ('owner','authorized')
+                    and m.valid_from <= current_date
+                    and (m.valid_to is null or m.valid_to >= current_date)) then
+    raise exception 'Chi chu so huu hoac nguoi duoc uy quyen moi bo phieu duoc'
+      using errcode = '42501';
+  end if;
+
+  -- Diện tích lấy từ DANH SÁCH ĐÃ ĐÓNG BĂNG, không đọc lại units.area_m2.
+  select dien_tich into v_dt from bieu_quyet_can
+   where bieu_quyet_id = p_bq and unit_id = p_unit;
+  if v_dt is null then
+    raise exception 'Can nay khong nam trong danh sach cua cuoc bieu quyet'
+      using errcode = '42501';
+  end if;
+
+  insert into phieu_bieu_quyet (bieu_quyet_id, unit_id, y_kien, dien_tich, bo_boi)
+    values (p_bq, p_unit, p_y_kien, v_dt, auth.uid())
+    returning id into v_id;
+  return v_id;
+end $fn$;
+
+-- Hủy một phiếu. Chỉ BQT/BQL, phải ghi lý do, và căn đó bỏ lại được.
+create or replace function huy_phieu_bieu_quyet(p_phieu uuid, p_ly_do text)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare v_pj uuid; v_dong timestamptz;
+begin
+  select b.project_id, b.dong_luc into v_pj, v_dong
+    from phieu_bieu_quyet p join bieu_quyet b on b.id = p.bieu_quyet_id
+   where p.id = p_phieu;
+  if v_pj is null then
+    raise exception 'Khong tim thay phieu %', p_phieu using errcode = '02000';
+  end if;
+  if not (is_bql_manager(v_pj) or is_bqt(v_pj)) then
+    raise exception 'Chi truong BQL hoac BQT moi huy duoc phieu' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_ly_do), '') = '' then
+    raise exception 'Phai ghi ly do huy phieu' using errcode = '22023';
+  end if;
+  -- Đóng rồi thì kết quả đã chốt; hủy một phiếu lúc này là sửa kết quả đã công bố.
+  if v_dong is not null then
+    raise exception 'Cuoc bieu quyet da dong, khong huy phieu duoc nua' using errcode = '23514';
+  end if;
+
+  update phieu_bieu_quyet
+     set huy_luc = clock_timestamp(), huy_boi = auth.uid(), ly_do_huy = btrim(p_ly_do)
+   where id = p_phieu and huy_luc is null;
+  if not found then
+    raise exception 'Phieu nay da huy roi' using errcode = '23505';
+  end if;
+end $fn$;
+
+-- ─────────────────────────── KIỂM PHIẾU ─────────────────────────────────────
+-- Dùng chung cho lúc đang mở (tạm tính) và lúc đóng (chốt). Một phép tính, một
+-- kết quả — hai bản chép tay thì màn hình hiện một con số còn biên bản in một
+-- con số khác, đúng vào thứ dễ bị soi nhất trong cả hệ thống.
+create or replace function kiem_phieu_bieu_quyet(p_bq uuid)
+returns table (dien_tich_bo_phieu numeric, tan_thanh numeric,
+               khong_tan_thanh numeric, trang numeric,
+               tong_dien_tich numeric, so_can_da_bo int,
+               ty_le_du_hop numeric, ty_le_tan_thanh numeric,
+               du_hop boolean, thong_qua boolean)
+language sql stable security definer set search_path = public as $fn$
+  with b as (select * from bieu_quyet where id = p_bq),
+  p as (
+    select coalesce(sum(dien_tich), 0) as bo,
+           coalesce(sum(dien_tich) filter (where y_kien = 'tan_thanh'), 0) as tt,
+           coalesce(sum(dien_tich) filter (where y_kien = 'khong_tan_thanh'), 0) as ktt,
+           coalesce(sum(dien_tich) filter (where y_kien = 'trang'), 0) as tr,
+           count(*)::int as n
+      from phieu_bieu_quyet where bieu_quyet_id = p_bq and huy_luc is null
+  )
+  select p.bo, p.tt, p.ktt, p.tr, b.tong_dien_tich, p.n,
+         -- ĐỦ ĐIỀU KIỆN HỌP: trên tổng diện tích TOÀN KHU.
+         case when b.tong_dien_tich = 0 then 0
+              else round(100 * p.bo / b.tong_dien_tich, 2) end,
+         -- THÔNG QUA: trên diện tích ĐÃ BỎ PHIẾU, không phải toàn khu. Lấy mẫu
+         -- số toàn khu ở đây là gộp hai ngưỡng làm một và ra một con số vô nghĩa.
+         case when p.bo = 0 then 0 else round(100 * p.tt / p.bo, 2) end,
+         (b.tong_dien_tich > 0 and 100 * p.bo / b.tong_dien_tich >= b.nguong_du_hop),
+         (p.bo > 0 and b.tong_dien_tich > 0
+          and 100 * p.bo / b.tong_dien_tich >= b.nguong_du_hop
+          and 100 * p.tt / p.bo >= b.nguong_thong_qua)
+    from b cross join p;
+$fn$;
+
+create or replace function dong_bieu_quyet(p_bq uuid)
+returns jsonb language plpgsql security definer set search_path = public as $fn$
+declare b bieu_quyet; k record;
+begin
+  select * into b from bieu_quyet where id = p_bq for update;
+  if not found then
+    raise exception 'Khong tim thay cuoc bieu quyet %', p_bq using errcode = '02000';
+  end if;
+  if not (is_bql_manager(b.project_id) or is_bqt(b.project_id)) then
+    raise exception 'Chi truong BQL hoac BQT moi dong duoc' using errcode = '42501';
+  end if;
+  if b.huy_luc is not null then
+    raise exception 'Cuoc bieu quyet nay da huy' using errcode = '23514';
+  end if;
+  if b.dong_luc is not null then
+    raise exception 'Cuoc bieu quyet nay da dong roi' using errcode = '23505';
+  end if;
+
+  select * into k from kiem_phieu_bieu_quyet(p_bq);
+  update bieu_quyet
+     set dong_luc = clock_timestamp(), dong_boi = auth.uid(),
+         kq_dien_tich_bo_phieu = k.dien_tich_bo_phieu,
+         kq_tan_thanh = k.tan_thanh, kq_khong_tan_thanh = k.khong_tan_thanh,
+         kq_trang = k.trang, kq_du_hop = k.du_hop, kq_thong_qua = k.thong_qua
+   where id = p_bq;
+
+  return jsonb_build_object('du_hop', k.du_hop, 'thong_qua', k.thong_qua,
+                            'ty_le_du_hop', k.ty_le_du_hop,
+                            'ty_le_tan_thanh', k.ty_le_tan_thanh);
+end $fn$;
+
+create or replace function huy_bieu_quyet(p_bq uuid, p_ly_do text)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare b bieu_quyet;
+begin
+  select * into b from bieu_quyet where id = p_bq for update;
+  if not found then
+    raise exception 'Khong tim thay cuoc bieu quyet %', p_bq using errcode = '02000';
+  end if;
+  if not (is_bql_manager(b.project_id) or is_bqt(b.project_id)) then
+    raise exception 'Chi truong BQL hoac BQT moi huy duoc' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_ly_do), '') = '' then
+    raise exception 'Phai ghi ly do huy' using errcode = '22023';
+  end if;
+  -- Đóng rồi thì kết quả đã công bố; hủy cả cuộc lúc đó là xóa một nghị quyết
+  -- đã có hiệu lực bằng một nút bấm.
+  if b.dong_luc is not null then
+    raise exception 'Cuoc bieu quyet da dong, khong huy duoc' using errcode = '23514';
+  end if;
+  if b.huy_luc is not null then
+    raise exception 'Cuoc bieu quyet nay da huy roi' using errcode = '23505';
+  end if;
+
+  update bieu_quyet set huy_luc = clock_timestamp(), huy_boi = auth.uid(),
+                        ly_do_huy = btrim(p_ly_do)
+   where id = p_bq;
+end $fn$;
+
+-- Căn nào của tôi chưa bỏ phiếu. Hiện danh sách này thay vì bắt cư dân tự nhớ
+-- mình có mấy căn — chủ nhiều căn là người dễ bỏ sót nhất, mà phiếu của họ lại
+-- nặng nhất theo diện tích.
+create or replace function bieu_quyet_cua_toi(p_bq uuid)
+returns table (unit_id uuid, ma_can text, dien_tich numeric,
+               da_bo boolean, y_kien text)
+language sql stable security definer set search_path = public as $fn$
+  select c.unit_id, c.ma_can, c.dien_tich,
+         (p.id is not null), p.y_kien
+    from bieu_quyet_can c
+    left join phieu_bieu_quyet p
+           on p.bieu_quyet_id = c.bieu_quyet_id and p.unit_id = c.unit_id
+          and p.huy_luc is null
+   where c.bieu_quyet_id = p_bq
+     and exists (select 1 from unit_memberships m
+                  where m.unit_id = c.unit_id and m.user_id = auth.uid()
+                    and m.status = 'active' and m.role in ('owner','authorized')
+                    and m.valid_from <= current_date
+                    and (m.valid_to is null or m.valid_to >= current_date))
+   order by c.ma_can;
+$fn$;
+
+-- ── RLS ──
+alter table bieu_quyet       enable row level security;
+alter table bieu_quyet_can   enable row level security;
+alter table phieu_bieu_quyet enable row level security;
+-- Cuộc biểu quyết và kết quả: cả khu đọc được. Kết quả mà chỉ ban tổ chức nhìn
+-- thấy thì đúng là thứ hội nghị nhà chung cư hay bị nghi ngờ nhất.
+create policy bq_read on bieu_quyet for select
+  using (is_staff(project_id) or o_trong_du_an(project_id));
+create policy bq_can_read on bieu_quyet_can for select
+  using (exists (select 1 from bieu_quyet b where b.id = bieu_quyet_can.bieu_quyet_id));
+-- PHIẾU thì không: hàng xóm bỏ phiếu gì không phải việc của nhau. BQT/BQL thấy
+-- hết vì họ là ban kiểm phiếu; mỗi căn thấy phiếu của chính mình.
+create policy phieu_bq_read on phieu_bieu_quyet for select
+  using (unit_id in (select current_unit_ids())
+         or is_staff((select project_id from bieu_quyet where id = bieu_quyet_id)));
+
+create trigger trg_audit_bieu_quyet after insert or update or delete on bieu_quyet
+  for each row execute function ghi_nhat_ky('project_id');
+create trigger trg_audit_phieu_bq after insert or update or delete on phieu_bieu_quyet
+  for each row execute function ghi_nhat_ky('unit_id');

@@ -1251,6 +1251,63 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      bieu_quyet: {
+        Row: {
+          id: string
+          project_id: string
+          tieu_de: string
+          noi_dung: string | null
+          nguong_du_hop: number
+          nguong_thong_qua: number
+          tong_dien_tich: number
+          so_can: number
+          mo_luc: string
+          mo_boi: string | null
+          dong_luc: string | null
+          dong_boi: string | null
+          kq_dien_tich_bo_phieu: number | null
+          kq_tan_thanh: number | null
+          kq_khong_tan_thanh: number | null
+          kq_trang: number | null
+          kq_du_hop: boolean | null
+          kq_thong_qua: boolean | null
+          huy_luc: string | null
+          huy_boi: string | null
+          ly_do_huy: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      bieu_quyet_can: {
+        Row: {
+          id: string
+          bieu_quyet_id: string
+          unit_id: string | null
+          ma_can: string
+          dien_tich: number
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      phieu_bieu_quyet: {
+        Row: {
+          id: string
+          bieu_quyet_id: string
+          unit_id: string
+          y_kien: string
+          dien_tich: number
+          bo_boi: string | null
+          bo_luc: string
+          huy_luc: string | null
+          huy_boi: string | null
+          ly_do_huy: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       kien_hang: {
         Row: {
           id: string
@@ -1680,6 +1737,48 @@ export type Database = {
           huy_luc: string | null
           ly_do_huy: string | null
           ghi_chu: string | null
+        }[]
+      }
+      mo_bieu_quyet: {
+        Args: {
+          p_project: string
+          p_tieu_de: string
+          p_noi_dung?: string | null
+          p_nguong_du_hop?: number
+          p_nguong_thong_qua?: number
+        }
+        Returns: string
+      }
+      bo_phieu_bieu_quyet: {
+        Args: { p_bq: string; p_unit: string; p_y_kien: string }
+        Returns: string
+      }
+      huy_phieu_bieu_quyet: { Args: { p_phieu: string; p_ly_do: string }; Returns: undefined }
+      kiem_phieu_bieu_quyet: {
+        Args: { p_bq: string }
+        Returns: {
+          dien_tich_bo_phieu: number
+          tan_thanh: number
+          khong_tan_thanh: number
+          trang: number
+          tong_dien_tich: number
+          so_can_da_bo: number
+          ty_le_du_hop: number
+          ty_le_tan_thanh: number
+          du_hop: boolean
+          thong_qua: boolean
+        }[]
+      }
+      dong_bieu_quyet: { Args: { p_bq: string }; Returns: Json }
+      huy_bieu_quyet: { Args: { p_bq: string; p_ly_do: string }; Returns: undefined }
+      bieu_quyet_cua_toi: {
+        Args: { p_bq: string }
+        Returns: {
+          unit_id: string
+          ma_can: string
+          dien_tich: number
+          da_bo: boolean
+          y_kien: string | null
         }[]
       }
       xoa_khach_cu: { Args: { p_giu_ngay?: number }; Returns: number }

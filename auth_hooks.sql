@@ -135,6 +135,13 @@ grant select on kien_hang to authenticated;
 -- công khai là cơ chế giám sát) nhưng RLS chot_can_read chỉ cho họ thấy dòng
 -- của CĂN MÌNH trong phần chi tiết — công nợ hàng xóm không phải việc của họ.
 grant select on chot_ban_giao, chot_ban_giao_can to authenticated;
+-- Biểu quyết hội nghị (§21). Chỉ select trên cả ba bảng: mở cuộc, bỏ phiếu,
+-- hủy phiếu, đóng cuộc đều đi qua hàm definer. Cấp insert thẳng trên
+-- phieu_bieu_quyet là cho một căn tự ghi diện tích phiếu của mình — trọng số
+-- phiếu do người bỏ phiếu tự khai thì cả cuộc biểu quyết mất nghĩa.
+-- bieu_quyet_can (danh sách căn đóng băng) cả khu đọc được: mẫu số của mọi tỷ
+-- lệ nằm ở đó, giấu nó đi là để lại đúng chỗ mà hội nghị hay bị nghi ngờ nhất.
+grant select on bieu_quyet, bieu_quyet_can, phieu_bieu_quyet to authenticated;
 grant select on dat_tien_ich to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
@@ -246,6 +253,17 @@ grant execute on function quy_ghi(uuid, text, date, text, bigint, text, date, te
 grant execute on function quy_dao(uuid, text)                                 to authenticated;
 grant execute on function quy_dat_doi_chieu(uuid, text, text, bigint, date)   to authenticated;
 grant execute on function tien_chu(bigint)                          to authenticated;
+-- Biểu quyết hội nghị (§21). Mọi hàm tự chốt quyền BÊN TRONG: mở/đóng/hủy đòi
+-- is_bql_manager hoặc is_bqt, bỏ phiếu đòi owner/authorized của đúng căn. Cấp
+-- cho authenticated ở đây vì thế không mở thêm gì — nó chỉ quyết định ai GỌI
+-- ĐƯỢC, còn ai LÀM ĐƯỢC thì nằm trong thân hàm.
+grant execute on function mo_bieu_quyet(uuid, text, text, numeric, numeric) to authenticated;
+grant execute on function bo_phieu_bieu_quyet(uuid, uuid, text)               to authenticated;
+grant execute on function huy_phieu_bieu_quyet(uuid, text)                    to authenticated;
+grant execute on function kiem_phieu_bieu_quyet(uuid)                         to authenticated;
+grant execute on function dong_bieu_quyet(uuid)                               to authenticated;
+grant execute on function huy_bieu_quyet(uuid, text)                          to authenticated;
+grant execute on function bieu_quyet_cua_toi(uuid)                            to authenticated;
 
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là
