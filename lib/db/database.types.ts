@@ -1209,6 +1209,48 @@ export type Database = {
           },
         ]
       }
+      chot_ban_giao: {
+        Row: {
+          id: string
+          project_id: string
+          ngay_chot: string
+          ghi_chu: string | null
+          so_can: number
+          so_can_no: number
+          tong_phai_thu: number
+          qua_han_90: number
+          quy_bao_tri: number
+          quy_doi_chieu: number | null
+          quy_doi_chieu_ngay: string | null
+          audit_den: number | null
+          lap_luc: string
+          lap_boi: string | null
+          ky_bql_luc: string | null
+          ky_bql_boi: string | null
+          ky_bqt_luc: string | null
+          ky_bqt_boi: string | null
+          huy_luc: string | null
+          huy_boi: string | null
+          ly_do_huy: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      chot_ban_giao_can: {
+        Row: {
+          id: string
+          chot_id: string
+          unit_id: string | null
+          ma_can: string
+          phai_thu: number
+          qua_han_90: number
+          hoa_don_cu_nhat: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       kien_hang: {
         Row: {
           id: string
@@ -1604,6 +1646,42 @@ export type Database = {
         Returns: { id: string; ma: string }[]
       }
       thu_hoi_khach: { Args: { p_id: string }; Returns: undefined }
+      cong_no_toi_moc: {
+        Args: { p_project: string; p_moc: string }
+        Returns: {
+          unit_id: string
+          ma_can: string
+          phai_thu: number
+          qua_han_90: number
+          hoa_don_cu_nhat: string | null
+        }[]
+      }
+      lap_chot_ban_giao: {
+        Args: { p_project: string; p_ngay: string; p_ghi_chu?: string | null }
+        Returns: string
+      }
+      ky_chot_ban_giao: { Args: { p_chot: string }; Returns: string }
+      huy_chot_ban_giao: { Args: { p_chot: string; p_ly_do: string }; Returns: undefined }
+      chot_ban_giao_ds: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          ngay_chot: string
+          so_can: number
+          so_can_no: number
+          tong_phai_thu: number
+          qua_han_90: number
+          quy_bao_tri: number
+          quy_doi_chieu: number | null
+          audit_den: number | null
+          lap_luc: string
+          ky_bql_luc: string | null
+          ky_bqt_luc: string | null
+          huy_luc: string | null
+          ly_do_huy: string | null
+          ghi_chu: string | null
+        }[]
+      }
       xoa_khach_cu: { Args: { p_giu_ngay?: number }; Returns: number }
       nhac_kien_hang: { Args: Record<string, never>; Returns: number }
       nhan_loai_kien: { Args: { p: string }; Returns: string }

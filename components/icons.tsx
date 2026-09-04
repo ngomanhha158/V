@@ -119,6 +119,14 @@ export const IcTaiVe = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></I>
 )
 
+/** Hai bàn tay trao nhau qua một tờ giấy: bàn giao có ký. */
+export const IcBanGiao = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M4 7h7v10H4z" /><path d="M13 7h7v10h-7z" /><path d="M11 12h2" />
+    <path d="M6.5 10.5h2M15.5 10.5h2" />
+  </I>
+)
+
 /** Thùng carton có băng dán: kiện hàng đang chờ ở quầy. */
 export const IcKien = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}>
