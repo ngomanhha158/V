@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { doc, ky } from '@/lib/db/jwt'
-import { biMatJwt, PHIEN_GIA_HAN_GIAY, PHIEN_SONG_GIAY } from '@/lib/db/env'
+import { biMatJwt, kiemCauHinh, PHIEN_GIA_HAN_GIAY, PHIEN_SONG_GIAY } from '@/lib/db/env'
 import { TEN_COOKIE, tuyChonCookie } from '@/lib/db/phien'
 
 export async function middleware(request: NextRequest) {
@@ -24,6 +24,15 @@ export async function middleware(request: NextRequest) {
   if (duong.startsWith('/demo') || duong.startsWith('/api/webhook/')
       || duong.startsWith('/api/cron/')) {
     return NextResponse.next({ request })
+  }
+
+  // SOÁT CẤU HÌNH TRƯỚC KHI CHẠM VÀO BÍ MẬT. Thiếu biến môi trường thì
+  // biMatJwt() ném lỗi ngay dòng dưới, và Next biến nó thành đúng ba chữ
+  // "Internal Server Error" — người đang dựng hệ thống nhìn ba chữ đó thì không
+  // biết bắt đầu từ đâu, trong khi câu hướng dẫn đã viết sẵn ở lib/db/env.ts.
+  // Đưa họ sang màn nói rõ THIẾU BIẾN NÀO.
+  if (duong !== '/loi-cau-hinh' && kiemCauHinh().length > 0) {
+    return NextResponse.rewrite(new URL('/loi-cau-hinh', request.url))
   }
 
   const claims = await doc(request.cookies.get(TEN_COOKIE)?.value, biMatJwt())
