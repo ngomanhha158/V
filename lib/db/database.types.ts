@@ -1209,6 +1209,129 @@ export type Database = {
           },
         ]
       }
+      chot_ban_giao: {
+        Row: {
+          id: string
+          project_id: string
+          ngay_chot: string
+          ghi_chu: string | null
+          so_can: number
+          so_can_no: number
+          tong_phai_thu: number
+          qua_han_90: number
+          quy_bao_tri: number
+          quy_doi_chieu: number | null
+          quy_doi_chieu_ngay: string | null
+          audit_den: number | null
+          lap_luc: string
+          lap_boi: string | null
+          ky_bql_luc: string | null
+          ky_bql_boi: string | null
+          ky_bqt_luc: string | null
+          ky_bqt_boi: string | null
+          huy_luc: string | null
+          huy_boi: string | null
+          ly_do_huy: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      chot_ban_giao_can: {
+        Row: {
+          id: string
+          chot_id: string
+          unit_id: string | null
+          ma_can: string
+          phai_thu: number
+          qua_han_90: number
+          hoa_don_cu_nhat: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      bieu_quyet: {
+        Row: {
+          id: string
+          project_id: string
+          tieu_de: string
+          noi_dung: string | null
+          nguong_du_hop: number
+          nguong_thong_qua: number
+          tong_dien_tich: number
+          so_can: number
+          mo_luc: string
+          mo_boi: string | null
+          dong_luc: string | null
+          dong_boi: string | null
+          kq_dien_tich_bo_phieu: number | null
+          kq_tan_thanh: number | null
+          kq_khong_tan_thanh: number | null
+          kq_trang: number | null
+          kq_du_hop: boolean | null
+          kq_thong_qua: boolean | null
+          huy_luc: string | null
+          huy_boi: string | null
+          ly_do_huy: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      bieu_quyet_can: {
+        Row: {
+          id: string
+          bieu_quyet_id: string
+          unit_id: string | null
+          ma_can: string
+          dien_tich: number
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      phieu_bieu_quyet: {
+        Row: {
+          id: string
+          bieu_quyet_id: string
+          unit_id: string
+          y_kien: string
+          dien_tich: number
+          bo_boi: string | null
+          bo_luc: string
+          huy_luc: string | null
+          huy_boi: string | null
+          ly_do_huy: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      kien_hang: {
+        Row: {
+          id: string
+          project_id: string
+          unit_id: string
+          loai: string
+          nha_van_chuyen: string | null
+          ma_van_don: string | null
+          vi_tri: string | null
+          ghi_chu: string | null
+          nhan_luc: string
+          nhan_boi: string | null
+          tra_luc: string | null
+          tra_boi: string | null
+          nguoi_lay: string | null
+          ten_nguoi_lay: string | null
+          huy_luc: string | null
+          huy_boi: string | null
+          ly_do_huy: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       tien_ich: {
         Row: {
           id: string
@@ -1580,7 +1703,130 @@ export type Database = {
         Returns: { id: string; ma: string }[]
       }
       thu_hoi_khach: { Args: { p_id: string }; Returns: undefined }
+      cong_no_toi_moc: {
+        Args: { p_project: string; p_moc: string }
+        Returns: {
+          unit_id: string
+          ma_can: string
+          phai_thu: number
+          qua_han_90: number
+          hoa_don_cu_nhat: string | null
+        }[]
+      }
+      lap_chot_ban_giao: {
+        Args: { p_project: string; p_ngay: string; p_ghi_chu?: string | null }
+        Returns: string
+      }
+      ky_chot_ban_giao: { Args: { p_chot: string }; Returns: string }
+      huy_chot_ban_giao: { Args: { p_chot: string; p_ly_do: string }; Returns: undefined }
+      chot_ban_giao_ds: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          ngay_chot: string
+          so_can: number
+          so_can_no: number
+          tong_phai_thu: number
+          qua_han_90: number
+          quy_bao_tri: number
+          quy_doi_chieu: number | null
+          audit_den: number | null
+          lap_luc: string
+          ky_bql_luc: string | null
+          ky_bqt_luc: string | null
+          huy_luc: string | null
+          ly_do_huy: string | null
+          ghi_chu: string | null
+        }[]
+      }
+      mo_bieu_quyet: {
+        Args: {
+          p_project: string
+          p_tieu_de: string
+          p_noi_dung?: string | null
+          p_nguong_du_hop?: number
+          p_nguong_thong_qua?: number
+        }
+        Returns: string
+      }
+      bo_phieu_bieu_quyet: {
+        Args: { p_bq: string; p_unit: string; p_y_kien: string }
+        Returns: string
+      }
+      huy_phieu_bieu_quyet: { Args: { p_phieu: string; p_ly_do: string }; Returns: undefined }
+      kiem_phieu_bieu_quyet: {
+        Args: { p_bq: string }
+        Returns: {
+          dien_tich_bo_phieu: number
+          tan_thanh: number
+          khong_tan_thanh: number
+          trang: number
+          tong_dien_tich: number
+          so_can_da_bo: number
+          ty_le_du_hop: number
+          ty_le_tan_thanh: number
+          du_hop: boolean
+          thong_qua: boolean
+        }[]
+      }
+      dong_bieu_quyet: { Args: { p_bq: string }; Returns: Json }
+      huy_bieu_quyet: { Args: { p_bq: string; p_ly_do: string }; Returns: undefined }
+      bieu_quyet_cua_toi: {
+        Args: { p_bq: string }
+        Returns: {
+          unit_id: string
+          ma_can: string
+          dien_tich: number
+          da_bo: boolean
+          y_kien: string | null
+        }[]
+      }
       xoa_khach_cu: { Args: { p_giu_ngay?: number }; Returns: number }
+      nhac_kien_hang: { Args: Record<string, never>; Returns: number }
+      nhan_loai_kien: { Args: { p: string }; Returns: string }
+      kien_han_ngay: { Args: Record<string, never>; Returns: number }
+      nhan_kien_hang: {
+        Args: {
+          p_unit: string
+          p_loai?: string
+          p_nha_van_chuyen?: string | null
+          p_ma_van_don?: string | null
+          p_vi_tri?: string | null
+          p_ghi_chu?: string | null
+        }
+        Returns: string
+      }
+      giao_kien_hang: { Args: { p_kien: string; p_nguoi: string }; Returns: Json }
+      huy_kien_hang: { Args: { p_kien: string; p_ly_do: string }; Returns: undefined }
+      kien_dang_giu: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          can: string
+          toa: string
+          loai: string
+          nhan_luc: string
+          vi_tri: string | null
+          nha_van_chuyen: string | null
+          ma_van_don: string | null
+          so_ngay: number
+        }[]
+      }
+      kien_cua_toi: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          can: string
+          loai: string
+          nhan_luc: string
+          vi_tri: string | null
+          nha_van_chuyen: string | null
+          tra_luc: string | null
+          ten_nguoi_lay: string | null
+          ly_do_huy: string | null
+          trang_thai: string
+        }[]
+      }
       khach_cua_toi: {
         Args: Record<string, never>
         Returns: {

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/db/server'
 import { biMatJwt } from '@/lib/db/env'
 import { docThe } from '@/lib/the'
 import { LY_DO_THE, vaiCan } from '@/lib/vai-tro'
+import { NutTrao } from './kien'
 
 /**
  * Màn bảo vệ quét thẻ.
@@ -67,6 +68,20 @@ export default async function Page({ params }: { params: Promise<{ ma: string }>
   if (!r) return <Hong title="Không tìm thấy người trên thẻ">Tài khoản có thể đã bị xóa.</Hong>
 
   const ok = r.con_hieu_luc
+
+  // Kiện quầy đang giữ cho căn này. Hỏi NGAY TRÊN MÀN QUÉT chứ không bắt bảo vệ
+  // mở thêm một trang: người ta đứng trước mặt nhau ở quầy, thêm một bước là
+  // thêm một lần "để lát nữa" — và "lát nữa" là lúc quyển sổ giấy quay lại.
+  // Chỉ hỏi khi thẻ HỢP LỆ: thẻ hỏng thì không có gì để trao.
+  const { data: kienDs } = ok
+    ? await db
+        .from('kien_hang')
+        .select('id, loai, vi_tri, nha_van_chuyen, ma_van_don')
+        .eq('unit_id', the.unit)
+        .is('tra_luc', null)
+        .is('huy_luc', null)
+        .order('nhan_luc')
+    : { data: [] }
   return (
     <div className="mx-auto max-w-md p-4 pb-10">
       {/* Kết luận chiếm nguyên một mảng màu, chữ to. Bảo vệ nhìn màn này nửa
@@ -108,6 +123,28 @@ export default async function Page({ params }: { params: Promise<{ ma: string }>
           </p>
         </div>
       </div>
+
+      {ok && (kienDs ?? []).length > 0 && (
+        <div className="mt-3 rounded-card border border-warn-line bg-warn-soft p-4">
+          <p className="text-[0.9375rem] font-semibold text-warn">
+            Quầy đang giữ {(kienDs ?? []).length} kiện cho căn này
+          </p>
+          <p className="mt-0.5 text-[0.8125rem] leading-relaxed text-muted">
+            Trao ở đây là sổ ghi lại đúng người vừa quét thẻ — không cần ký giấy.
+          </p>
+          <div className="mt-2 divide-y divide-warn-line">
+            {(kienDs ?? []).map((k) => (
+              <NutTrao
+                key={k.id}
+                id={k.id}
+                uid={the.uid}
+                loai={k.loai}
+                moTa={[k.nha_van_chuyen, k.ma_van_don, k.vi_tri].filter(Boolean).join(' · ')}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Bảo vệ đối chiếu MẶT NGƯỜI, không đối chiếu cái tên với chính nó. Nói
           ra ở đây vì đó là bước duy nhất hệ thống không làm thay được.

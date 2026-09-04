@@ -38,13 +38,25 @@ export function Card({
   )
 }
 
+/**
+ * `xuongDong` cho những thẻ mà tiêu đề là một CÂU chứ không phải một nhãn — nội
+ * dung nghị quyết đưa ra biểu quyết chẳng hạn. Mặc định vẫn cắt một dòng: phần
+ * lớn thẻ có tiêu đề ngắn, và ở đó cắt giữ cho chiều cao các thẻ bằng nhau.
+ * Cắt một câu dài thì người đọc mất đúng phần đang bỏ phiếu cho.
+ */
 export function CardHead({
-  title, sub, right, className,
-}: { title: ReactNode; sub?: ReactNode; right?: ReactNode; className?: string }) {
+  title, sub, right, className, xuongDong,
+}: {
+  title: ReactNode; sub?: ReactNode; right?: ReactNode
+  className?: string; xuongDong?: boolean
+}) {
   return (
     <div className={cx('flex items-start justify-between gap-3 border-b border-line px-4 py-3', className)}>
       <div className="min-w-0">
-        <h2 className="truncate text-[0.9375rem] font-semibold text-ink">{title}</h2>
+        <h2 className={cx(
+          'text-[0.9375rem] font-semibold text-ink',
+          xuongDong ? 'break-words' : 'truncate',
+        )}>{title}</h2>
         {sub && <p className="mt-0.5 text-[0.8125rem] text-muted">{sub}</p>}
       </div>
       {right && <div className="shrink-0">{right}</div>}

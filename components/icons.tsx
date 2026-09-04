@@ -119,6 +119,21 @@ export const IcTaiVe = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><path d="M12 3v11m0 0 4-4m-4 4-4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></I>
 )
 
+/** Hai bàn tay trao nhau qua một tờ giấy: bàn giao có ký. */
+export const IcBanGiao = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M4 7h7v10H4z" /><path d="M13 7h7v10h-7z" /><path d="M11 12h2" />
+    <path d="M6.5 10.5h2M15.5 10.5h2" />
+  </I>
+)
+
+/** Thùng carton có băng dán: kiện hàng đang chờ ở quầy. */
+export const IcKien = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5z" /><path d="M3 8.5 12 13l9-4.5M12 13v7" />
+  </I>
+)
+
 /** Lịch có dấu tích: khung giờ đã giữ chỗ, không phải một cái lịch để xem. */
 export const IcDatCho = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}>
@@ -175,4 +190,13 @@ export const IcThe = (p: SVGProps<SVGSVGElement>) => (
 )
 export const IcXe = (p: SVGProps<SVGSVGElement>) => (
   <I {...p}><path d="M5 16.5V19a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1v-2.5" /><path d="M21.5 16.5V19a1 1 0 0 1-1 1H20a1 1 0 0 1-1-1v-2.5" /><path d="M3 16.5h18v-4l-1.6-4.2A2 2 0 0 0 17.5 7h-11a2 2 0 0 0-1.9 1.3L3 12.5z" /><circle cx="6.75" cy="14.25" r=".9" /><circle cx="17.25" cy="14.25" r=".9" /></I>
+)
+/** Thùng phiếu: hộp có khe, lá phiếu đang thả vào. Cố ý KHÔNG dùng lại hình
+ *  thăm dò ở bảng tin — hai thứ đó tính phiếu theo hai luật khác nhau, và một
+ *  hình chung là mời người dùng nghĩ chúng là một. */
+export const IcBieuQuyet = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M4 12h16v8H4z" /><path d="M8 12V9.5h8V12" />
+    <path d="M9.5 6.5h5" /><path d="M10 16h4" />
+  </I>
 )

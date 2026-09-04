@@ -106,9 +106,11 @@ export default async function Home() {
         <Link href="/onboarding" className="font-medium text-muted hover:text-ink">Thêm căn hộ</Link>
         <Link href="/approvals" className="font-medium text-muted hover:text-ink">Duyệt thành viên</Link>
         <Link href="/thong-bao" className="font-medium text-muted hover:text-ink">Thông báo</Link>
+        <Link href="/hang" className="font-medium text-muted hover:text-ink">Hàng ở quầy</Link>
         <Link href="/tien-ich" className="font-medium text-muted hover:text-ink">Đặt tiện ích</Link>
         <Link href="/khach" className="font-medium text-muted hover:text-ink">Khách thăm</Link>
         <Link href="/quy-bao-tri" className="font-medium text-muted hover:text-ink">Quỹ bảo trì</Link>
+        <Link href="/bieu-quyet" className="font-medium text-muted hover:text-ink">Biểu quyết</Link>
         {isStaff && (
           <Link href="/bql" className="font-medium text-brand hover:underline">
             Quản lý tòa nhà (BQL) →

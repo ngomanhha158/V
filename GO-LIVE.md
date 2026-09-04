@@ -22,10 +22,10 @@ Không phải kế hoạch — là những gì đã kiểm và những gì còn 
 | Backup | GitHub Actions dump hằng ngày, gồm cả schema `auth` |
 | Lưu trữ ảnh | Volume của service `v`, phục vụ qua `/api/anh` — hỏi lại quyền từng lần xem |
 | Quyền `anon` | **Không có bảng nào** — request không JWT không đọc được gì |
-| Bộ test | 16 file SQL độc lập + cả ngăn xếp Railway + 202 test JS, xanh trên CI mỗi lần push |
-| Giao diện | 47 route thật (chưa kể bản demo), build sạch, sáng/tối |
+| Bộ test | 20 file SQL độc lập + cả ngăn xếp Railway + 244 test JS, xanh trên CI mỗi lần push |
+| Giao diện | 56 route thật (chưa kể bản demo), build sạch, sáng/tối |
 
-Sáu job nền và giờ chạy (giờ VN). Đặt thiếu một cái thì nó KHÔNG chạy và
+Bảy job nền và giờ chạy (giờ VN). Đặt thiếu một cái thì nó KHÔNG chạy và
 không có gì báo — bảng đối chiếu đầy đủ ở đầu `cron.sql` và bước 8 của
 `railway/GD1-runbook.sh`:
 
@@ -34,6 +34,7 @@ không có gì báo — bảng đối chiếu đầy đủ ở đầu `cron.sql`
 - `nhac-no` — 08:00 mỗi ngày, nhắc nợ T-3 / T-0 / T+3
 - `mo-ky-bao-tri` — 07:00 mỗi ngày, mở kỳ bảo trì tới hạn
 - `don-ma-dang-nhap` — 03:00 mỗi ngày, dọn mã đăng nhập đã hết hạn
+- `nhac-kien-hang` — 18:00 mỗi ngày, nhắc kiện hàng để quá 3 ngày ở quầy
 - `don-so-ra-vao` — 02:30 mỗi ngày, xóa lượt khách quá 90 ngày. **Đây là lời
   hứa về hạn lưu mà màn Khách thăm nói với cư dân** — quên đặt lịch thì sổ ra
   vào giữ mãi, đúng cái mà tính năng đó cam kết là sẽ không làm.

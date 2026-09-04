@@ -55,6 +55,14 @@ export default async function Page() {
         />
       )}
 
+      <Hop tone="trung" title="Chốt sổ bàn giao">
+        Khi tòa nhà đổi đơn vị quản lý, số dư quỹ và công nợ toàn khu được khóa
+        lại thành một bản chốt mà hai bên cùng ký.{' '}
+        <Link href="/ban-giao" className="font-medium text-brand hover:underline">
+          Xem các bản chốt →
+        </Link>
+      </Hop>
+
       <Hop tone="trung" title="Sổ này không sửa được">
         Ghi sai thì phải ghi thêm một bút toán đảo, và cả hai dòng cùng nằm lại
         trong sổ — nên một lần sai luôn nhìn thấy được. Thấy khoản nào chưa rõ,
