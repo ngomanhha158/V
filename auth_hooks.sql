@@ -155,6 +155,13 @@ grant select on ke_hoach_thu, ke_hoach_thu_dot, dot_thu_can to authenticated;
 -- đúng khi làm ở một chỗ duy nhất.
 grant select, insert, update, delete on ca_truc to authenticated;
 grant select on phien_truc, ban_giao_ca, ban_giao_ca_viec to authenticated;
+-- Kho vật tư (§24). Chỉ nhân sự đọc — kho là chuyện nội bộ vận hành, và tồn
+-- kho công khai là bản đồ cho người muốn biết tòa nhà đang thiếu gì. Danh mục
+-- vật tư cấp cả quyền ghi (policy vat_tu_staff chốt lại); nhập / xuất / kiểm kê
+-- đi qua hàm definer, vì tồn kho là TỔNG của sổ và phép cộng đó chỉ đúng khi
+-- mọi dòng đều đi qua một cửa.
+grant select, insert, update, delete on vat_tu to authenticated;
+grant select on phieu_kho, phieu_kho_dong to authenticated;
 grant select on dat_tien_ich to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
@@ -293,6 +300,15 @@ grant execute on function dang_truc(uuid)                                     to
 grant execute on function ban_giao_chua_ky(uuid)                              to authenticated;
 grant execute on function so_ban_giao_ca(uuid, date, date)                    to authenticated;
 grant execute on function viec_ban_giao(uuid)                                 to authenticated;
+-- Kho vật tư (§24).
+grant execute on function ton_vat_tu(uuid)                                    to authenticated;
+grant execute on function nhap_kho(uuid, text, jsonb)                         to authenticated;
+grant execute on function xuat_kho(uuid, uuid, text, jsonb)                   to authenticated;
+grant execute on function kiem_ke_kho(uuid, text, jsonb)                      to authenticated;
+grant execute on function ton_kho(uuid)                                       to authenticated;
+grant execute on function so_kho(uuid, date, date)                            to authenticated;
+grant execute on function dong_phieu_kho(uuid)                                to authenticated;
+grant execute on function vat_tu_da_dung(uuid)                                to authenticated;
 
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là

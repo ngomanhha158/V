@@ -1251,6 +1251,64 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      vat_tu: {
+        Row: {
+          id: string
+          project_id: string
+          ma: string
+          ten: string
+          don_vi: string
+          don_gia: number
+          ton_toi_thieu: number
+          dang_dung: boolean
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          ma: string
+          ten: string
+          don_vi?: string
+          don_gia?: number
+          ton_toi_thieu?: number
+          dang_dung?: boolean
+        }
+        Update: {
+          ma?: string
+          ten?: string
+          don_vi?: string
+          ton_toi_thieu?: number
+          dang_dung?: boolean
+        }
+        Relationships: []
+      }
+      phieu_kho: {
+        Row: {
+          id: string
+          project_id: string
+          loai: string
+          ticket_id: string | null
+          ly_do: string | null
+          tong_tien: number
+          nguoi_id: string | null
+          luc: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      phieu_kho_dong: {
+        Row: {
+          id: string
+          phieu_id: string
+          vat_tu_id: string
+          so_luong: number
+          don_gia: number
+          thanh_tien: number
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       ca_truc: {
         Row: {
           id: string
@@ -1843,6 +1901,66 @@ export type Database = {
           huy_luc: string | null
           ly_do_huy: string | null
           ghi_chu: string | null
+        }[]
+      }
+      ton_vat_tu: { Args: { p_vat_tu: string }; Returns: number }
+      nhap_kho: { Args: { p_project: string; p_ly_do: string | null; p_dong: Json }; Returns: string }
+      xuat_kho: {
+        Args: { p_project: string; p_ticket: string | null; p_ly_do: string | null; p_dong: Json }
+        Returns: string
+      }
+      kiem_ke_kho: { Args: { p_project: string; p_ly_do: string; p_dong: Json }; Returns: Json }
+      ton_kho: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          ma: string
+          ten: string
+          don_vi: string
+          don_gia: number
+          ton: number
+          ton_toi_thieu: number
+          gia_tri: number
+          sap_het: boolean
+        }[]
+      }
+      so_kho: {
+        Args: { p_project: string; p_tu: string; p_den: string }
+        Returns: {
+          phieu_id: string
+          loai: string
+          luc: string
+          tong_tien: number
+          ly_do: string | null
+          nguoi: string | null
+          ticket_id: string | null
+          tieu_de_yc: string | null
+          ma_can: string | null
+          so_dong: number
+        }[]
+      }
+      dong_phieu_kho: {
+        Args: { p_phieu: string }
+        Returns: {
+          vat_tu_id: string
+          ma: string
+          ten: string
+          don_vi: string
+          so_luong: number
+          don_gia: number
+          thanh_tien: number
+        }[]
+      }
+      vat_tu_da_dung: {
+        Args: { p_ticket: string }
+        Returns: {
+          ma: string
+          ten: string
+          don_vi: string
+          so_luong: number
+          don_gia: number
+          thanh_tien: number
+          luc: string
         }[]
       }
       vao_ca: { Args: { p_ca: string; p_ngay?: string | null }; Returns: string }

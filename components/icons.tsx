@@ -217,3 +217,11 @@ export const IcCaTruc = (p: SVGProps<SVGSVGElement>) => (
     <path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1" /><path d="M21 3v4h-4" />
   </I>
 )
+
+/** Thùng hàng trên kệ: kho là chỗ ĐỂ hàng, khác IcKien là một kiện đang đi qua. */
+export const IcKho = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M3 20h18" /><path d="M5 20V9h6v11" /><path d="M13 20v-7h6v7" />
+    <path d="M5 9 8 4l3 5" /><path d="M8 13h.01M16 16h.01" />
+  </I>
+)

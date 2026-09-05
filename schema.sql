@@ -5147,3 +5147,309 @@ create trigger trg_audit_ban_giao_ca after insert or update or delete on ban_gia
   for each row execute function ghi_nhat_ky('project_id');
 create trigger trg_audit_phien_truc after insert or update or delete on phien_truc
   for each row execute function ghi_nhat_ky('project_id');
+
+-- ═════════════════ 24. KHO VẬT TƯ, XUẤT KHO THEO YÊU CẦU ════════════════════
+-- Vật tư sửa chữa không ai đếm. Cuối tháng ban quản trị hỏi "hết 12 triệu tiền
+-- vật tư, dùng cho căn nào" thì không ai trả lời được, và khoản đó thành khoản
+-- bị nghi ngờ mỗi kỳ họp.
+--
+-- CHỐT LỚN NHẤT: TỒN KHO LÀ MỘT SỔ, KHÔNG PHẢI MỘT CON SỐ.
+-- Cách sai hiển nhiên là để một cột `ton` trên bảng vật tư rồi UPDATE mỗi lần
+-- xuất. Làm thế thì (a) không bao giờ giải thích được con số đó từ đâu ra, và
+-- (b) hai người xuất cùng lúc là mất một lần trừ. Ở đây tồn = TỔNG các dòng
+-- giao dịch, đúng như bên quỹ bảo trì (§16).
+--
+-- CHỐT THỨ HAI: xuất kho NEO VÀO YÊU CẦU. Đó là cả lý do tính năng này tồn tại
+-- — "đã dùng gì cho căn nào". Xuất không có yêu cầu vẫn được (bảo trì chung),
+-- nhưng phải ghi lý do, và hai loại đó phân biệt được trong sổ.
+
+create table if not exists vat_tu (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  ma          text not null,
+  ten         text not null,
+  don_vi      text not null default 'cái',
+  -- Bình quân gia quyền liên hoàn: mỗi lần nhập tính lại. Đây là giá dùng để
+  -- ghi giá trị lúc xuất, và nó được CHÉP vào dòng xuất chứ không đọc lại.
+  don_gia     bigint not null default 0 check (don_gia >= 0),
+  ton_toi_thieu int not null default 0 check (ton_toi_thieu >= 0),
+  dang_dung   boolean not null default true,
+  unique (project_id, ma)
+);
+
+create table if not exists phieu_kho (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  loai        text not null check (loai in ('nhap','xuat','kiem_ke')),
+  -- Yêu cầu mà lần xuất này phục vụ. Null là hợp lệ (bảo trì chung), nhưng khi
+  -- đó ly_do bắt buộc — xem ràng buộc bên dưới.
+  ticket_id   uuid references tickets(id) on delete set null,
+  ly_do       text,
+  tong_tien   bigint not null default 0,
+  nguoi_id    uuid references profiles(id),
+  luc         timestamptz not null default clock_timestamp(),
+  constraint xuat_phai_co_ly_do_hoac_yeu_cau check (
+    loai <> 'xuat' or ticket_id is not null or coalesce(btrim(ly_do), '') <> '')
+);
+create index if not exists phieu_kho_ky on phieu_kho (project_id, luc desc);
+create index if not exists phieu_kho_ticket on phieu_kho (ticket_id) where ticket_id is not null;
+
+create table if not exists phieu_kho_dong (
+  id          uuid primary key default gen_random_uuid(),
+  phieu_id    uuid not null references phieu_kho(id) on delete cascade,
+  vat_tu_id   uuid not null references vat_tu(id) on delete restrict,
+  -- DẤU MANG NGHĨA, y hệt sổ quỹ: nhập dương, xuất âm, kiểm kê là chênh lệch
+  -- nên có thể âm hoặc dương. Tồn = tổng cột này, không có phép trừ nào ở đâu
+  -- khác để mà quên.
+  so_luong    numeric(12,2) not null check (so_luong <> 0),
+  don_gia     bigint not null check (don_gia >= 0),
+  thanh_tien  bigint not null,
+  unique (phieu_id, vat_tu_id)
+);
+create index if not exists phieu_kho_dong_vat_tu on phieu_kho_dong (vat_tu_id);
+
+-- Tồn của một vật tư, tính từ sổ. Một hàm duy nhất, dùng lại ở mọi chỗ cần —
+-- viết lại phép cộng này ở màn hình là tạo ra cơ hội cho hai con số khác nhau.
+create or replace function ton_vat_tu(p_vat_tu uuid)
+returns numeric language sql stable security definer set search_path = public as $fn$
+  select coalesce(sum(d.so_luong), 0)
+    from phieu_kho_dong d where d.vat_tu_id = p_vat_tu;
+$fn$;
+
+-- ─────────────────────────── NHẬP KHO ───────────────────────────────────────
+-- p_dong: [{"vat_tu": uuid, "so_luong": số, "don_gia": số}]
+create or replace function nhap_kho(p_project uuid, p_ly_do text, p_dong jsonb)
+returns uuid language plpgsql security definer set search_path = public as $fn$
+declare v_id uuid; d jsonb; v_vt uuid; v_sl numeric; v_gia bigint;
+        v_ton numeric; v_gia_cu bigint; v_tong bigint := 0; v_kiem bigint;
+begin
+  if not is_staff(p_project) then
+    raise exception 'Chi nhan su cua du an nay moi nhap kho duoc' using errcode = '42501';
+  end if;
+  if jsonb_typeof(p_dong) <> 'array' or jsonb_array_length(p_dong) = 0 then
+    raise exception 'Phieu nhap khong co dong nao' using errcode = '22023';
+  end if;
+
+  insert into phieu_kho (project_id, loai, ly_do, nguoi_id)
+    values (p_project, 'nhap', nullif(btrim(coalesce(p_ly_do,'')), ''), auth.uid())
+    returning id into v_id;
+
+  for d in select * from jsonb_array_elements(p_dong) loop
+    v_vt := (d ->> 'vat_tu')::uuid;
+    v_sl := (d ->> 'so_luong')::numeric;
+    v_gia := (d ->> 'don_gia')::bigint;
+    if v_sl is null or v_sl <= 0 then
+      raise exception 'So luong nhap phai lon hon 0' using errcode = '22023';
+    end if;
+    if v_gia is null or v_gia < 0 then
+      raise exception 'Don gia nhap khong hop le' using errcode = '22023';
+    end if;
+    if not exists (select 1 from vat_tu where id = v_vt and project_id = p_project) then
+      raise exception 'Vat tu % khong thuoc du an nay', v_vt using errcode = '42501';
+    end if;
+
+    -- BÌNH QUÂN GIA QUYỀN LIÊN HOÀN. Lấy thẳng giá lô mới làm giá kho là để một
+    -- lô 10 cái mua đắt kéo giá của 200 cái đang nằm trong kho lên theo.
+    v_ton := ton_vat_tu(v_vt);
+    select don_gia into v_gia_cu from vat_tu where id = v_vt;
+    update vat_tu
+       set don_gia = case when v_ton + v_sl > 0
+                          then round((v_ton * v_gia_cu + v_sl * v_gia) / (v_ton + v_sl))::bigint
+                          else v_gia end
+     where id = v_vt;
+
+    insert into phieu_kho_dong (phieu_id, vat_tu_id, so_luong, don_gia, thanh_tien)
+      values (v_id, v_vt, v_sl, v_gia, round(v_sl * v_gia)::bigint);
+    v_tong := v_tong + round(v_sl * v_gia)::bigint;
+  end loop;
+
+  update phieu_kho set tong_tien = v_tong where id = v_id;
+  -- Tự kiểm: tổng phiếu phải bằng tổng các dòng của chính nó.
+  select coalesce(sum(thanh_tien), 0) into v_kiem from phieu_kho_dong where phieu_id = v_id;
+  if v_kiem <> v_tong then
+    raise exception 'Phieu nhap khong can: % khac %', v_kiem, v_tong using errcode = '23514';
+  end if;
+  return v_id;
+end $fn$;
+
+-- ─────────────────────────── XUẤT KHO ───────────────────────────────────────
+-- p_dong: [{"vat_tu": uuid, "so_luong": số}] — đơn giá KHÔNG do người xuất nhập,
+-- nó chép từ giá kho tại thời điểm xuất.
+create or replace function xuat_kho(
+  p_project uuid, p_ticket uuid, p_ly_do text, p_dong jsonb
+) returns uuid language plpgsql security definer set search_path = public as $fn$
+declare v_id uuid; d jsonb; v_vt uuid; v_sl numeric; v_gia bigint;
+        v_ton numeric; v_tong bigint := 0; v_ten text;
+begin
+  if not is_staff(p_project) then
+    raise exception 'Chi nhan su cua du an nay moi xuat kho duoc' using errcode = '42501';
+  end if;
+  if jsonb_typeof(p_dong) <> 'array' or jsonb_array_length(p_dong) = 0 then
+    raise exception 'Phieu xuat khong co dong nao' using errcode = '22023';
+  end if;
+  if p_ticket is not null
+     and not exists (select 1 from tickets where id = p_ticket and project_id = p_project) then
+    raise exception 'Yeu cau % khong thuoc du an nay', p_ticket using errcode = '42501';
+  end if;
+  -- Không có yêu cầu thì phải có lý do. Một lần xuất không gắn với gì cả là
+  -- đúng dòng mà cuối tháng không ai giải trình được.
+  if p_ticket is null and coalesce(btrim(coalesce(p_ly_do,'')), '') = '' then
+    raise exception 'Xuat khong gan yeu cau thi phai ghi ly do' using errcode = '22023';
+  end if;
+
+  insert into phieu_kho (project_id, loai, ticket_id, ly_do, nguoi_id)
+    values (p_project, 'xuat', p_ticket, nullif(btrim(coalesce(p_ly_do,'')), ''), auth.uid())
+    returning id into v_id;
+
+  for d in select * from jsonb_array_elements(p_dong) loop
+    v_vt := (d ->> 'vat_tu')::uuid;
+    v_sl := (d ->> 'so_luong')::numeric;
+    if v_sl is null or v_sl <= 0 then
+      raise exception 'So luong xuat phai lon hon 0' using errcode = '22023';
+    end if;
+    select ten, don_gia into v_ten, v_gia from vat_tu
+     where id = v_vt and project_id = p_project;
+    if v_ten is null then
+      raise exception 'Vat tu % khong thuoc du an nay', v_vt using errcode = '42501';
+    end if;
+
+    -- TỒN ÂM LÀ MỘT LỜI NÓI DỐI. Chặn ở đây, và nói ra đang còn bao nhiêu —
+    -- người đứng ở kho cần con số đó để đi mua, không cần một chữ "lỗi".
+    v_ton := ton_vat_tu(v_vt);
+    if v_sl > v_ton then
+      raise exception '% chi con % trong kho, khong xuat duoc %', v_ten, v_ton, v_sl
+        using errcode = '23514';
+    end if;
+
+    insert into phieu_kho_dong (phieu_id, vat_tu_id, so_luong, don_gia, thanh_tien)
+      values (v_id, v_vt, -v_sl, v_gia, round(v_sl * v_gia)::bigint);
+    v_tong := v_tong + round(v_sl * v_gia)::bigint;
+  end loop;
+
+  update phieu_kho set tong_tien = v_tong where id = v_id;
+  return v_id;
+end $fn$;
+
+-- ─────────────────────────── KIỂM KÊ ────────────────────────────────────────
+-- Sổ nói một đằng, kệ hàng nói một nẻo. Không có bước này thì một lần đếm nhầm
+-- là sổ sai vĩnh viễn, và người ta bỏ luôn cả cái kho.
+-- p_dong: [{"vat_tu": uuid, "thuc_te": số}]
+create or replace function kiem_ke_kho(p_project uuid, p_ly_do text, p_dong jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $fn$
+declare v_id uuid; d jsonb; v_vt uuid; v_that numeric; v_ton numeric;
+        v_lech numeric; v_gia bigint; v_dem int := 0; v_tong bigint := 0;
+begin
+  if not is_bql_manager(p_project) then
+    raise exception 'Chi truong BQL moi kiem ke duoc — day la buoc sua lai so sach'
+      using errcode = '42501';
+  end if;
+  if coalesce(btrim(coalesce(p_ly_do,'')), '') = '' then
+    raise exception 'Phai ghi ly do kiem ke' using errcode = '22023';
+  end if;
+
+  insert into phieu_kho (project_id, loai, ly_do, nguoi_id)
+    values (p_project, 'kiem_ke', btrim(p_ly_do), auth.uid())
+    returning id into v_id;
+
+  for d in select * from jsonb_array_elements(coalesce(p_dong, '[]'::jsonb)) loop
+    v_vt := (d ->> 'vat_tu')::uuid;
+    v_that := (d ->> 'thuc_te')::numeric;
+    if v_that is null or v_that < 0 then
+      raise exception 'So luong thuc te khong hop le' using errcode = '22023';
+    end if;
+    select don_gia into v_gia from vat_tu where id = v_vt and project_id = p_project;
+    if v_gia is null then
+      raise exception 'Vat tu % khong thuoc du an nay', v_vt using errcode = '42501';
+    end if;
+
+    v_ton := ton_vat_tu(v_vt);
+    v_lech := v_that - v_ton;
+    -- Khớp thì KHÔNG ghi dòng nào. Ghi một dòng 0 cho mỗi vật tư là làm ngập sổ
+    -- bằng những dòng không nói gì, và chôn mất mấy dòng thật sự lệch.
+    if v_lech <> 0 then
+      insert into phieu_kho_dong (phieu_id, vat_tu_id, so_luong, don_gia, thanh_tien)
+        values (v_id, v_vt, v_lech, v_gia, round(v_lech * v_gia)::bigint);
+      v_dem := v_dem + 1;
+      v_tong := v_tong + round(v_lech * v_gia)::bigint;
+    end if;
+  end loop;
+
+  update phieu_kho set tong_tien = v_tong where id = v_id;
+  return jsonb_build_object('so_vat_tu_lech', v_dem, 'gia_tri_lech', v_tong);
+end $fn$;
+
+-- ─────────────────────────── ĐỌC ────────────────────────────────────────────
+create or replace function ton_kho(p_project uuid)
+returns table (id uuid, ma text, ten text, don_vi text, don_gia bigint,
+               ton numeric, ton_toi_thieu int, gia_tri bigint, sap_het boolean)
+language sql stable security definer set search_path = public as $fn$
+  select v.id, v.ma, v.ten, v.don_vi, v.don_gia,
+         coalesce(t.sl, 0), v.ton_toi_thieu,
+         round(coalesce(t.sl, 0) * v.don_gia)::bigint,
+         coalesce(t.sl, 0) <= v.ton_toi_thieu
+    from vat_tu v
+    left join lateral (
+      select sum(d.so_luong) as sl from phieu_kho_dong d where d.vat_tu_id = v.id
+    ) t on true
+   where v.project_id = p_project and v.dang_dung and is_staff(p_project)
+   order by (coalesce(t.sl, 0) <= v.ton_toi_thieu) desc, v.ten;
+$fn$;
+
+create or replace function so_kho(p_project uuid, p_tu date, p_den date)
+returns table (phieu_id uuid, loai text, luc timestamptz, tong_tien bigint,
+               ly_do text, nguoi text, ticket_id uuid, tieu_de_yc text,
+               ma_can text, so_dong int)
+language sql stable security definer set search_path = public as $fn$
+  select p.id, p.loai, p.luc, p.tong_tien, p.ly_do, pr.full_name,
+         p.ticket_id, t.title, u.code,
+         (select count(*)::int from phieu_kho_dong d where d.phieu_id = p.id)
+    from phieu_kho p
+    left join profiles pr on pr.id = p.nguoi_id
+    left join tickets t on t.id = p.ticket_id
+    left join units u on u.id = t.unit_id
+   where p.project_id = p_project and is_staff(p_project)
+     and p.luc >= p_tu::timestamptz and p.luc < (p_den + 1)::timestamptz
+   order by p.luc desc;
+$fn$;
+
+create or replace function dong_phieu_kho(p_phieu uuid)
+returns table (vat_tu_id uuid, ma text, ten text, don_vi text,
+               so_luong numeric, don_gia bigint, thanh_tien bigint)
+language sql stable security definer set search_path = public as $fn$
+  select v.id, v.ma, v.ten, v.don_vi, d.so_luong, d.don_gia, d.thanh_tien
+    from phieu_kho_dong d
+    join phieu_kho p on p.id = d.phieu_id
+    join vat_tu v on v.id = d.vat_tu_id
+   where d.phieu_id = p_phieu and is_staff(p.project_id)
+   order by v.ten;
+$fn$;
+
+-- Đã dùng gì cho yêu cầu này. Đây chính là câu hỏi mà cả tính năng dựng lên để
+-- trả lời, nên nó phải gọi được từ màn chi tiết yêu cầu.
+create or replace function vat_tu_da_dung(p_ticket uuid)
+returns table (ma text, ten text, don_vi text, so_luong numeric,
+               don_gia bigint, thanh_tien bigint, luc timestamptz)
+language sql stable security definer set search_path = public as $fn$
+  select v.ma, v.ten, v.don_vi, -d.so_luong, d.don_gia, d.thanh_tien, p.luc
+    from phieu_kho p
+    join phieu_kho_dong d on d.phieu_id = p.id
+    join vat_tu v on v.id = d.vat_tu_id
+   where p.ticket_id = p_ticket and p.loai = 'xuat' and is_staff(p.project_id)
+   order by p.luc;
+$fn$;
+
+-- ── RLS ──
+alter table vat_tu         enable row level security;
+alter table phieu_kho      enable row level security;
+alter table phieu_kho_dong enable row level security;
+-- Kho là chuyện nội bộ vận hành. Cư dân biết vật tư nào còn bao nhiêu không
+-- giúp gì cho họ, mà lại là bản đồ cho người muốn biết tòa nhà đang thiếu gì.
+create policy vat_tu_staff on vat_tu for all
+  using (is_staff(project_id)) with check (is_staff(project_id));
+create policy phieu_kho_staff on phieu_kho for select using (is_staff(project_id));
+create policy phieu_kho_dong_staff on phieu_kho_dong for select
+  using (exists (select 1 from phieu_kho p
+                  where p.id = phieu_kho_dong.phieu_id and is_staff(p.project_id)));
+
+create trigger trg_audit_phieu_kho after insert or update or delete on phieu_kho
+  for each row execute function ghi_nhat_ky('project_id');
