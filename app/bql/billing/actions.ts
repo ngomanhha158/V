@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 
 export type BillingState = { error?: string; ok?: string }
 
@@ -12,9 +13,7 @@ function firstOfMonth(v: string): string | null {
 }
 
 async function projectId() {
-  const db = await createClient()
-  const { data } = await db.from('projects').select('id').limit(1).maybeSingle()
-  return data?.id ?? null
+  return (await duAnBQL())?.id ?? null
 }
 
 function humanError(e: { code?: string; message?: string }, fallback: string) {

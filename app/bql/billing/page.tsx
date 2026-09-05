@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { InvoiceActions, ReadingsForm } from './forms'
 import {
   Bang, Button, Card, CardHead, Input, PageHead, Pill, Stat, Td, Th, Tr, Trong, vnd,
@@ -21,7 +22,7 @@ export default async function Billing({
   const sp = await searchParams
   const db = await createClient()
 
-  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
   const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')

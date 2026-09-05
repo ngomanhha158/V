@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { Bang, Card, CardHead, Hop, PageHead, Pill, Td, Th, Tr, Trong, ngayGioVN, vnd } from '@/components/ui'
 import { loiLienTuc } from '@/lib/phieu-thu'
 import { NutHuy } from './form'
@@ -27,7 +28,7 @@ export default async function Page({
   const ky = `${thang}-01`
 
   const db = await createClient()
-  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) {
     return (
       <div className="space-y-5">

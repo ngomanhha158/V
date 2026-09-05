@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 
 export type BangTinState = { error?: string; ok?: string }
 
@@ -17,7 +18,7 @@ export async function dangThongBao(
   const { data: { user } } = await db.auth.getUser()
   if (!user) return { error: 'Chưa đăng nhập.' }
 
-  const { data: project } = await db.from('projects').select('id').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) return { error: 'Chưa có dự án nào.' }
 
   const title = rong(form.get('title'))

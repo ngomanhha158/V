@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import {
   DIEN_TICH_TOI_DA, dieuKien, docDienTich, docLoc, soM2, taLoc, type ThamSo,
 } from '@/lib/can-ho'
@@ -18,7 +19,7 @@ function dichLoi(code: string | undefined, msg: string): string {
 
 async function moiTruong() {
   const db = await createClient()
-  const { data: project } = await db.from('projects').select('id').limit(1).maybeSingle()
+  const project = await duAnBQL()
   return { db, project: project?.id ?? null }
 }
 

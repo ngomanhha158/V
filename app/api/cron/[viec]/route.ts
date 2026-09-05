@@ -35,6 +35,9 @@ const VIEC = {
   // Nhắc kiện hàng để quá hạn ở quầy (§19). Hàm tự chống nhắc trùng trong 20
   // tiếng, nên chạy nhiều lần một ngày cũng không spam cư dân.
   'nhac-kien-hang': 'nhac_kien_hang',
+  // Báo cáo quý cho BQT (§26). Đặt lịch ngày 5 tháng đầu mỗi quý — hàm tự tìm
+  // quý VỪA KẾT THÚC, và chạy lại thì bỏ qua vì đã có bản cho quý đó.
+  'bao-cao-quy': 'sinh_bao_cao_quy',
 } as const
 
 type Viec = keyof typeof VIEC

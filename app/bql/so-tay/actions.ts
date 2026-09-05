@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 
 export type SoTayState = { error?: string; ok?: string }
 
@@ -11,7 +12,7 @@ const rong = (v: FormDataEntryValue | null) => {
 
 export async function luuMuc(_prev: SoTayState, form: FormData): Promise<SoTayState> {
   const db = await createClient()
-  const { data: project } = await db.from('projects').select('id').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) return { error: 'Chưa có dự án nào.' }
 
   const section = rong(form.get('section'))

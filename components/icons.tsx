@@ -200,3 +200,44 @@ export const IcBieuQuyet = (p: SVGProps<SVGSVGElement>) => (
     <path d="M9.5 6.5h5" /><path d="M10 16h4" />
   </I>
 )
+
+/** Ba cột tiền thấp dần theo thời gian: một khoản trải ra thành nhiều kỳ.
+ *  Khác IcTien (một khoản) và IcHoaDon (tờ giấy đòi tiền). */
+export const IcChiaDot = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M4 20h16" /><path d="M6 20v-5h3v5" /><path d="M11 20v-8h3v8" />
+    <path d="M16 20v-11h3v11" /><path d="M5 6h6M8 3.5v5" />
+  </I>
+)
+
+/** Đồng hồ có mũi tên vòng: ca này nối tiếp ca kia, không phải một mốc giờ. */
+export const IcCaTruc = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M12 7v5l3 2" />
+    <path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1" /><path d="M21 3v4h-4" />
+  </I>
+)
+
+/** Thùng hàng trên kệ: kho là chỗ ĐỂ hàng, khác IcKien là một kiện đang đi qua. */
+export const IcKho = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M3 20h18" /><path d="M5 20V9h6v11" /><path d="M13 20v-7h6v7" />
+    <path d="M5 9 8 4l3 5" /><path d="M8 13h.01M16 16h.01" />
+  </I>
+)
+
+/** Búa và thước: sửa chữa có phép, khác IcYeuCau là báo hỏng. */
+export const IcThiCong = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M14 3.5 20.5 10l-2.5 2.5L11.5 6z" /><path d="M12.5 8 4 16.5V20h3.5L16 11.5" />
+    <path d="M3 3h4M5 3v4" />
+  </I>
+)
+
+/** Trang giấy có biểu đồ cột: báo cáo định kỳ, khác IcBieuDo là màn hình sống. */
+export const IcBaoCao = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M5 3h9l5 5v13H5z" /><path d="M14 3v5h5" />
+    <path d="M8.5 17v-3M12 17v-5M15.5 17v-2" />
+  </I>
+)

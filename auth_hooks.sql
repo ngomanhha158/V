@@ -142,6 +142,34 @@ grant select on chot_ban_giao, chot_ban_giao_can to authenticated;
 -- bieu_quyet_can (danh sách căn đóng băng) cả khu đọc được: mẫu số của mọi tỷ
 -- lệ nằm ở đó, giấu nó đi là để lại đúng chỗ mà hội nghị hay bị nghi ngờ nhất.
 grant select on bieu_quyet, bieu_quyet_can, phieu_bieu_quyet to authenticated;
+-- Thu theo đợt (§22). Kế hoạch và lịch đợt: cả khu đọc được — con số trên hóa
+-- đơn của họ phải tra ngược lại được tới nghị quyết đã duyệt. Số tiền của TỪNG
+-- CĂN thì RLS (dtc_read) lọc theo đúng luật xem tiền của căn đó, cùng vị từ với
+-- hóa đơn và phiếu thu. Không cấp quyền ghi: lập và hủy đều đi qua hàm definer,
+-- vì phép chia tiền chỉ đúng khi làm ở một chỗ duy nhất.
+grant select on ke_hoach_thu, ke_hoach_thu_dot, dot_thu_can to authenticated;
+-- Ca trực và bàn giao ca (§23). Khối này CHỈ NHÂN SỰ đọc — RLS đã chốt bằng
+-- is_staff, và cấp select ở đây không mở gì cho cư dân. Riêng ca_truc cấp cả
+-- quyền ghi vì đó là danh mục BQL tự quản lý (policy ca_truc_staff chốt lại);
+-- vào ca / bàn giao / ký nhận thì đi qua hàm definer, vì thứ tự và chữ ký chỉ
+-- đúng khi làm ở một chỗ duy nhất.
+grant select, insert, update, delete on ca_truc to authenticated;
+grant select on phien_truc, ban_giao_ca, ban_giao_ca_viec to authenticated;
+-- Kho vật tư (§24). Chỉ nhân sự đọc — kho là chuyện nội bộ vận hành, và tồn
+-- kho công khai là bản đồ cho người muốn biết tòa nhà đang thiếu gì. Danh mục
+-- vật tư cấp cả quyền ghi (policy vat_tu_staff chốt lại); nhập / xuất / kiểm kê
+-- đi qua hàm definer, vì tồn kho là TỔNG của sổ và phép cộng đó chỉ đúng khi
+-- mọi dòng đều đi qua một cửa.
+grant select, insert, update, delete on vat_tu to authenticated;
+grant select on phieu_kho, phieu_kho_dong to authenticated;
+-- Đăng ký thi công (§25). Chỉ select: đăng ký, duyệt, ghi ký quỹ, tất toán đều
+-- đi qua hàm definer — vòng đời tiền ký quỹ chỉ cân được khi mọi lần cộng trừ
+-- đều qua một cửa. RLS (dktc_read) cho cư dân thấy đăng ký của căn mình.
+grant select on dang_ky_thi_cong to authenticated;
+-- Báo cáo quý (§26). CẢ KHU đọc được: đây là thứ BQT mang ra họp với cư dân,
+-- giấu nó đi thì mỗi lần họp lại quay về cãi nhau về con số. Không cấp ghi —
+-- báo cáo là bản chụp đóng băng, sinh ra qua hàm và không sửa được sau đó.
+grant select on bao_cao_quy to authenticated;
 grant select on dat_tien_ich to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
@@ -264,6 +292,53 @@ grant execute on function kiem_phieu_bieu_quyet(uuid)                         to
 grant execute on function dong_bieu_quyet(uuid)                               to authenticated;
 grant execute on function huy_bieu_quyet(uuid, text)                          to authenticated;
 grant execute on function bieu_quyet_cua_toi(uuid)                            to authenticated;
+-- Thu theo đợt (§22).
+grant execute on function lap_ke_hoach_thu(uuid, text, bigint, text, int, date, text, date, text) to authenticated;
+grant execute on function huy_ke_hoach_thu(uuid, text)                        to authenticated;
+grant execute on function ke_hoach_thu_ds(uuid)                               to authenticated;
+grant execute on function ke_hoach_thu_chi_tiet(uuid)                         to authenticated;
+grant execute on function tra_gop_cua_toi()                                   to authenticated;
+-- Ca trực và bàn giao ca (§23). Mọi hàm tự chốt is_staff hoặc "chính người đang
+-- trực" BÊN TRONG, nên cấp cho authenticated chỉ quyết định ai GỌI ĐƯỢC.
+grant execute on function vao_ca(uuid, date)                                  to authenticated;
+grant execute on function ban_giao_ca(uuid, uuid, text, uuid[])               to authenticated;
+grant execute on function ky_nhan_ca(uuid)                                    to authenticated;
+grant execute on function ket_ca_khong_ban_giao(uuid, text)                   to authenticated;
+grant execute on function dang_truc(uuid)                                     to authenticated;
+grant execute on function ban_giao_chua_ky(uuid)                              to authenticated;
+grant execute on function so_ban_giao_ca(uuid, date, date)                    to authenticated;
+grant execute on function viec_ban_giao(uuid)                                 to authenticated;
+-- Kho vật tư (§24).
+grant execute on function ton_vat_tu(uuid)                                    to authenticated;
+grant execute on function nhap_kho(uuid, text, jsonb)                         to authenticated;
+grant execute on function xuat_kho(uuid, uuid, text, jsonb)                   to authenticated;
+grant execute on function kiem_ke_kho(uuid, text, jsonb)                      to authenticated;
+grant execute on function ton_kho(uuid)                                       to authenticated;
+grant execute on function so_kho(uuid, date, date)                            to authenticated;
+grant execute on function dong_phieu_kho(uuid)                                to authenticated;
+grant execute on function vat_tu_da_dung(uuid)                                to authenticated;
+-- Đăng ký thi công (§25).
+grant execute on function duoc_thi_cong(uuid, timestamptz)                    to authenticated;
+grant execute on function dang_ky_thi_cong(uuid, text, text, date, date, time, time, text, text, int, text) to authenticated;
+grant execute on function duyet_thi_cong(uuid, bigint, time, time, boolean)   to authenticated;
+grant execute on function tu_choi_thi_cong(uuid, text)                        to authenticated;
+grant execute on function ghi_ky_quy(uuid, bigint)                            to authenticated;
+grant execute on function tat_toan_thi_cong(uuid, bigint, text)               to authenticated;
+grant execute on function huy_thi_cong(uuid, text)                            to authenticated;
+grant execute on function thi_cong_ds(uuid, text)                             to authenticated;
+grant execute on function thi_cong_hom_nay(uuid)                              to authenticated;
+grant execute on function thi_cong_cua_toi()                                  to authenticated;
+-- Báo cáo quý (§26). tinh_bao_cao_quy KHÔNG cấp: nó là phần tính không kiểm
+-- quyền, chỉ dành cho lap_bao_cao_quy và job nền. sinh_bao_cao_quy cũng không
+-- cấp — nó là job nền, gọi bằng service_role qua /api/cron.
+grant execute on function moc_quy(int, int)                                   to authenticated;
+grant execute on function quy_cua(date)                                       to authenticated;
+grant execute on function lap_bao_cao_quy(uuid, int, int)                     to authenticated;
+grant execute on function huy_bao_cao_quy(uuid, text)                         to authenticated;
+grant execute on function bao_cao_quy_ds(uuid)                                to authenticated;
+-- Nhiều khu (§27).
+grant execute on function du_an_cua_toi()                                     to authenticated;
+grant execute on function duoc_quan_ly(uuid)                                  to authenticated;
 
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là

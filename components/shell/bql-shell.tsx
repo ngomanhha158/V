@@ -1,11 +1,13 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { NavDoc } from './nav-link'
+import { ChonKhu } from './chon-khu'
+import { nenHienHopChon, type Khu } from '@/lib/khu'
 import { ThemeToggle } from './theme-toggle'
 import { NutRa } from './nut-ra'
 import {
   IcBanGiao, IcBieuDo, IcCanHo, IcCheck, IcDoiSoat, IcHoaDon, IcLich, IcLoa, IcNguoi, IcNha, IcNhap, IcQR,
-  IcBieuQuyet, IcDatCho, IcKet, IcKhach, IcKien, IcPhieuThu, IcSach, IcSo, IcTaiVe, IcThe, IcTien,
+  IcBaoCao, IcBieuQuyet, IcCaTruc, IcChiaDot, IcDatCho, IcKho, IcThiCong, IcKet, IcKhach, IcKien, IcPhieuThu, IcSach, IcSo, IcTaiVe, IcThe, IcTien,
   IcToaNha, IcXe, IcYeuCau,
 } from '@/components/icons'
 
@@ -28,10 +30,16 @@ function Muc({ nhan }: { nhan: string }) {
  * thấy hết mục, không cần mở đóng gì.
  */
 export function BqlShell({
-  children, base = '', duAn,
-}: { children: ReactNode; base?: string; duAn?: string }) {
+  children, base = '', duAn, khu, dsKhu, chonKhu,
+}: {
+  children: ReactNode; base?: string; duAn?: string
+  khu?: Khu | null; dsKhu?: Khu[]; chonKhu?: (formData: FormData) => void
+}) {
   // Bản demo không có phiên nào để thoát ra — xem ghi chú ở ResidentShell.
   const laThat = base === ''
+  // Hộp chọn khu luôn hiện tên khu đang xem. Để dòng phụ dưới "VBuilding" nói
+  // lại đúng cái tên đó là in hai lần cùng một chữ trong bốn chục pixel.
+  const coHopChon = !!(khu && chonKhu && nenHienHopChon(dsKhu ?? []))
   const nav = (
     <>
       <Muc nhan="Vận hành" />
@@ -39,10 +47,13 @@ export function BqlShell({
       <NavDoc href={`${base}/bql/tickets`} icon={<IcYeuCau />}>Điều phối yêu cầu</NavDoc>
       <NavDoc href={`${base}/bql/sla`} icon={<IcCheck />}>Cam kết thời gian</NavDoc>
       <NavDoc href={`${base}/bql/bao-tri`} icon={<IcLich />}>Bảo trì định kỳ</NavDoc>
+      <NavDoc href={`${base}/bql/kho`} icon={<IcKho />}>Kho vật tư</NavDoc>
       <NavDoc href={`${base}/quet`} icon={<IcThe />}>Quét thẻ cư dân</NavDoc>
+      <NavDoc href={`${base}/bql/ca-truc`} icon={<IcCaTruc />}>Ca trực</NavDoc>
       <NavDoc href={`${base}/bql/so-ra-vao`} icon={<IcKhach />}>Sổ ra vào</NavDoc>
       <NavDoc href={`${base}/bql/tien-ich`} icon={<IcDatCho />}>Tiện ích</NavDoc>
       <NavDoc href={`${base}/bql/kien-hang`} icon={<IcKien />}>Nhận hàng hộ</NavDoc>
+      <NavDoc href={`${base}/bql/thi-cong`} icon={<IcThiCong />}>Chuyển nhà &amp; thi công</NavDoc>
       <NavDoc href={`${base}/bql/bai-xe`} icon={<IcXe />}>Chỗ đỗ xe</NavDoc>
 
       <Muc nhan="Truyền thông" />
@@ -57,15 +68,18 @@ export function BqlShell({
       <NavDoc href={`${base}/bql/doi-soat`} icon={<IcDoiSoat />}>Đối soát tiền về</NavDoc>
       <NavDoc href={`${base}/bql/phieu-thu`} icon={<IcPhieuThu />}>Phiếu thu</NavDoc>
       <NavDoc href={`${base}/bql/quy-bao-tri`} icon={<IcKet />}>Quỹ bảo trì 2%</NavDoc>
+      <NavDoc href={`${base}/bql/tra-gop`} icon={<IcChiaDot />}>Thu theo đợt</NavDoc>
       <NavDoc href={`${base}/bql/ban-giao`} icon={<IcBanGiao />}>Chốt sổ bàn giao</NavDoc>
       <NavDoc href={`${base}/bql/xuat`} icon={<IcTaiVe />}>Xuất Excel</NavDoc>
 
       {/* Tòa nhà và import là việc DỰNG hệ thống, làm vài lần rồi thôi. Để
           chúng cạnh việc trực ban hằng ngày là bắt người trực lướt qua mỗi lần. */}
       <Muc nhan="Vận hành khu" />
+      <NavDoc href={`${base}/bql/khu`} icon={<IcToaNha />}>Khu đang quản lý</NavDoc>
       <NavDoc href={`${base}/bql/duyet-chu-ho`} icon={<IcNguoi />}>Duyệt chủ hộ</NavDoc>
       <NavDoc href={`${base}/bql/go-live`} icon={<IcCheck />}>Sẵn sàng go-live</NavDoc>
       <NavDoc href={`${base}/bql/poster`} icon={<IcQR />}>Poster QR</NavDoc>
+      <NavDoc href={`${base}/bql/bao-cao`} icon={<IcBaoCao />}>Báo cáo quý</NavDoc>
       <NavDoc href={`${base}/bql/nhat-ky`} icon={<IcSo />}>Nhật ký kiểm toán</NavDoc>
 
       <Muc nhan="Dữ liệu" />
@@ -87,11 +101,18 @@ export function BqlShell({
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm leading-tight font-semibold text-ink">VBuilding</span>
             <span className="block truncate text-[0.75rem] leading-tight text-faint">
-              {duAn ?? 'Ban quản lý'}
+              {coHopChon ? `${dsKhu?.length} khu đang quản lý` : (duAn ?? 'Ban quản lý')}
             </span>
           </span>
           <ThemeToggle className="lg:hidden" />
         </div>
+
+        {/* Chọn khu chỉ hiện khi có từ hai khu trở lên — xem ghi chú ở ChonKhu. */}
+        {coHopChon && (
+          <div className="px-3 pt-3">
+            <ChonKhu dang={khu} ds={dsKhu ?? []} chon={chonKhu} />
+          </div>
+        )}
 
         {/* Máy tính: cột dọc. Điện thoại: dải ngang cuộn được, các nhãn nhóm
             ẩn đi vì hàng ngang không đủ chỗ diễn đạt phân cấp. */}

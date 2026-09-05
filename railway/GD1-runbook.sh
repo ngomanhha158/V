@@ -117,7 +117,7 @@ B6. Job nền. Ảnh Postgres của Railway không có pg_cron, nên cron.sql KH
     dùng ở đây. Thay bằng 7 Cron Service, mỗi cái chạy đúng một dòng curl.
 
     Đặt biến CRON_SECRET cho service `v` trước (openssl rand -base64 32), rồi
-    tạo 7 service từ image `curlimages/curl:latest`, mỗi service một lịch:
+    tạo 8 service từ image `curlimages/curl:latest`, mỗi service một lịch:
 
       Tên service            Lịch (UTC)      Đường
       cron-nhac-no           0 1 * * *       /api/cron/nhac-no
@@ -127,9 +127,15 @@ B6. Job nền. Ảnh Postgres của Railway không có pg_cron, nên cron.sql KH
       cron-don-ma            0 20 * * *      /api/cron/don-ma-dang-nhap
       cron-don-so-ra-vao     30 19 * * *     /api/cron/don-so-ra-vao
       cron-nhac-kien         0 11 * * *      /api/cron/nhac-kien-hang
+      cron-bao-cao-quy       0 19 4 1,4,7,10 * /api/cron/bao-cao-quy
 
-    Việc cuối là hạn lưu 90 ngày của sổ ra vào khách. Quên đặt thì sổ giữ mãi —
-    tức là đúng cái mà màn Khách thăm đang hứa với cư dân là sẽ không làm.
+    Việc `don-so-ra-vao` là hạn lưu 90 ngày của sổ ra vào khách. Quên đặt thì sổ
+    giữ mãi — tức là đúng cái mà màn Khách thăm đang hứa với cư dân là sẽ không
+    làm.
+
+    Việc cuối chạy 02:00 giờ VN ngày 5 tháng đầu mỗi quý (19:00 UTC ngày 4) và
+    sinh báo cáo cho quý VỪA KẾT THÚC. Chạy lại nhiều lần cũng chỉ ra một bản:
+    mỗi quý một báo cáo còn hiệu lực, chốt bằng index ở database.
 
     Start command của mỗi service (thay <đường> và dùng tên miền công khai của
     service `v`):

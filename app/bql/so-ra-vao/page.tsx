@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { Bang, Card, CardHead, Hop, PageHead, Pill, Td, Th, Tr, Trong, ngayGioVN } from '@/components/ui'
 import { TONE_TRANG_THAI, khoangGio, loiSoGiay, nhanTrangThai } from '@/lib/khach'
 
@@ -23,7 +24,7 @@ export default async function Page({
   const tu = hopLe(sp.tu) ?? iso(new Date(Date.now() - 6 * NGAY))
 
   const db = await createClient()
-  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) {
     return (
       <div className="space-y-5">

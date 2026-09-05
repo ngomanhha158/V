@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { HANG_MUC } from '@/lib/bao-tri'
 
 export type BaoTriState = { error?: string; ok?: string }
@@ -17,8 +18,8 @@ function dichLoi(code: string | undefined, msg: string): string {
 
 async function duAn() {
   const db = await createClient()
-  const { data } = await db.from('projects').select('id').limit(1).maybeSingle()
-  return { db, project: data?.id ?? null }
+  const duAn = await duAnBQL()
+  return { db, project: duAn?.id ?? null }
 }
 
 /** Đọc số nguyên trong khoảng, trả null nếu không đọc được. */

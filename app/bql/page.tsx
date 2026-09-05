@@ -9,6 +9,9 @@ export const dynamic = 'force-dynamic'
 
 export default async function Bql() {
   const db = await createClient()
+  // Màn này CỐ Ý đọc thẳng thay vì qua duAnBQL(): nó là màn chẩn đoán, và nó
+  // phải phân biệt được "truy vấn hỏng" với "chưa có dự án nào" — mà một hàm
+  // trả về null gộp cả hai ca đó lại.
   const { data: project, error: loiDuAn } = await db
     .from('projects').select('id, name').limit(1).maybeSingle()
 

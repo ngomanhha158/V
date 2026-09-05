@@ -1251,6 +1251,240 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      bao_cao_quy: {
+        Row: {
+          id: string
+          project_id: string
+          nam: number
+          quy: number
+          tu_ngay: string
+          den_ngay: string
+          hoa_don_phai_thu: number
+          hoa_don_da_thu: number
+          cong_no_cuoi_quy: number
+          so_can: number
+          so_can_no: number
+          quy_bao_tri_dau: number
+          quy_bao_tri_cuoi: number
+          quy_chi_trong_quy: number
+          chi_vat_tu: number
+          so_yeu_cau: number
+          so_yeu_cau_xong: number
+          so_yeu_cau_dung_han: number
+          so_danh_gia: number
+          tong_diem: number
+          so_thi_cong: number
+          so_ban_giao_ca: number
+          so_ban_giao_chua_ky: number
+          ghi_chu: string | null
+          lap_luc: string
+          lap_boi: string | null
+          audit_den: number | null
+          huy_luc: string | null
+          huy_boi: string | null
+          ly_do_huy: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      dang_ky_thi_cong: {
+        Row: {
+          id: string
+          project_id: string
+          unit_id: string
+          loai: string
+          hang_muc: string
+          tu_ngay: string
+          den_ngay: string
+          gio_bat_dau: string
+          gio_ket_thuc: string
+          lam_chu_nhat: boolean
+          don_vi_thi_cong: string | null
+          dien_thoai: string | null
+          so_nguoi: number | null
+          ky_quy_phai_nop: number
+          ky_quy_da_nop: number
+          ky_quy_tru: number
+          ky_quy_hoan: number
+          ly_do_tru: string | null
+          trang_thai: string
+          ghi_chu: string | null
+          dang_ky_boi: string | null
+          dang_ky_luc: string
+          duyet_boi: string | null
+          duyet_luc: string | null
+          ly_do_tu_choi: string | null
+          xong_luc: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      vat_tu: {
+        Row: {
+          id: string
+          project_id: string
+          ma: string
+          ten: string
+          don_vi: string
+          don_gia: number
+          ton_toi_thieu: number
+          dang_dung: boolean
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          ma: string
+          ten: string
+          don_vi?: string
+          don_gia?: number
+          ton_toi_thieu?: number
+          dang_dung?: boolean
+        }
+        Update: {
+          ma?: string
+          ten?: string
+          don_vi?: string
+          ton_toi_thieu?: number
+          dang_dung?: boolean
+        }
+        Relationships: []
+      }
+      phieu_kho: {
+        Row: {
+          id: string
+          project_id: string
+          loai: string
+          ticket_id: string | null
+          ly_do: string | null
+          tong_tien: number
+          nguoi_id: string | null
+          luc: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      phieu_kho_dong: {
+        Row: {
+          id: string
+          phieu_id: string
+          vat_tu_id: string
+          so_luong: number
+          don_gia: number
+          thanh_tien: number
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      ca_truc: {
+        Row: {
+          id: string
+          project_id: string
+          ten: string
+          bat_dau: string
+          ket_thuc: string
+          dang_dung: boolean
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          ten: string
+          bat_dau: string
+          ket_thuc: string
+          dang_dung?: boolean
+        }
+        Update: {
+          ten?: string
+          bat_dau?: string
+          ket_thuc?: string
+          dang_dung?: boolean
+        }
+        Relationships: []
+      }
+      phien_truc: {
+        Row: {
+          id: string
+          project_id: string
+          ca_id: string
+          ngay: string
+          nguoi_id: string
+          vao_luc: string
+          ra_luc: string | null
+          ly_do_khong_ban_giao: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      ban_giao_ca: {
+        Row: {
+          id: string
+          project_id: string
+          phien_ra: string
+          phien_vao: string
+          nguoi_ra: string
+          nguoi_vao: string
+          tinh_hinh: string
+          luc: string
+          ky_nhan_luc: string | null
+          ky_nhan_boi: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      ban_giao_ca_viec: {
+        Row: { id: string; ban_giao_id: string; ticket_id: string; ghi_chu: string | null }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      ke_hoach_thu: {
+        Row: {
+          id: string
+          project_id: string
+          ten: string
+          mo_ta: string | null
+          tong_chi_phi: number
+          cach_chia: string
+          so_dot: number
+          ky_bat_dau: string
+          nghi_quyet: string
+          ngay_nq: string | null
+          tong_dien_tich: number | null
+          so_can: number
+          lap_luc: string
+          lap_boi: string | null
+          huy_luc: string | null
+          huy_boi: string | null
+          ly_do_huy: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      ke_hoach_thu_dot: {
+        Row: { id: string; ke_hoach_id: string; thu_tu: number; ky: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      dot_thu_can: {
+        Row: {
+          id: string
+          dot_id: string
+          unit_id: string
+          ma_can: string
+          dien_tich: number | null
+          so_tien: number
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       bieu_quyet: {
         Row: {
           id: string
@@ -1737,6 +1971,355 @@ export type Database = {
           huy_luc: string | null
           ly_do_huy: string | null
           ghi_chu: string | null
+        }[]
+      }
+      du_an_cua_toi: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          name: string
+          so_toa: number
+          so_can: number
+          vai_tro: string | null
+        }[]
+      }
+      duoc_quan_ly: { Args: { p_project: string }; Returns: boolean }
+      sinh_bao_cao_quy: { Args: Record<string, never>; Returns: number }
+      moc_quy: { Args: { p_nam: number; p_quy: number }; Returns: { tu: string; den: string }[] }
+      quy_cua: { Args: { p_ngay: string }; Returns: { nam: number; quy: number }[] }
+      lap_bao_cao_quy: { Args: { p_project: string; p_nam: number; p_quy: number }; Returns: string }
+      huy_bao_cao_quy: { Args: { p_id: string; p_ly_do: string }; Returns: undefined }
+      bao_cao_quy_ds: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          nam: number
+          quy: number
+          tu_ngay: string
+          den_ngay: string
+          hoa_don_phai_thu: number
+          hoa_don_da_thu: number
+          cong_no_cuoi_quy: number
+          so_can: number
+          so_can_no: number
+          quy_bao_tri_dau: number
+          quy_bao_tri_cuoi: number
+          quy_chi_trong_quy: number
+          chi_vat_tu: number
+          so_yeu_cau: number
+          so_yeu_cau_xong: number
+          so_yeu_cau_dung_han: number
+          so_danh_gia: number
+          tong_diem: number
+          so_thi_cong: number
+          so_ban_giao_ca: number
+          so_ban_giao_chua_ky: number
+          lap_luc: string
+          nguoi_lap: string | null
+          audit_den: number | null
+          huy_luc: string | null
+          ly_do_huy: string | null
+        }[]
+      }
+      duoc_thi_cong: {
+        Args: { p_id: string; p_luc?: string | null }
+        Returns: { duoc: boolean; ly_do: string }[]
+      }
+      dang_ky_thi_cong: {
+        Args: {
+          p_unit: string
+          p_loai: string
+          p_hang_muc: string
+          p_tu: string
+          p_den: string
+          p_gio_bat_dau?: string
+          p_gio_ket_thuc?: string
+          p_don_vi?: string | null
+          p_dien_thoai?: string | null
+          p_so_nguoi?: number | null
+          p_ghi_chu?: string | null
+        }
+        Returns: string
+      }
+      duyet_thi_cong: {
+        Args: {
+          p_id: string
+          p_ky_quy: number
+          p_gio_bat_dau?: string | null
+          p_gio_ket_thuc?: string | null
+          p_lam_chu_nhat?: boolean | null
+        }
+        Returns: undefined
+      }
+      tu_choi_thi_cong: { Args: { p_id: string; p_ly_do: string }; Returns: undefined }
+      ghi_ky_quy: { Args: { p_id: string; p_so_tien: number }; Returns: number }
+      tat_toan_thi_cong: {
+        Args: { p_id: string; p_tru?: number; p_ly_do_tru?: string | null }
+        Returns: Json
+      }
+      huy_thi_cong: { Args: { p_id: string; p_ly_do: string }; Returns: undefined }
+      thi_cong_ds: {
+        Args: { p_project: string; p_trang_thai?: string | null }
+        Returns: {
+          id: string
+          unit_id: string
+          ma_can: string
+          toa: string
+          loai: string
+          hang_muc: string
+          tu_ngay: string
+          den_ngay: string
+          gio_bat_dau: string
+          gio_ket_thuc: string
+          lam_chu_nhat: boolean
+          don_vi_thi_cong: string | null
+          dien_thoai: string | null
+          ky_quy_phai_nop: number
+          ky_quy_da_nop: number
+          ky_quy_tru: number
+          ky_quy_hoan: number
+          ly_do_tru: string | null
+          trang_thai: string
+          ly_do_tu_choi: string | null
+          ghi_chu: string | null
+          dang_ky_luc: string
+          nguoi_dang_ky: string | null
+          duoc_luc_nay: boolean
+          ly_do_luc_nay: string
+        }[]
+      }
+      thi_cong_hom_nay: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          ma_can: string
+          toa: string
+          loai: string
+          hang_muc: string
+          don_vi_thi_cong: string | null
+          dien_thoai: string | null
+          so_nguoi: number | null
+          gio_bat_dau: string
+          gio_ket_thuc: string
+          duoc: boolean
+          ly_do: string
+        }[]
+      }
+      thi_cong_cua_toi: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          unit_id: string
+          ma_can: string
+          loai: string
+          hang_muc: string
+          tu_ngay: string
+          den_ngay: string
+          gio_bat_dau: string
+          gio_ket_thuc: string
+          lam_chu_nhat: boolean
+          ky_quy_phai_nop: number
+          ky_quy_da_nop: number
+          ky_quy_tru: number
+          ky_quy_hoan: number
+          ly_do_tru: string | null
+          trang_thai: string
+          ly_do_tu_choi: string | null
+          dang_ky_luc: string
+          duoc_luc_nay: boolean
+          ly_do_luc_nay: string
+        }[]
+      }
+      ton_vat_tu: { Args: { p_vat_tu: string }; Returns: number }
+      nhap_kho: { Args: { p_project: string; p_ly_do: string | null; p_dong: Json }; Returns: string }
+      xuat_kho: {
+        Args: { p_project: string; p_ticket: string | null; p_ly_do: string | null; p_dong: Json }
+        Returns: string
+      }
+      kiem_ke_kho: { Args: { p_project: string; p_ly_do: string; p_dong: Json }; Returns: Json }
+      ton_kho: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          ma: string
+          ten: string
+          don_vi: string
+          don_gia: number
+          ton: number
+          ton_toi_thieu: number
+          gia_tri: number
+          sap_het: boolean
+        }[]
+      }
+      so_kho: {
+        Args: { p_project: string; p_tu: string; p_den: string }
+        Returns: {
+          phieu_id: string
+          loai: string
+          luc: string
+          tong_tien: number
+          ly_do: string | null
+          nguoi: string | null
+          ticket_id: string | null
+          tieu_de_yc: string | null
+          ma_can: string | null
+          so_dong: number
+        }[]
+      }
+      dong_phieu_kho: {
+        Args: { p_phieu: string }
+        Returns: {
+          vat_tu_id: string
+          ma: string
+          ten: string
+          don_vi: string
+          so_luong: number
+          don_gia: number
+          thanh_tien: number
+        }[]
+      }
+      vat_tu_da_dung: {
+        Args: { p_ticket: string }
+        Returns: {
+          ma: string
+          ten: string
+          don_vi: string
+          so_luong: number
+          don_gia: number
+          thanh_tien: number
+          luc: string
+        }[]
+      }
+      vao_ca: { Args: { p_ca: string; p_ngay?: string | null }; Returns: string }
+      ban_giao_ca: {
+        Args: { p_phien_ra: string; p_phien_vao: string; p_tinh_hinh: string; p_viec?: string[] }
+        Returns: string
+      }
+      ky_nhan_ca: { Args: { p_id: string }; Returns: undefined }
+      ket_ca_khong_ban_giao: { Args: { p_phien: string; p_ly_do: string }; Returns: undefined }
+      dang_truc: {
+        Args: { p_project: string }
+        Returns: {
+          phien_id: string
+          ca_id: string
+          ca: string
+          nguoi_id: string
+          ho_ten: string | null
+          vao_luc: string
+          ngay: string
+          la_toi: boolean
+        }[]
+      }
+      ban_giao_chua_ky: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          luc: string
+          ca_ra: string
+          ca_vao: string
+          nguoi_ra: string | null
+          nguoi_vao: string | null
+          tinh_hinh: string
+          so_viec: number
+          gio_cho: number
+          cho_toi_ky: boolean
+        }[]
+      }
+      so_ban_giao_ca: {
+        Args: { p_project: string; p_tu: string; p_den: string }
+        Returns: {
+          id: string
+          luc: string
+          ca_ra: string
+          ca_vao: string
+          nguoi_ra: string | null
+          nguoi_vao: string | null
+          tinh_hinh: string
+          ky_nhan_luc: string | null
+          so_viec: number
+        }[]
+      }
+      viec_ban_giao: {
+        Args: { p_id: string }
+        Returns: {
+          ticket_id: string
+          tieu_de: string
+          trang_thai: Database["public"]["Enums"]["ticket_status"]
+          muc_do: Database["public"]["Enums"]["ticket_priority"]
+          ma_can: string
+          ghi_chu: string | null
+          qua_han: boolean
+        }[]
+      }
+      lap_ke_hoach_thu: {
+        Args: {
+          p_project: string
+          p_ten: string
+          p_tong: number
+          p_cach_chia: string
+          p_so_dot: number
+          p_ky_bat_dau: string
+          p_nghi_quyet: string
+          p_ngay_nq?: string | null
+          p_mo_ta?: string | null
+        }
+        Returns: string
+      }
+      huy_ke_hoach_thu: { Args: { p_id: string; p_ly_do: string }; Returns: Json }
+      ke_hoach_thu_ds: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          ten: string
+          tong_chi_phi: number
+          cach_chia: string
+          so_dot: number
+          ky_bat_dau: string
+          nghi_quyet: string
+          ngay_nq: string | null
+          so_can: number
+          lap_luc: string
+          huy_luc: string | null
+          ly_do_huy: string | null
+          da_len_hoa_don: number
+          chua_toi_ky: number
+          so_can_con_no: number
+          dot_da_qua: number
+        }[]
+      }
+      ke_hoach_thu_chi_tiet: {
+        Args: { p_id: string }
+        Returns: {
+          unit_id: string
+          ma_can: string
+          dien_tich: number | null
+          thu_tu: number
+          ky: string
+          so_tien: number
+          hoa_don_id: string | null
+          hoa_don_trang_thai: string | null
+          hoa_don_tong: number | null
+          hoa_don_da_tra: number | null
+        }[]
+      }
+      tra_gop_cua_toi: {
+        Args: Record<string, never>
+        Returns: {
+          ke_hoach_id: string
+          ten: string
+          nghi_quyet: string
+          so_dot: number
+          unit_id: string
+          ma_can: string
+          tong_phai_tra: number
+          thu_tu: number
+          ky: string
+          so_tien: number
+          hoa_don_id: string | null
+          hoa_don_trang_thai: string | null
+          hoa_don_tong: number | null
+          hoa_don_da_tra: number | null
+          huy_luc: string | null
         }[]
       }
       mo_bieu_quyet: {

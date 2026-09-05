@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 
 export type BuildingState = { error?: string; ok?: string }
 
@@ -17,7 +18,7 @@ export async function addBuilding(_prev: BuildingState, formData: FormData): Pro
   }
 
   const db = await createClient()
-  const { data: project } = await db.from('projects').select('id').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) return { error: 'Chưa có dự án nào.' }
 
   // RLS (building_staff_write) mới là chốt chặn: cư dân gọi thẳng API cũng bị chặn.

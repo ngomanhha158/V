@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import {
   Bang, Card, CardHead, Chip, Hop, PageHead, Pill, Td, Th, Tr, Trong, ngayGioVN, vnd,
 } from '@/components/ui'
@@ -24,7 +25,7 @@ export default async function DoiSoat({
   const tab: TabKey = laTab(sp.tab) ? sp.tab : 'chua_khop'
 
   const db = await createClient()
-  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
   const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')

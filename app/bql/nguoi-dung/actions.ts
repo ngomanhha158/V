@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { createAdminClient } from '@/lib/db/admin'
 import { normalizeEmail, toE164VN } from '@/lib/phone'
 
@@ -35,8 +36,7 @@ async function guard(): Promise<
   { loi: string } | { db: Awaited<ReturnType<typeof createClient>>; project: string }
 > {
   const db = await createClient()
-  const { data: project } = await db.from('projects')
-    .select('id').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) return { loi: 'Chưa có dự án nào trong hệ thống.' }
 
   const { data: laTruong } = await db.rpc('is_bql_manager', { p_project: project.id })

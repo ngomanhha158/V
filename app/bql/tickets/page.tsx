@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { dispatchTicket } from './actions'
 import { Constants } from '@/lib/db/database.types'
 import {
@@ -32,7 +33,7 @@ export default async function BqlTickets({
   const sp = await searchParams
   const db = await createClient()
 
-  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) return <main><p>Chưa có dự án nào.</p></main>
   const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')

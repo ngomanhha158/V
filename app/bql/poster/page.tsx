@@ -2,6 +2,7 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import QRCode from 'qrcode'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { Card, CardHead, Hop, PageHead, Trong } from '@/components/ui'
 import { PrintButton } from './print-button'
 
@@ -15,7 +16,7 @@ export const dynamic = 'force-dynamic'
  */
 export default async function Poster() {
   const db = await createClient()
-  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
   const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')

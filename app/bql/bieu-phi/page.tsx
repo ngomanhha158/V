@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { Card, CardHead, Hop, PageHead, Pill, Trong } from '@/components/ui'
 import { DanhSachPhi, FormThem, type BieuPhi } from './form'
 
@@ -8,7 +9,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function BieuPhiPage() {
   const db = await createClient()
-  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
   const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
