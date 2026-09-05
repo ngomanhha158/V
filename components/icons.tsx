@@ -209,3 +209,11 @@ export const IcChiaDot = (p: SVGProps<SVGSVGElement>) => (
     <path d="M16 20v-11h3v11" /><path d="M5 6h6M8 3.5v5" />
   </I>
 )
+
+/** Đồng hồ có mũi tên vòng: ca này nối tiếp ca kia, không phải một mốc giờ. */
+export const IcCaTruc = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M12 7v5l3 2" />
+    <path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1" /><path d="M21 3v4h-4" />
+  </I>
+)

@@ -1251,6 +1251,69 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      ca_truc: {
+        Row: {
+          id: string
+          project_id: string
+          ten: string
+          bat_dau: string
+          ket_thuc: string
+          dang_dung: boolean
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          ten: string
+          bat_dau: string
+          ket_thuc: string
+          dang_dung?: boolean
+        }
+        Update: {
+          ten?: string
+          bat_dau?: string
+          ket_thuc?: string
+          dang_dung?: boolean
+        }
+        Relationships: []
+      }
+      phien_truc: {
+        Row: {
+          id: string
+          project_id: string
+          ca_id: string
+          ngay: string
+          nguoi_id: string
+          vao_luc: string
+          ra_luc: string | null
+          ly_do_khong_ban_giao: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      ban_giao_ca: {
+        Row: {
+          id: string
+          project_id: string
+          phien_ra: string
+          phien_vao: string
+          nguoi_ra: string
+          nguoi_vao: string
+          tinh_hinh: string
+          luc: string
+          ky_nhan_luc: string | null
+          ky_nhan_boi: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      ban_giao_ca_viec: {
+        Row: { id: string; ban_giao_id: string; ticket_id: string; ghi_chu: string | null }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       ke_hoach_thu: {
         Row: {
           id: string
@@ -1780,6 +1843,67 @@ export type Database = {
           huy_luc: string | null
           ly_do_huy: string | null
           ghi_chu: string | null
+        }[]
+      }
+      vao_ca: { Args: { p_ca: string; p_ngay?: string | null }; Returns: string }
+      ban_giao_ca: {
+        Args: { p_phien_ra: string; p_phien_vao: string; p_tinh_hinh: string; p_viec?: string[] }
+        Returns: string
+      }
+      ky_nhan_ca: { Args: { p_id: string }; Returns: undefined }
+      ket_ca_khong_ban_giao: { Args: { p_phien: string; p_ly_do: string }; Returns: undefined }
+      dang_truc: {
+        Args: { p_project: string }
+        Returns: {
+          phien_id: string
+          ca_id: string
+          ca: string
+          nguoi_id: string
+          ho_ten: string | null
+          vao_luc: string
+          ngay: string
+          la_toi: boolean
+        }[]
+      }
+      ban_giao_chua_ky: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          luc: string
+          ca_ra: string
+          ca_vao: string
+          nguoi_ra: string | null
+          nguoi_vao: string | null
+          tinh_hinh: string
+          so_viec: number
+          gio_cho: number
+          cho_toi_ky: boolean
+        }[]
+      }
+      so_ban_giao_ca: {
+        Args: { p_project: string; p_tu: string; p_den: string }
+        Returns: {
+          id: string
+          luc: string
+          ca_ra: string
+          ca_vao: string
+          nguoi_ra: string | null
+          nguoi_vao: string | null
+          tinh_hinh: string
+          ky_nhan_luc: string | null
+          so_viec: number
+        }[]
+      }
+      viec_ban_giao: {
+        Args: { p_id: string }
+        Returns: {
+          ticket_id: string
+          tieu_de: string
+          trang_thai: Database["public"]["Enums"]["ticket_status"]
+          muc_do: Database["public"]["Enums"]["ticket_priority"]
+          ma_can: string
+          ghi_chu: string | null
+          qua_han: boolean
         }[]
       }
       lap_ke_hoach_thu: {

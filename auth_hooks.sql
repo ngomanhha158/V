@@ -148,6 +148,13 @@ grant select on bieu_quyet, bieu_quyet_can, phieu_bieu_quyet to authenticated;
 -- hóa đơn và phiếu thu. Không cấp quyền ghi: lập và hủy đều đi qua hàm definer,
 -- vì phép chia tiền chỉ đúng khi làm ở một chỗ duy nhất.
 grant select on ke_hoach_thu, ke_hoach_thu_dot, dot_thu_can to authenticated;
+-- Ca trực và bàn giao ca (§23). Khối này CHỈ NHÂN SỰ đọc — RLS đã chốt bằng
+-- is_staff, và cấp select ở đây không mở gì cho cư dân. Riêng ca_truc cấp cả
+-- quyền ghi vì đó là danh mục BQL tự quản lý (policy ca_truc_staff chốt lại);
+-- vào ca / bàn giao / ký nhận thì đi qua hàm definer, vì thứ tự và chữ ký chỉ
+-- đúng khi làm ở một chỗ duy nhất.
+grant select, insert, update, delete on ca_truc to authenticated;
+grant select on phien_truc, ban_giao_ca, ban_giao_ca_viec to authenticated;
 grant select on dat_tien_ich to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
@@ -276,6 +283,16 @@ grant execute on function huy_ke_hoach_thu(uuid, text)                        to
 grant execute on function ke_hoach_thu_ds(uuid)                               to authenticated;
 grant execute on function ke_hoach_thu_chi_tiet(uuid)                         to authenticated;
 grant execute on function tra_gop_cua_toi()                                   to authenticated;
+-- Ca trực và bàn giao ca (§23). Mọi hàm tự chốt is_staff hoặc "chính người đang
+-- trực" BÊN TRONG, nên cấp cho authenticated chỉ quyết định ai GỌI ĐƯỢC.
+grant execute on function vao_ca(uuid, date)                                  to authenticated;
+grant execute on function ban_giao_ca(uuid, uuid, text, uuid[])               to authenticated;
+grant execute on function ky_nhan_ca(uuid)                                    to authenticated;
+grant execute on function ket_ca_khong_ban_giao(uuid, text)                   to authenticated;
+grant execute on function dang_truc(uuid)                                     to authenticated;
+grant execute on function ban_giao_chua_ky(uuid)                              to authenticated;
+grant execute on function so_ban_giao_ca(uuid, date, date)                    to authenticated;
+grant execute on function viec_ban_giao(uuid)                                 to authenticated;
 
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là

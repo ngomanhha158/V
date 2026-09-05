@@ -4832,3 +4832,318 @@ create policy dtc_read on dot_thu_can for select
 
 create trigger trg_audit_ke_hoach_thu after insert or update or delete on ke_hoach_thu
   for each row execute function ghi_nhat_ky('project_id');
+
+-- ═════════════════ 23. CA TRỰC VÀ BIÊN BẢN BÀN GIAO CA ══════════════════════
+-- Việc dở dang của ca trước không sang được ca sau. Cư dân phải kể lại sự cố từ
+-- đầu cho người mới, và đúng lúc họ đang bực nhất.
+--
+-- CHỐT LỚN NHẤT: việc chuyển tiếp NEO VÀO YÊU CẦU CÓ THẬT, không phải một ô chữ
+-- tự do. Ô chữ tự do biến biên bản bàn giao thành một cuốn nhật ký không ai đọc,
+-- và con số "3 việc chuyển tiếp" thành một số do người ta tự gõ. Neo vào ticket
+-- thì ca sau bấm mở được từng việc, và con số đếm ra từ dữ liệu.
+--
+-- CHỐT THỨ HAI: ca vào KÝ NHẬN, không phải ca ra ký. Ca ra viết, ca vào xác nhận
+-- đã đọc. Ký một mình thì "tôi đã báo rồi" và "tôi chưa nghe ai nói gì" vẫn là
+-- hai lời khai không có gì phân xử.
+--
+-- CHỐT THỨ BA: không bàn giao được cho người chưa vào ca. Nghe thì bất tiện,
+-- nhưng khoảng trống "ca đêm về mà ca ngày chưa tới" là một sự cố vận hành thật,
+-- và nó phải HIỆN RA chứ không bị một biên bản gửi vào chỗ trống che đi. Lối
+-- thoát có sẵn — kết ca kèm lý do — và lối thoát đó cũng nằm lại trong sổ.
+
+create table if not exists ca_truc (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  ten         text not null,
+  bat_dau     time not null,
+  ket_thuc    time not null,
+  dang_dung   boolean not null default true,
+  unique (project_id, ten)
+);
+
+-- Một người, một ca, một ngày. `ngay` là ngày ca BẮT ĐẦU — ca đêm 18:00–06:00
+-- thuộc về ngày nó mở, không phải ngày nó đóng.
+create table if not exists phien_truc (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  ca_id       uuid not null references ca_truc(id) on delete cascade,
+  ngay        date not null,
+  nguoi_id    uuid not null references profiles(id),
+  vao_luc     timestamptz not null default clock_timestamp(),
+  ra_luc      timestamptz,
+  -- Kết ca mà không bàn giao được cho ai: phải ghi lý do, và dòng đó ở lại.
+  ly_do_khong_ban_giao text,
+  unique (ca_id, ngay, nguoi_id)
+);
+create index if not exists phien_truc_dang_truc
+  on phien_truc (project_id, vao_luc desc) where ra_luc is null;
+
+create table if not exists ban_giao_ca (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  phien_ra    uuid not null references phien_truc(id) on delete cascade,
+  phien_vao   uuid not null references phien_truc(id) on delete cascade,
+  -- CHÉP tên hai bên vào đây, không chỉ trỏ qua phien_truc: biên bản phải tự
+  -- nói được nó là giữa ai với ai, kể cả nhiều năm sau. Và chép ra thì mới đặt
+  -- được ràng buộc "hai bên hai người" ngay ở tầng bảng.
+  nguoi_ra    uuid not null references profiles(id),
+  nguoi_vao   uuid not null references profiles(id),
+  -- BẮT BUỘC. "Không có gì bất thường" cũng là một câu phải viết ra — im lặng
+  -- và bình yên trông giống hệt nhau trong sổ.
+  tinh_hinh   text not null,
+  luc         timestamptz not null default clock_timestamp(),
+  ky_nhan_luc timestamptz,
+  ky_nhan_boi uuid references profiles(id),
+  constraint hai_phien_khac_nhau check (phien_ra <> phien_vao),
+  constraint hai_ben_hai_nguoi   check (nguoi_ra <> nguoi_vao),
+  constraint ky_thi_phai_co_nguoi check ((ky_nhan_luc is null) = (ky_nhan_boi is null))
+);
+create index if not exists ban_giao_ca_chua_ky
+  on ban_giao_ca (project_id, luc desc) where ky_nhan_luc is null;
+
+create table if not exists ban_giao_ca_viec (
+  id          uuid primary key default gen_random_uuid(),
+  ban_giao_id uuid not null references ban_giao_ca(id) on delete cascade,
+  ticket_id   uuid not null references tickets(id) on delete cascade,
+  ghi_chu     text,
+  unique (ban_giao_id, ticket_id)
+);
+
+-- ─────────────────────────── VÀO CA ─────────────────────────────────────────
+-- Tự mở ca của mình. Không có màn xếp lịch: xếp lịch là một tính năng khác, và
+-- bắt phải xếp lịch trước mới trực được thì ngày đầu tiên đã không ai trực được.
+create or replace function vao_ca(p_ca uuid, p_ngay date default null)
+returns uuid language plpgsql security definer set search_path = public as $fn$
+declare c ca_truc; v_ngay date; v_id uuid;
+begin
+  select * into c from ca_truc where id = p_ca;
+  if not found then
+    raise exception 'Khong tim thay ca truc %', p_ca using errcode = '02000';
+  end if;
+  if not is_staff(c.project_id) then
+    raise exception 'Chi nhan su cua du an nay moi vao ca duoc' using errcode = '42501';
+  end if;
+  if not c.dang_dung then
+    raise exception 'Ca % da ngung dung', c.ten using errcode = '23514';
+  end if;
+  v_ngay := coalesce(p_ngay, current_date);
+
+  -- ĐANG TRỰC MỘT CA RỒI thì không vào ca thứ hai. Một người trực hai chỗ cùng
+  -- lúc là một người không trực chỗ nào.
+  if exists (select 1 from phien_truc p
+              where p.nguoi_id = auth.uid() and p.ra_luc is null) then
+    raise exception 'Ban dang trong mot ca chua ket; ket ca do truoc da'
+      using errcode = '23505';
+  end if;
+
+  insert into phien_truc (project_id, ca_id, ngay, nguoi_id)
+    values (c.project_id, p_ca, v_ngay, auth.uid())
+    returning id into v_id;
+  return v_id;
+end $fn$;
+
+-- ─────────────────────────── BÀN GIAO ───────────────────────────────────────
+-- Ca RA viết. Ca vào ký nhận ở hàm dưới.
+create or replace function ban_giao_ca(
+  p_phien_ra uuid, p_phien_vao uuid, p_tinh_hinh text,
+  p_viec uuid[] default '{}'
+) returns uuid language plpgsql security definer set search_path = public as $fn$
+declare r phien_truc; v phien_truc; v_id uuid; t uuid; v_du int;
+begin
+  select * into r from phien_truc where id = p_phien_ra;
+  if not found then
+    raise exception 'Khong tim thay phien truc di ra' using errcode = '02000';
+  end if;
+  select * into v from phien_truc where id = p_phien_vao;
+  if not found then
+    raise exception 'Khong tim thay phien truc di vao — nguoi ca sau chua vao ca'
+      using errcode = '02000';
+  end if;
+
+  -- Chỉ CHÍNH NGƯỜI đang ra ca mới viết được biên bản của mình. Trưởng BQL viết
+  -- hộ thì dòng "ca đêm đã báo" thành lời của người không có mặt đêm đó.
+  if r.nguoi_id <> auth.uid() then
+    raise exception 'Chi nguoi dang ra ca moi viet duoc bien ban cua ca do'
+      using errcode = '42501';
+  end if;
+  if r.ra_luc is not null then
+    raise exception 'Ca nay da ket roi' using errcode = '23514';
+  end if;
+  if v.ra_luc is not null then
+    raise exception 'Nguoi ca sau da ket ca, khong nhan ban giao duoc' using errcode = '23514';
+  end if;
+  if r.project_id <> v.project_id then
+    raise exception 'Hai phien truc khong cung mot du an' using errcode = '42501';
+  end if;
+  if r.nguoi_id = v.nguoi_id then
+    raise exception 'Khong ban giao cho chinh minh duoc' using errcode = '23514';
+  end if;
+  if coalesce(btrim(p_tinh_hinh), '') = '' then
+    raise exception 'Phai ghi tinh hinh ca — "khong co gi bat thuong" cung la mot cau phai viet ra'
+      using errcode = '22023';
+  end if;
+
+  insert into ban_giao_ca (project_id, phien_ra, phien_vao, nguoi_ra, nguoi_vao, tinh_hinh)
+    values (r.project_id, p_phien_ra, p_phien_vao, r.nguoi_id, v.nguoi_id, btrim(p_tinh_hinh))
+    returning id into v_id;
+
+  -- Việc chuyển tiếp: chỉ yêu cầu CÙNG DỰ ÁN và CÒN MỞ. Chuyển tiếp một việc đã
+  -- xong là rác, và rác trong danh sách bàn giao thì ca sau bỏ qua cả danh sách.
+  foreach t in array coalesce(p_viec, '{}') loop
+    select count(*)::int into v_du from tickets
+     where id = t and project_id = r.project_id
+       and status not in ('resolved','closed','rejected');
+    if v_du = 0 then
+      raise exception 'Yeu cau % khong thuoc du an nay hoac da xong', t using errcode = '42501';
+    end if;
+    insert into ban_giao_ca_viec (ban_giao_id, ticket_id) values (v_id, t)
+      on conflict do nothing;
+  end loop;
+
+  -- Ra ca gắn với việc ĐÃ BÀN GIAO, không phải một nút "tôi về" riêng. Tách hai
+  -- việc đó là mở đúng cánh cửa mà tính năng này sinh ra để đóng.
+  update phien_truc set ra_luc = clock_timestamp() where id = p_phien_ra;
+  return v_id;
+end $fn$;
+
+-- Ca VÀO ký nhận. Đây là chữ ký duy nhất có nghĩa: nó nói "tôi đã đọc".
+create or replace function ky_nhan_ca(p_id uuid)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare b ban_giao_ca;
+begin
+  select * into b from ban_giao_ca where id = p_id for update;
+  if not found then
+    raise exception 'Khong tim thay bien ban ban giao %', p_id using errcode = '02000';
+  end if;
+  if b.nguoi_vao <> auth.uid() then
+    raise exception 'Chi nguoi nhan ca moi ky nhan duoc' using errcode = '42501';
+  end if;
+  if b.ky_nhan_luc is not null then
+    raise exception 'Bien ban nay da ky nhan roi' using errcode = '23505';
+  end if;
+  update ban_giao_ca set ky_nhan_luc = clock_timestamp(), ky_nhan_boi = auth.uid()
+   where id = p_id;
+end $fn$;
+
+-- Lối thoát: kết ca khi KHÔNG có ai để bàn giao. Phải ghi lý do, và dòng đó ở
+-- lại trong sổ — đó là điểm khác giữa một lối thoát và một lỗ hổng.
+create or replace function ket_ca_khong_ban_giao(p_phien uuid, p_ly_do text)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare r phien_truc;
+begin
+  select * into r from phien_truc where id = p_phien for update;
+  if not found then
+    raise exception 'Khong tim thay phien truc %', p_phien using errcode = '02000';
+  end if;
+  if r.nguoi_id <> auth.uid() then
+    raise exception 'Chi nguoi dang truc moi ket duoc ca cua minh' using errcode = '42501';
+  end if;
+  if r.ra_luc is not null then
+    raise exception 'Ca nay da ket roi' using errcode = '23505';
+  end if;
+  if coalesce(btrim(p_ly_do), '') = '' then
+    raise exception 'Phai ghi ly do ket ca ma khong ban giao' using errcode = '22023';
+  end if;
+  update phien_truc
+     set ra_luc = clock_timestamp(), ly_do_khong_ban_giao = btrim(p_ly_do)
+   where id = p_phien;
+end $fn$;
+
+-- ─────────────────────────── ĐỌC ────────────────────────────────────────────
+create or replace function dang_truc(p_project uuid)
+returns table (phien_id uuid, ca_id uuid, ca text, nguoi_id uuid, ho_ten text,
+               vao_luc timestamptz, ngay date, la_toi boolean)
+language sql stable security definer set search_path = public as $fn$
+  select p.id, c.id, c.ten, p.nguoi_id, pr.full_name, p.vao_luc, p.ngay,
+         p.nguoi_id = auth.uid()
+    from phien_truc p
+    join ca_truc c on c.id = p.ca_id
+    left join profiles pr on pr.id = p.nguoi_id
+   where p.project_id = p_project and p.ra_luc is null and is_staff(p_project)
+   order by p.vao_luc;
+$fn$;
+
+-- Biên bản CHƯA KÝ NHẬN. Đây là màn quan trọng nhất của cả tính năng: một ca
+-- bắt đầu mà không ai xác nhận đã đọc biên bản ca trước chính là cái hỏng mà
+-- tính năng này dựng lên để chặn.
+create or replace function ban_giao_chua_ky(p_project uuid)
+returns table (id uuid, luc timestamptz, ca_ra text, ca_vao text,
+               nguoi_ra text, nguoi_vao text, tinh_hinh text, so_viec int,
+               gio_cho numeric, cho_toi_ky boolean)
+language sql stable security definer set search_path = public as $fn$
+  select b.id, b.luc, cr.ten, cv.ten, pr.full_name, pv.full_name, b.tinh_hinh,
+         (select count(*)::int from ban_giao_ca_viec w where w.ban_giao_id = b.id),
+         round(extract(epoch from (clock_timestamp() - b.luc)) / 3600, 1),
+         -- So bằng ID, không bằng TÊN CA: hai người cùng một ca thì so theo ca
+         -- sẽ hiện nút "ký nhận" cho cả hai, và người không được ký bấm vào chỉ
+         -- nhận một lỗi quyền.
+         b.nguoi_vao = auth.uid()
+    from ban_giao_ca b
+    join phien_truc r on r.id = b.phien_ra
+    join phien_truc v on v.id = b.phien_vao
+    join ca_truc cr on cr.id = r.ca_id
+    join ca_truc cv on cv.id = v.ca_id
+    left join profiles pr on pr.id = b.nguoi_ra
+    left join profiles pv on pv.id = b.nguoi_vao
+   where b.project_id = p_project and b.ky_nhan_luc is null and is_staff(p_project)
+   order by b.luc;
+$fn$;
+
+create or replace function so_ban_giao_ca(p_project uuid, p_tu date, p_den date)
+returns table (id uuid, luc timestamptz, ca_ra text, ca_vao text,
+               nguoi_ra text, nguoi_vao text, tinh_hinh text,
+               ky_nhan_luc timestamptz, so_viec int)
+language sql stable security definer set search_path = public as $fn$
+  select b.id, b.luc, cr.ten, cv.ten, pr.full_name, pv.full_name, b.tinh_hinh,
+         b.ky_nhan_luc,
+         (select count(*)::int from ban_giao_ca_viec w where w.ban_giao_id = b.id)
+    from ban_giao_ca b
+    join phien_truc r on r.id = b.phien_ra
+    join phien_truc v on v.id = b.phien_vao
+    join ca_truc cr on cr.id = r.ca_id
+    join ca_truc cv on cv.id = v.ca_id
+    left join profiles pr on pr.id = b.nguoi_ra
+    left join profiles pv on pv.id = b.nguoi_vao
+   where b.project_id = p_project and is_staff(p_project)
+     and b.luc >= p_tu::timestamptz and b.luc < (p_den + 1)::timestamptz
+   order by b.luc desc;
+$fn$;
+
+-- Việc của một biên bản, kèm tình trạng HIỆN TẠI của yêu cầu — không chép trạng
+-- thái vào lúc bàn giao. Ca sau mở biên bản ra là để đi làm việc đó, nên họ cần
+-- biết bây giờ nó đang ở đâu, không phải nó đã ở đâu lúc 6 giờ sáng.
+create or replace function viec_ban_giao(p_id uuid)
+returns table (ticket_id uuid, tieu_de text, trang_thai ticket_status,
+               muc_do ticket_priority, ma_can text, ghi_chu text,
+               qua_han boolean)
+language sql stable security definer set search_path = public as $fn$
+  select t.id, t.title, t.status, t.priority, u.code, w.ghi_chu,
+         (t.sla_resolve_due is not null and t.sla_resolve_due < clock_timestamp()
+          and t.status not in ('resolved','closed','rejected'))
+    from ban_giao_ca_viec w
+    join ban_giao_ca b on b.id = w.ban_giao_id
+    join tickets t on t.id = w.ticket_id
+    join units u on u.id = t.unit_id
+   where w.ban_giao_id = p_id and is_staff(b.project_id)
+   order by t.priority desc, t.created_at;
+$fn$;
+
+-- ── RLS ──
+alter table ca_truc         enable row level security;
+alter table phien_truc      enable row level security;
+alter table ban_giao_ca     enable row level security;
+alter table ban_giao_ca_viec enable row level security;
+-- Toàn bộ khối này CHỈ NHÂN SỰ đọc. Cư dân không có việc gì với lịch trực, và
+-- công khai ai trực đêm nào là công khai lúc nào tòa nhà mỏng người nhất.
+create policy ca_truc_staff on ca_truc for all
+  using (is_staff(project_id)) with check (is_staff(project_id));
+create policy phien_truc_staff on phien_truc for select using (is_staff(project_id));
+create policy ban_giao_staff on ban_giao_ca for select using (is_staff(project_id));
+create policy ban_giao_viec_staff on ban_giao_ca_viec for select
+  using (exists (select 1 from ban_giao_ca b
+                  where b.id = ban_giao_ca_viec.ban_giao_id and is_staff(b.project_id)));
+
+create trigger trg_audit_ban_giao_ca after insert or update or delete on ban_giao_ca
+  for each row execute function ghi_nhat_ky('project_id');
+create trigger trg_audit_phien_truc after insert or update or delete on phien_truc
+  for each row execute function ghi_nhat_ky('project_id');
