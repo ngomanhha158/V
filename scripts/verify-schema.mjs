@@ -29,7 +29,7 @@ async function run(file) {
 }
 
 // test_rls.sql chạy cuối: nó SET ROLE + FORCE RLS, ảnh hưởng các test sau nếu chạy trước.
-const files = ['schema.sql', 'seed.sql', 'test_billing.sql', 'test_tickets.sql', 'test_jobs.sql', 'test_dashboard.sql', 'test_doisoat.sql', 'test_golive.sql', 'test_nguoidung.sql', 'test_nhatky.sql', 'test_baotri.sql', 'test_banggop.sql', 'test_the.sql', 'test_xe.sql', 'test_phieu_thu.sql', 'test_quy.sql', 'test_khach.sql', 'test_tienich.sql', 'test_kienhang.sql', 'test_bangiao.sql', 'test_bieuquyet.sql', 'test_tragop.sql', 'test_catruc.sql', 'test_kho.sql', 'test_thicong.sql', 'test_baocao.sql', 'test_rls.sql']
+const files = ['schema.sql', 'seed.sql', 'test_billing.sql', 'test_tickets.sql', 'test_jobs.sql', 'test_dashboard.sql', 'test_doisoat.sql', 'test_golive.sql', 'test_nguoidung.sql', 'test_nhatky.sql', 'test_baotri.sql', 'test_banggop.sql', 'test_the.sql', 'test_xe.sql', 'test_phieu_thu.sql', 'test_quy.sql', 'test_khach.sql', 'test_tienich.sql', 'test_kienhang.sql', 'test_bangiao.sql', 'test_bieuquyet.sql', 'test_tragop.sql', 'test_catruc.sql', 'test_kho.sql', 'test_thicong.sql', 'test_baocao.sql', 'test_datoa.sql', 'test_rls.sql']
 let ok = true
 for (const f of files) ok = (await run(f)) && ok
 process.exit(ok ? 0 : 1)

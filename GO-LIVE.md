@@ -22,8 +22,8 @@ Không phải kế hoạch — là những gì đã kiểm và những gì còn 
 | Backup | GitHub Actions dump hằng ngày, gồm cả schema `auth` |
 | Lưu trữ ảnh | Volume của service `v`, phục vụ qua `/api/anh` — hỏi lại quyền từng lần xem |
 | Quyền `anon` | **Không có bảng nào** — request không JWT không đọc được gì |
-| Bộ test | 25 file SQL độc lập + cả ngăn xếp Railway + 285 test JS, xanh trên CI mỗi lần push |
-| Giao diện | 65 route thật (chưa kể bản demo), build sạch, sáng/tối |
+| Bộ test | 26 file SQL độc lập + cả ngăn xếp Railway + 293 test JS, xanh trên CI mỗi lần push |
+| Giao diện | 67 route thật (chưa kể bản demo), build sạch, sáng/tối |
 
 Tám job nền và giờ chạy (giờ VN). Đặt thiếu một cái thì nó KHÔNG chạy và
 không có gì báo — bảng đối chiếu đầy đủ ở đầu `cron.sql` và bước 8 của

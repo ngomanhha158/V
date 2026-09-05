@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import {
   Card, CardHead, Hop, PageHead, Pill, Trong, cx, ngayGioVN,
 } from '@/components/ui'
@@ -19,8 +20,8 @@ export const dynamic = 'force-dynamic'
 
 export default async function Page() {
   const db = await createClient()
-  const [{ data: project }, { data: me }] = await Promise.all([
-    db.from('projects').select('id, name').limit(1).maybeSingle(),
+  const [project, { data: me }] = await Promise.all([
+    duAnBQL(),
     db.auth.getUser(),
   ])
   if (!project) {

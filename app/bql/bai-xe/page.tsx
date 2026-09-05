@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { Bang, Card, CardHead, Hop, PageHead, Pill, Td, Th, Tr, Trong } from '@/components/ui'
 import { conTrong, nhanLoai, vuotSucChua } from '@/lib/xe'
 import { FormHanMuc, NutGoi } from './form'
@@ -7,7 +8,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function Page() {
   const db = await createClient()
-  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) {
     return (
       <div className="space-y-5">

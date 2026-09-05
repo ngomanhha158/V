@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import {
   coLoc, dieuKien, docLoc, queryLoc, taLoc, TEN_TINH_TRANG, tenLoai, type ThamSo,
 } from '@/lib/can-ho'
@@ -19,7 +20,7 @@ export default async function CanHo({
   const sp = await searchParams
   const db = await createClient()
 
-  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào trong hệ thống" />
 
   // Guard hiển thị. Chốt chặn thật là RLS (policy unit_staff_write).

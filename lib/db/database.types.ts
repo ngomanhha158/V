@@ -1973,6 +1973,17 @@ export type Database = {
           ghi_chu: string | null
         }[]
       }
+      du_an_cua_toi: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          name: string
+          so_toa: number
+          so_can: number
+          vai_tro: string | null
+        }[]
+      }
+      duoc_quan_ly: { Args: { p_project: string }; Returns: boolean }
       sinh_bao_cao_quy: { Args: Record<string, never>; Returns: number }
       moc_quy: { Args: { p_nam: number; p_quy: number }; Returns: { tu: string; den: string }[] }
       quy_cua: { Args: { p_ngay: string }; Returns: { nam: number; quy: number }[] }

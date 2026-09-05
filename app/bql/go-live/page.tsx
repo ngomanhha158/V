@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { bankConfig } from '@/lib/bank'
 import {
   Card, CardHead, Hop, LinkButton, PageHead, Pill, Stat, Trong, cx, soVN,
@@ -53,7 +54,7 @@ function Hang({ m }: { m: Muc }) {
 
 export default async function GoLive() {
   const db = await createClient()
-  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
   const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')

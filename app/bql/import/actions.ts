@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { validateUnitRows, type ParsedUnit, type RowIssue } from '@/lib/import/units'
 import { sheetToRows } from '@/lib/import/xlsx'
 
@@ -12,9 +13,7 @@ export type PreviewState =
 
 /** Chỉ để ẩn/hiện giao diện. Chốt chặn thật là RLS (policy unit_staff_write). */
 async function currentProject() {
-  const db = await createClient()
-  const { data } = await db.from('projects').select('id, name').limit(1).maybeSingle()
-  return data
+  return await duAnBQL()
 }
 
 export async function previewUnits(_prev: PreviewState, formData: FormData): Promise<PreviewState> {

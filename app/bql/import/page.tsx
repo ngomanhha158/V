@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { ImportForm } from './import-form'
 import { PageHead, Trong } from '@/components/ui'
 
@@ -7,7 +8,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function ImportUnits() {
   const db = await createClient()
-  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) {
     return <Trong title="Chưa có dự án nào trong hệ thống" />
   }

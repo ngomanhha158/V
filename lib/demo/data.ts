@@ -733,3 +733,14 @@ export const BINH_LUAN_DEMO: BinhLuanDemo[] = [
   { id: 3, body: '(nội dung đã ẩn)',
     created_at: ngayGio(1, 9), an_luc: ngayGio(1, 10), can: 'P1-07.02', ten: 'Hoàng Thị Mai' },
 ]
+
+// Người xem demo vận hành BA khu — đủ để hộp chọn khu có nghĩa. Khu thứ ba cố
+// tình chưa nhập căn nào: đó là trạng thái thật của một khu vừa ký hợp đồng,
+// và màn "Khu đang quản lý" phải nói ra thay vì hiện 0 căn không giải thích.
+export type KhuDemo = { id: string; name: string; so_toa: number; so_can: number; vai_tro: string | null }
+
+export const KHU_DEMO: KhuDemo[] = [
+  { id: 'demo-project', name: 'Sunrise Riverside', so_toa: 3, so_can: 468, vai_tro: 'bql_manager' },
+  { id: 'demo-green', name: 'Green Park Tower', so_toa: 1, so_can: 212, vai_tro: 'bql_staff' },
+  { id: 'demo-moi', name: 'The Aurora (mới ký)', so_toa: 2, so_can: 0, vai_tro: 'bql_manager' },
+]

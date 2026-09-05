@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { LOAI_XE, type LoaiXe } from '@/lib/xe'
 
 export type BieuPhiState = { error?: string; ok?: string }
@@ -25,8 +26,8 @@ function docTien(s: string): number | null {
 
 async function duAn() {
   const db = await createClient()
-  const { data } = await db.from('projects').select('id').limit(1).maybeSingle()
-  return { db, project: data?.id ?? null }
+  const duAn = await duAnBQL()
+  return { db, project: duAn?.id ?? null }
 }
 
 function dichLoi(code: string | undefined, msg: string): string {

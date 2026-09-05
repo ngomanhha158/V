@@ -336,6 +336,9 @@ grant execute on function quy_cua(date)                                       to
 grant execute on function lap_bao_cao_quy(uuid, int, int)                     to authenticated;
 grant execute on function huy_bao_cao_quy(uuid, text)                         to authenticated;
 grant execute on function bao_cao_quy_ds(uuid)                                to authenticated;
+-- Nhiều khu (§27).
+grant execute on function du_an_cua_toi()                                     to authenticated;
+grant execute on function duoc_quan_ly(uuid)                                  to authenticated;
 
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là

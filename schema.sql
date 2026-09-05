@@ -6102,3 +6102,53 @@ create policy bcq_read on bao_cao_quy for select
 
 create trigger trg_audit_bao_cao_quy after insert or update or delete on bao_cao_quy
   for each row execute function ghi_nhat_ky('project_id');
+
+-- ═══════════════ 27. NHIỀU TÒA, NHIỀU KHU TRONG MỘT TÀI KHOẢN ═══════════════
+-- Hệ thống đang mặc định lấy DỰ ÁN ĐẦU TIÊN ở mọi màn BQL. Thêm khu thứ hai là
+-- mỗi màn hiện dữ liệu của khu nào tùy vào thứ tự trả về của Postgres — tức là
+-- tùy vào may rủi.
+--
+-- Schema đã có project_id ở mọi bảng từ đầu và RLS đã lọc theo is_staff, nên
+-- phần khó KHÔNG nằm ở dữ liệu: nó nằm ở chỗ "khu đang xem" phải là một lựa
+-- chọn có thật, ghi ở đâu đó, và kiểm lại được.
+--
+-- CHỐT: DANH SÁCH DỰ ÁN CŨNG PHẢI LỌC.
+-- `project_read using (true)` đúng khi cả hệ thống có một khu. Với nhiều khách
+-- hàng trên cùng một cài đặt thì nó thành một chỗ liệt kê tên mọi khu cho bất
+-- kỳ ai đăng nhập — và tên khu là thông tin thương mại.
+
+drop policy if exists project_read on projects;
+create policy project_read on projects for select
+  using (is_staff(id) or o_trong_du_an(id));
+
+-- Các khu người này ĐƯỢC QUẢN LÝ, kèm vài con số để nhận ra khu nào là khu nào.
+-- Người trực ban nhớ "khu 468 căn" chứ không nhớ uuid.
+create or replace function du_an_cua_toi()
+returns table (id uuid, name text, so_toa int, so_can int, vai_tro text)
+language sql stable security definer set search_path = public as $fn$
+  select p.id, p.name,
+         (select count(*)::int from buildings b where b.project_id = p.id),
+         (select count(*)::int from units u join buildings b on b.id = u.building_id
+           where b.project_id = p.id),
+         -- Vai trò CAO NHẤT ở khu đó. Một người có thể vừa là BQT vừa là kỹ
+         -- thuật; hiện cả hai thì màn chọn khu thành một bảng phân quyền.
+         (select s.role::text from staff_assignments s
+           where s.project_id = p.id and s.user_id = auth.uid() and s.is_active
+           order by case s.role
+                      when 'bql_manager' then 1 when 'bqt' then 2
+                      when 'bql_staff' then 3 when 'technician' then 4
+                      else 5 end
+           limit 1)
+    from projects p
+   where exists (select 1 from staff_assignments s
+                  where s.project_id = p.id and s.user_id = auth.uid() and s.is_active)
+   order by p.name;
+$fn$;
+
+-- Khu này người đang đăng nhập có được quản lý không. Dùng để KIỂM LẠI lựa chọn
+-- lưu trong cookie — cookie do trình duyệt gửi lên, và một id bịa trong đó phải
+-- rơi về khu mặc định chứ không được làm màn hình trống trơn không lý do.
+create or replace function duoc_quan_ly(p_project uuid)
+returns boolean language sql stable security definer set search_path = public as $fn$
+  select p_project is not null and is_staff(p_project);
+$fn$;

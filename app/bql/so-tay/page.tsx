@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { SoanMuc } from './form'
 import { xoaMuc } from './actions'
 import { Button, Card, CardHead, Hop, PageHead, Pill, Stat, Trong } from '@/components/ui'
@@ -8,7 +9,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function BqlSoTay() {
   const db = await createClient()
-  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
   const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')

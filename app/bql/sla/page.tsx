@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { Card, CardHead, Hop, PageHead, Pill, Trong } from '@/components/ui'
 import { DanhSachSla, FormThem, type Sla } from './form'
 
@@ -9,7 +10,7 @@ const THU_TU = { urgent: 0, high: 1, normal: 2, low: 3 } as Record<string, numbe
 
 export default async function SlaPage() {
   const db = await createClient()
-  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
+  const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
   const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
   if (!isStaff) redirect('/')
