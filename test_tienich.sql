@@ -18,6 +18,13 @@ declare
   mai date := current_date + 1;
   r record; n int;
 begin
+  -- `mai` KHÔNG được rơi vào Chủ nhật. Bài kiểm hạn mức bên dưới đặt hai lượt
+  -- ở `mai` rồi thử lượt thứ ba ở `mai + 1`, và nếu `mai` là Chủ nhật thì
+  -- `mai + 1` đã sang tuần mới — lượt thứ ba được nhận, bài test đỏ, mà chẳng
+  -- có gì hỏng cả. Một bài test đổi nghĩa theo thứ trong tuần còn tệ hơn không
+  -- có bài test: nó đỏ vào một sáng thứ Bảy nào đó và không ai hiểu vì sao.
+  if extract(isodow from mai) = 7 then mai := mai + 1; end if;
+
   insert into projects (id, name) values (p_t, 'Khu tien ich');
   insert into buildings (id, project_id, code, name) values (t_t, p_t, 'T1', 'Toa T1');
   insert into units (building_id, code, floor_no) values (t_t,'T1-05.01',5), (t_t,'T1-05.02',5);
@@ -32,7 +39,10 @@ begin
     (u_a, a, 'owner', 'active'), (u_b, b, 'owner', 'active');
 
   insert into tien_ich (project_id, ten, phi, toi_da_tuan, dat_truoc_ngay)
-    values (p_t, 'Sanh sinh hoat', 200000, 2, 14) returning id into ti;
+  -- dat_truoc_ngay = 30 chứ không phải 14: mấy bài dưới cần một ngày ở TUẦN
+  -- KHÁC để hạn mức tuần không xen vào. Bài 6b vẫn chứng minh được cửa sổ này
+  -- có tác dụng — nó thử đặt trước 60 ngày.
+    values (p_t, 'Sanh sinh hoat', 200000, 2, 30) returning id into ti;
   insert into tien_ich_suat (tien_ich_id, thu_tu, bat_dau, ket_thuc)
     values (ti, 1, time '08:00', time '11:00') returning id into s1;
   insert into tien_ich_suat (tien_ich_id, thu_tu, bat_dau, ket_thuc)
@@ -74,6 +84,11 @@ begin
   -- Không có nó thì một hộ đặt kín cả tháng tối thứ Bảy, và những hộ còn lại
   -- quay về Zalo.
   d2 := dat_suat(s3, mai);        -- căn B: suất thứ hai trong tuần
+  -- Lượt thứ ba đặt sang NGÀY KHÁC, cố ý: hạn mức tính theo tuần chứ không theo
+  -- ngày, và đặt lại trong cùng ngày thì một lỗi "đếm theo ngày" vẫn lọt qua.
+  if tuan_cua(mai) <> tuan_cua(mai + 1) then
+    raise exception 'FIXTURE hong: % va % khong cung tuan, bai kiem han muc mat nghia', mai, mai + 1;
+  end if;
   begin
     perform dat_suat(s1, mai + 1);
     raise exception 'FAIL 3: dat duoc suat thu ba trong tuan (toi_da_tuan = 2)';
@@ -181,21 +196,27 @@ begin
   exception when insufficient_privilege then null;
   end;
   perform set_config('test.uid', bql::text, true);
+  -- SANG TUẦN KHÁC (mai + 8), cố ý: căn A đang kín hạn mức của tuần `mai`, nên
+  -- thử ở tuần đó thì lỗi bật ra là "hết suất tuần" chứ không phải "suất đã
+  -- đóng" — bài test vẫn xanh mà chứng minh nhầm chuyện.
   begin
-    perform dong_suat(s2, mai + 3, '  ');
+    perform dong_suat(s2, mai + 8, '  ');
     raise exception 'FAIL 8: dong duoc suat ma khong ghi ly do';
   exception when sqlstate '22023' then null;
   end;
-  perform dong_suat(s2, mai + 3, 'Ve sinh dinh ky');
+  perform dong_suat(s2, mai + 8, 'Ve sinh dinh ky');
   -- Đóng rồi thì cư dân không đặt được nữa — cùng một index chống trùng.
   perform set_config('test.uid', a::text, true);
   begin
-    perform dat_suat(s2, mai + 3);
+    perform dat_suat(s2, mai + 8);
     raise exception 'FAIL 8b: dat duoc suat BQL da dong';
   exception when unique_violation then null;
+        when check_violation then
+    -- Bắt riêng để nói ra: đây là bài đã đỏ vì lý do KHÁC lý do đang kiểm.
+    raise exception 'FAIL 8b1: chan vi ly do khac chu khong phai vi suat da dong: %', sqlerrm;
   end;
   -- Và cư dân không tự mở lại được.
-  select id into d1 from dat_tien_ich where suat_id = s2 and ngay = mai + 3 and dong_cua;
+  select id into d1 from dat_tien_ich where suat_id = s2 and ngay = mai + 8 and dong_cua;
   begin
     perform huy_dat_suat(d1);
     raise exception 'FAIL 8c: cu dan mo lai duoc suat BQL da dong';
@@ -203,7 +224,7 @@ begin
   end;
   perform set_config('test.uid', bql::text, true);
   begin
-    perform dong_suat(s2, mai + 3, 'Ve sinh lan hai');
+    perform dong_suat(s2, mai + 8, 'Ve sinh lan hai');
     raise exception 'FAIL 8d: dong duoc mot suat da dong';
   exception when unique_violation then null;
   end;
@@ -240,9 +261,15 @@ begin
   update tien_ich set dang_mo = false where id = ti;
   perform set_config('test.uid', a::text, true);
   begin
-    perform dat_suat(s2, mai + 5);
+    -- mai + 9: lại là tuần khác. Ở tuần `mai` thì căn A hết hạn mức, và lỗi hết
+    -- hạn mức cũng là check_violation — bài test sẽ xanh dù tính năng "đóng cửa
+    -- tiện ích" có hỏng hoàn toàn.
+    perform dat_suat(s2, mai + 9);
     raise exception 'FAIL 10: dat duoc khi tien ich dang dong';
-  exception when check_violation then null;
+  exception when check_violation then
+    if sqlerrm not like '%dang dong%' and sqlerrm not like '%dong cua%' then
+      raise exception 'FAIL 10a: chan vi ly do khac chu khong phai vi tien ich dong: %', sqlerrm;
+    end if;
   end;
   update tien_ich set dang_mo = true where id = ti;
 
