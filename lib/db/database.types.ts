@@ -1251,6 +1251,39 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      dang_ky_thi_cong: {
+        Row: {
+          id: string
+          project_id: string
+          unit_id: string
+          loai: string
+          hang_muc: string
+          tu_ngay: string
+          den_ngay: string
+          gio_bat_dau: string
+          gio_ket_thuc: string
+          lam_chu_nhat: boolean
+          don_vi_thi_cong: string | null
+          dien_thoai: string | null
+          so_nguoi: number | null
+          ky_quy_phai_nop: number
+          ky_quy_da_nop: number
+          ky_quy_tru: number
+          ky_quy_hoan: number
+          ly_do_tru: string | null
+          trang_thai: string
+          ghi_chu: string | null
+          dang_ky_boi: string | null
+          dang_ky_luc: string
+          duyet_boi: string | null
+          duyet_luc: string | null
+          ly_do_tu_choi: string | null
+          xong_luc: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       vat_tu: {
         Row: {
           id: string
@@ -1901,6 +1934,115 @@ export type Database = {
           huy_luc: string | null
           ly_do_huy: string | null
           ghi_chu: string | null
+        }[]
+      }
+      duoc_thi_cong: {
+        Args: { p_id: string; p_luc?: string | null }
+        Returns: { duoc: boolean; ly_do: string }[]
+      }
+      dang_ky_thi_cong: {
+        Args: {
+          p_unit: string
+          p_loai: string
+          p_hang_muc: string
+          p_tu: string
+          p_den: string
+          p_gio_bat_dau?: string
+          p_gio_ket_thuc?: string
+          p_don_vi?: string | null
+          p_dien_thoai?: string | null
+          p_so_nguoi?: number | null
+          p_ghi_chu?: string | null
+        }
+        Returns: string
+      }
+      duyet_thi_cong: {
+        Args: {
+          p_id: string
+          p_ky_quy: number
+          p_gio_bat_dau?: string | null
+          p_gio_ket_thuc?: string | null
+          p_lam_chu_nhat?: boolean | null
+        }
+        Returns: undefined
+      }
+      tu_choi_thi_cong: { Args: { p_id: string; p_ly_do: string }; Returns: undefined }
+      ghi_ky_quy: { Args: { p_id: string; p_so_tien: number }; Returns: number }
+      tat_toan_thi_cong: {
+        Args: { p_id: string; p_tru?: number; p_ly_do_tru?: string | null }
+        Returns: Json
+      }
+      huy_thi_cong: { Args: { p_id: string; p_ly_do: string }; Returns: undefined }
+      thi_cong_ds: {
+        Args: { p_project: string; p_trang_thai?: string | null }
+        Returns: {
+          id: string
+          unit_id: string
+          ma_can: string
+          toa: string
+          loai: string
+          hang_muc: string
+          tu_ngay: string
+          den_ngay: string
+          gio_bat_dau: string
+          gio_ket_thuc: string
+          lam_chu_nhat: boolean
+          don_vi_thi_cong: string | null
+          dien_thoai: string | null
+          ky_quy_phai_nop: number
+          ky_quy_da_nop: number
+          ky_quy_tru: number
+          ky_quy_hoan: number
+          ly_do_tru: string | null
+          trang_thai: string
+          ly_do_tu_choi: string | null
+          ghi_chu: string | null
+          dang_ky_luc: string
+          nguoi_dang_ky: string | null
+          duoc_luc_nay: boolean
+          ly_do_luc_nay: string
+        }[]
+      }
+      thi_cong_hom_nay: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          ma_can: string
+          toa: string
+          loai: string
+          hang_muc: string
+          don_vi_thi_cong: string | null
+          dien_thoai: string | null
+          so_nguoi: number | null
+          gio_bat_dau: string
+          gio_ket_thuc: string
+          duoc: boolean
+          ly_do: string
+        }[]
+      }
+      thi_cong_cua_toi: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          unit_id: string
+          ma_can: string
+          loai: string
+          hang_muc: string
+          tu_ngay: string
+          den_ngay: string
+          gio_bat_dau: string
+          gio_ket_thuc: string
+          lam_chu_nhat: boolean
+          ky_quy_phai_nop: number
+          ky_quy_da_nop: number
+          ky_quy_tru: number
+          ky_quy_hoan: number
+          ly_do_tru: string | null
+          trang_thai: string
+          ly_do_tu_choi: string | null
+          dang_ky_luc: string
+          duoc_luc_nay: boolean
+          ly_do_luc_nay: string
         }[]
       }
       ton_vat_tu: { Args: { p_vat_tu: string }; Returns: number }

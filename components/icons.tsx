@@ -225,3 +225,11 @@ export const IcKho = (p: SVGProps<SVGSVGElement>) => (
     <path d="M5 9 8 4l3 5" /><path d="M8 13h.01M16 16h.01" />
   </I>
 )
+
+/** Búa và thước: sửa chữa có phép, khác IcYeuCau là báo hỏng. */
+export const IcThiCong = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M14 3.5 20.5 10l-2.5 2.5L11.5 6z" /><path d="M12.5 8 4 16.5V20h3.5L16 11.5" />
+    <path d="M3 3h4M5 3v4" />
+  </I>
+)

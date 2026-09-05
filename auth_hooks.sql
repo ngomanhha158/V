@@ -162,6 +162,10 @@ grant select on phien_truc, ban_giao_ca, ban_giao_ca_viec to authenticated;
 -- mọi dòng đều đi qua một cửa.
 grant select, insert, update, delete on vat_tu to authenticated;
 grant select on phieu_kho, phieu_kho_dong to authenticated;
+-- Đăng ký thi công (§25). Chỉ select: đăng ký, duyệt, ghi ký quỹ, tất toán đều
+-- đi qua hàm definer — vòng đời tiền ký quỹ chỉ cân được khi mọi lần cộng trừ
+-- đều qua một cửa. RLS (dktc_read) cho cư dân thấy đăng ký của căn mình.
+grant select on dang_ky_thi_cong to authenticated;
 grant select on dat_tien_ich to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
@@ -309,6 +313,17 @@ grant execute on function ton_kho(uuid)                                       to
 grant execute on function so_kho(uuid, date, date)                            to authenticated;
 grant execute on function dong_phieu_kho(uuid)                                to authenticated;
 grant execute on function vat_tu_da_dung(uuid)                                to authenticated;
+-- Đăng ký thi công (§25).
+grant execute on function duoc_thi_cong(uuid, timestamptz)                    to authenticated;
+grant execute on function dang_ky_thi_cong(uuid, text, text, date, date, time, time, text, text, int, text) to authenticated;
+grant execute on function duyet_thi_cong(uuid, bigint, time, time, boolean)   to authenticated;
+grant execute on function tu_choi_thi_cong(uuid, text)                        to authenticated;
+grant execute on function ghi_ky_quy(uuid, bigint)                            to authenticated;
+grant execute on function tat_toan_thi_cong(uuid, bigint, text)               to authenticated;
+grant execute on function huy_thi_cong(uuid, text)                            to authenticated;
+grant execute on function thi_cong_ds(uuid, text)                             to authenticated;
+grant execute on function thi_cong_hom_nay(uuid)                              to authenticated;
+grant execute on function thi_cong_cua_toi()                                  to authenticated;
 
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là

@@ -5,7 +5,7 @@ import { ThemeToggle } from './theme-toggle'
 import { NutRa } from './nut-ra'
 import {
   IcBanGiao, IcBieuDo, IcCanHo, IcCheck, IcDoiSoat, IcHoaDon, IcLich, IcLoa, IcNguoi, IcNha, IcNhap, IcQR,
-  IcBieuQuyet, IcCaTruc, IcChiaDot, IcDatCho, IcKho, IcKet, IcKhach, IcKien, IcPhieuThu, IcSach, IcSo, IcTaiVe, IcThe, IcTien,
+  IcBieuQuyet, IcCaTruc, IcChiaDot, IcDatCho, IcKho, IcThiCong, IcKet, IcKhach, IcKien, IcPhieuThu, IcSach, IcSo, IcTaiVe, IcThe, IcTien,
   IcToaNha, IcXe, IcYeuCau,
 } from '@/components/icons'
 
@@ -45,6 +45,7 @@ export function BqlShell({
       <NavDoc href={`${base}/bql/so-ra-vao`} icon={<IcKhach />}>Sổ ra vào</NavDoc>
       <NavDoc href={`${base}/bql/tien-ich`} icon={<IcDatCho />}>Tiện ích</NavDoc>
       <NavDoc href={`${base}/bql/kien-hang`} icon={<IcKien />}>Nhận hàng hộ</NavDoc>
+      <NavDoc href={`${base}/bql/thi-cong`} icon={<IcThiCong />}>Chuyển nhà &amp; thi công</NavDoc>
       <NavDoc href={`${base}/bql/bai-xe`} icon={<IcXe />}>Chỗ đỗ xe</NavDoc>
 
       <Muc nhan="Truyền thông" />
