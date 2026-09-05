@@ -27,7 +27,10 @@ export function NavDoc({
       className={cx(
         // shrink-0 + nowrap: trên điện thoại thanh này cuộn ngang, thiếu hai
         // cái đó thì các mục bị bóp lại cho vừa màn hình và vỡ chữ.
-        'flex shrink-0 items-center gap-2.5 rounded-ctl px-2.5 py-2 text-sm font-medium whitespace-nowrap transition-colors',
+        // py-2 trên điện thoại (vùng chạm cho ngón tay), py-1 trên máy tính:
+        // con trỏ chuột không cần 36px, và mỗi 8px tiết kiệm ở đây nhân với số
+        // mục là cả một khoảng cuộn.
+        'flex shrink-0 items-center gap-2.5 rounded-ctl px-2.5 py-2 text-sm font-medium whitespace-nowrap transition-colors lg:py-1',
         on ? 'bg-brand-soft text-brand-deep' : 'text-muted hover:bg-sunken hover:text-ink',
       )}
     >
