@@ -142,6 +142,12 @@ grant select on chot_ban_giao, chot_ban_giao_can to authenticated;
 -- bieu_quyet_can (danh sách căn đóng băng) cả khu đọc được: mẫu số của mọi tỷ
 -- lệ nằm ở đó, giấu nó đi là để lại đúng chỗ mà hội nghị hay bị nghi ngờ nhất.
 grant select on bieu_quyet, bieu_quyet_can, phieu_bieu_quyet to authenticated;
+-- Thu theo đợt (§22). Kế hoạch và lịch đợt: cả khu đọc được — con số trên hóa
+-- đơn của họ phải tra ngược lại được tới nghị quyết đã duyệt. Số tiền của TỪNG
+-- CĂN thì RLS (dtc_read) lọc theo đúng luật xem tiền của căn đó, cùng vị từ với
+-- hóa đơn và phiếu thu. Không cấp quyền ghi: lập và hủy đều đi qua hàm definer,
+-- vì phép chia tiền chỉ đúng khi làm ở một chỗ duy nhất.
+grant select on ke_hoach_thu, ke_hoach_thu_dot, dot_thu_can to authenticated;
 grant select on dat_tien_ich to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
@@ -264,6 +270,12 @@ grant execute on function kiem_phieu_bieu_quyet(uuid)                         to
 grant execute on function dong_bieu_quyet(uuid)                               to authenticated;
 grant execute on function huy_bieu_quyet(uuid, text)                          to authenticated;
 grant execute on function bieu_quyet_cua_toi(uuid)                            to authenticated;
+-- Thu theo đợt (§22).
+grant execute on function lap_ke_hoach_thu(uuid, text, bigint, text, int, date, text, date, text) to authenticated;
+grant execute on function huy_ke_hoach_thu(uuid, text)                        to authenticated;
+grant execute on function ke_hoach_thu_ds(uuid)                               to authenticated;
+grant execute on function ke_hoach_thu_chi_tiet(uuid)                         to authenticated;
+grant execute on function tra_gop_cua_toi()                                   to authenticated;
 
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là

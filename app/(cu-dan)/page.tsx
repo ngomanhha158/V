@@ -111,6 +111,7 @@ export default async function Home() {
         <Link href="/khach" className="font-medium text-muted hover:text-ink">Khách thăm</Link>
         <Link href="/quy-bao-tri" className="font-medium text-muted hover:text-ink">Quỹ bảo trì</Link>
         <Link href="/bieu-quyet" className="font-medium text-muted hover:text-ink">Biểu quyết</Link>
+        <Link href="/tra-gop" className="font-medium text-muted hover:text-ink">Khoản chia đợt</Link>
         {isStaff && (
           <Link href="/bql" className="font-medium text-brand hover:underline">
             Quản lý tòa nhà (BQL) →

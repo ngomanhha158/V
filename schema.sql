@@ -773,6 +773,28 @@ begin
      -- ...và không sinh dòng 0đ phí gửi xe cho căn không đăng ký chiếc nào
      and (f.calc_method <> 'per_vehicle' or q.so_luong > 0);
 
+  -- Đợt thu của khoản lớn (§22). Nằm Ở ĐÂY chứ không ở một hàm riêng: hàm này
+  -- xóa sạch rồi dựng lại toàn bộ dòng của hóa đơn còn draft, nên bất kỳ dòng
+  -- nào sinh ở nơi khác đều bị nó quét đi ngay lần chạy kế tiếp. Một hóa đơn thì
+  -- chỉ một chỗ được quyền dựng dòng cho nó.
+  --
+  -- fee_type_id để null: đợt sơn mặt ngoài không phải một loại phí định kỳ, và
+  -- nhét nó vào biểu phí là để nó tự tính lại vào tháng sau.
+  insert into invoice_lines (invoice_id, fee_type_id, description, quantity, unit_price, amount)
+  select i.id, null,
+         k.ten || ' — đợt ' || d.thu_tu || '/' || k.so_dot,
+         1, c.so_tien, c.so_tien
+    from invoices i
+    join ke_hoach_thu_dot d on d.ky = i.period
+    join ke_hoach_thu k on k.id = d.ke_hoach_id
+                       and k.project_id = i.project_id
+                       -- Kế hoạch đã hủy thì dừng thu ngay từ kỳ còn draft.
+                       -- Hóa đơn đã phát hành thì giữ nguyên: tiền đó đã báo
+                       -- tới cư dân rồi.
+                       and k.huy_luc is null
+    join dot_thu_can c on c.dot_id = d.id and c.unit_id = i.unit_id
+   where i.project_id = p_project and i.period = p_period and i.status = 'draft';
+
   update invoices i set total_amount = coalesce(
       (select sum(l.amount) from invoice_lines l where l.invoice_id = i.id), 0)
    where i.project_id = p_project and i.period = p_period and i.status = 'draft';
@@ -4465,3 +4487,348 @@ create trigger trg_audit_bieu_quyet after insert or update or delete on bieu_quy
   for each row execute function ghi_nhat_ky('project_id');
 create trigger trg_audit_phieu_bq after insert or update or delete on phieu_bieu_quyet
   for each row execute function ghi_nhat_ky('unit_id');
+
+-- ═════════════════ 22. THU THEO ĐỢT CHO KHOẢN LỚN ═══════════════════════════
+-- Sơn lại mặt ngoài hết 2,1 tỷ. Chia cho 468 căn là mỗi nhà 4,5 triệu trong
+-- MỘT tháng, cộng thêm phí quản lý và tiền nước của đúng tháng đó. Hộ khó khăn
+-- không trả nổi thì họ không trả CHẬM — họ nợ luôn, và khoản nợ đó ở lại trong
+-- báo cáo công nợ nhiều năm.
+--
+-- CHỐT LỚN NHẤT CỦA THIẾT KẾ: đợt thu KHÔNG phải một loại tiền mới.
+-- Nó là một DÒNG trên hóa đơn tháng của kỳ tương ứng, sinh ra từ chính
+-- generate_invoices(). Làm cách khác — một bảng "đợt thu" riêng có tiền riêng —
+-- là dựng nguồn sự thật thứ hai về tiền: báo cáo công nợ, phiếu thu, đối soát
+-- ngân hàng và chốt sổ bàn giao đều đang đọc invoices, và không cái nào trong
+-- số đó biết bảng mới tồn tại.
+--
+-- Hệ quả tốt kèm theo: cư dân vẫn chuyển MỘT lần mỗi tháng, đúng cái họ muốn,
+-- và mã QR / nội dung chuyển khoản không phải sinh thêm loại nào.
+--
+-- Vì sao KHÔNG giữ một hóa đơn lớn rồi cho trả dần: `due_date` chỉ có một. Hộ
+-- đang trả đúng lịch vẫn bị đếm là quá hạn ngay từ ngày đầu, và mọi màn công nợ
+-- sẽ tô đỏ đúng những người đang làm đúng.
+
+create table if not exists ke_hoach_thu (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  ten         text not null,
+  mo_ta       text,
+  tong_chi_phi bigint not null check (tong_chi_phi > 0),
+  -- 'theo_can': chia đều mỗi căn. 'theo_m2': chia theo diện tích.
+  cach_chia   text not null check (cach_chia in ('theo_can','theo_m2')),
+  so_dot      int not null check (so_dot between 1 and 36),
+  ky_bat_dau  date not null,
+  -- Khoản lớn phân bổ cho cả tòa mà không có nghị quyết thì đó là một khoản
+  -- thu do một người quyết định. Bắt buộc như bên quỹ bảo trì (§16).
+  nghi_quyet  text not null,
+  ngay_nq     date,
+  -- Đóng băng lúc lập, để về sau đối chiếu lại được mẫu số đã dùng.
+  tong_dien_tich numeric(12,2),
+  so_can      int not null,
+  lap_luc     timestamptz not null default clock_timestamp(),
+  lap_boi     uuid references profiles(id),
+  huy_luc     timestamptz, huy_boi uuid references profiles(id), ly_do_huy text,
+  constraint huy_phai_co_ly_do check ((huy_luc is null) = (ly_do_huy is null)),
+  constraint ky_phai_dau_thang check (ky_bat_dau = date_trunc('month', ky_bat_dau)::date)
+);
+
+-- Lịch: đợt thứ mấy rơi vào kỳ nào.
+create table if not exists ke_hoach_thu_dot (
+  id          uuid primary key default gen_random_uuid(),
+  ke_hoach_id uuid not null references ke_hoach_thu(id) on delete cascade,
+  thu_tu      int not null check (thu_tu > 0),
+  ky          date not null,
+  unique (ke_hoach_id, thu_tu),
+  unique (ke_hoach_id, ky)
+);
+
+-- Số tiền của TỪNG CĂN ở TỪNG ĐỢT, đóng băng lúc lập.
+--
+-- KHÔNG lưu invoice_line_id: generate_invoices() xóa và dựng lại toàn bộ dòng
+-- của hóa đơn còn draft mỗi lần chạy, nên một khóa ngoại trỏ tới dòng đó là
+-- một khóa trỏ vào chỗ trống ngay lần chạy kế tiếp. Muốn biết đợt đã lên hóa
+-- đơn chưa thì nối qua (unit_id, ky) — quan hệ đó thì không đổi.
+create table if not exists dot_thu_can (
+  id          uuid primary key default gen_random_uuid(),
+  dot_id      uuid not null references ke_hoach_thu_dot(id) on delete cascade,
+  unit_id     uuid not null references units(id) on delete cascade,
+  ma_can      text not null,
+  dien_tich   numeric(8,2),
+  so_tien     bigint not null check (so_tien > 0),
+  unique (dot_id, unit_id)
+);
+create index if not exists dot_thu_can_unit on dot_thu_can (unit_id);
+
+-- ─────────────────────────── LẬP KẾ HOẠCH ───────────────────────────────────
+create or replace function lap_ke_hoach_thu(
+  p_project uuid, p_ten text, p_tong bigint, p_cach_chia text,
+  p_so_dot int, p_ky_bat_dau date, p_nghi_quyet text,
+  p_ngay_nq date default null, p_mo_ta text default null
+) returns uuid language plpgsql security definer set search_path = public as $fn$
+declare
+  v_id uuid; v_theo_m2 boolean; v_thieu int; v_tong_dt numeric; v_can int;
+  v_ky date; v_da_phat date; v_kiem bigint; k int;
+begin
+  if not (is_bql_manager(p_project) or is_bqt(p_project)) then
+    raise exception 'Chi truong BQL hoac BQT moi lap duoc ke hoach thu' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_ten), '') = '' then
+    raise exception 'Phai dat ten khoan thu — dong nay in nguyen van len hoa don cua 468 ho'
+      using errcode = '22023';
+  end if;
+  if coalesce(btrim(p_nghi_quyet), '') = '' then
+    raise exception 'Phai ghi so nghi quyet — khoan lon phan bo cho ca toa ma khong co nghi quyet la mot khoan thu do mot nguoi quyet dinh'
+      using errcode = '22023';
+  end if;
+  if p_cach_chia not in ('theo_can','theo_m2') then
+    raise exception 'Cach chia khong hop le: %', p_cach_chia using errcode = '22023';
+  end if;
+  if p_ky_bat_dau <> date_trunc('month', p_ky_bat_dau)::date then
+    raise exception 'Ky bat dau phai la ngay dau thang' using errcode = '22023';
+  end if;
+  if p_ky_bat_dau < date_trunc('month', current_date)::date then
+    raise exception 'Khong lap duoc ke hoach thu cho ky da qua' using errcode = '22023';
+  end if;
+
+  v_theo_m2 := p_cach_chia = 'theo_m2';
+  if v_theo_m2 then
+    -- Cùng lý do như biểu quyết (§21): thiếu diện tích một căn là mẫu số sai,
+    -- và ở đây cái sai đó là TIỀN của từng nhà.
+    select count(*)::int into v_thieu
+      from units u join buildings b on b.id = u.building_id
+     where b.project_id = p_project and coalesce(u.area_m2, 0) <= 0;
+    if v_thieu > 0 then
+      raise exception '% can chua co dien tich; chia theo m2 luc nay ra so tien sai', v_thieu
+        using errcode = '22023';
+    end if;
+  end if;
+
+  select coalesce(sum(u.area_m2), 0), count(*)::int into v_tong_dt, v_can
+    from units u join buildings b on b.id = u.building_id
+   where b.project_id = p_project;
+  if v_can = 0 then
+    raise exception 'Chua co can ho nao' using errcode = '22023';
+  end if;
+
+  -- CHẶN Ở ĐÂY: kỳ đã phát hành hóa đơn thì dòng đợt thu không bao giờ lên
+  -- được nữa (generate_invoices chỉ đụng hóa đơn còn draft). Phát hiện lúc lập
+  -- kế hoạch, chứ không phải ba tháng sau khi có người hỏi tiền đâu.
+  select min(i.period) into v_da_phat
+    from invoices i
+   where i.project_id = p_project
+     and i.status <> 'draft'
+     and i.period >= p_ky_bat_dau
+     and i.period < (p_ky_bat_dau + make_interval(months => p_so_dot))::date;
+  if v_da_phat is not null then
+    raise exception 'Ky % da phat hanh hoa don, dot thu se khong len duoc; chon ky bat dau muon hon',
+      to_char(v_da_phat, 'MM/YYYY') using errcode = '23514';
+  end if;
+
+  insert into ke_hoach_thu (project_id, ten, mo_ta, tong_chi_phi, cach_chia, so_dot,
+                            ky_bat_dau, nghi_quyet, ngay_nq, tong_dien_tich, so_can, lap_boi)
+    values (p_project, btrim(p_ten), nullif(btrim(coalesce(p_mo_ta,'')), ''), p_tong,
+            p_cach_chia, p_so_dot, p_ky_bat_dau, btrim(p_nghi_quyet), p_ngay_nq,
+            case when v_theo_m2 then v_tong_dt end, v_can, auth.uid())
+    returning id into v_id;
+
+  for k in 1 .. p_so_dot loop
+    v_ky := (p_ky_bat_dau + make_interval(months => k - 1))::date;
+    insert into ke_hoach_thu_dot (ke_hoach_id, thu_tu, ky) values (v_id, k, v_ky);
+  end loop;
+
+  -- ── Chia tiền, hai tầng, không rơi mất đồng nào ──
+  -- Tầng 1: tổng chi phí -> từng căn, theo PHƯƠNG PHÁP PHẦN DƯ LỚN NHẤT. Làm
+  -- tròn từng căn rồi cộng lại thì tổng lệch tới vài trăm đồng so với hóa đơn
+  -- nhà thầu — nhỏ, nhưng đó là con số BQT phải giải trình trước hội nghị.
+  -- Tầng 2: tiền của một căn -> từng đợt, đợt CUỐI ôm phần lẻ (đúng thói quen
+  -- ai cũng hiểu: đợt cuối là đợt lệch).
+  insert into dot_thu_can (dot_id, unit_id, ma_can, dien_tich, so_tien)
+  with can as (
+    select u.id, u.code, u.area_m2,
+           case when v_theo_m2 then coalesce(u.area_m2, 0)::numeric else 1 end as ts
+      from units u join buildings b on b.id = u.building_id
+     where b.project_id = p_project
+  ),
+  tong_ts as (select sum(ts) as t from can),
+  chia as (
+    select c.id, c.code, c.area_m2,
+           floor(p_tong::numeric * c.ts / tong_ts.t) as nguyen,
+           p_tong::numeric * c.ts / tong_ts.t
+             - floor(p_tong::numeric * c.ts / tong_ts.t) as le
+      from can c cross join tong_ts
+  ),
+  xep as (
+    select id, code, area_m2, nguyen::bigint as nguyen,
+           row_number() over (order by le desc, code) as hang
+      from chia
+  ),
+  phan_bo as (
+    select x.id, x.code, x.area_m2,
+           x.nguyen + case when x.hang <= p_tong - (select sum(nguyen) from xep)
+                           then 1 else 0 end as tong_phai_tra
+      from xep x
+  )
+  select d.id, p.id, p.code, p.area_m2,
+         case when d.thu_tu < p_so_dot
+              then p.tong_phai_tra / p_so_dot
+              -- Đợt cuối = phần còn lại, tính bằng phép trừ chứ không phải bằng
+              -- một phép chia thứ hai. Chia lần nữa rồi hy vọng khớp là cách
+              -- chắc chắn nhất để tổng các đợt lệch tổng phải trả.
+              else p.tong_phai_tra - (p.tong_phai_tra / p_so_dot) * (p_so_dot - 1)
+         end
+    from phan_bo p
+    cross join ke_hoach_thu_dot d
+   where d.ke_hoach_id = v_id
+     and (case when d.thu_tu < p_so_dot
+               then p.tong_phai_tra / p_so_dot
+               else p.tong_phai_tra - (p.tong_phai_tra / p_so_dot) * (p_so_dot - 1)
+          end) > 0;
+
+  -- TỰ KIỂM. Một kế hoạch mà tổng các đợt không bằng tổng chi phí là một kế
+  -- hoạch sai ngay từ lúc sinh ra, và cái sai đó chỉ lộ ra ở đợt cuối — nhiều
+  -- tháng sau, khi không ai còn nhớ đã chia thế nào.
+  select coalesce(sum(so_tien), 0) into v_kiem
+    from dot_thu_can c join ke_hoach_thu_dot d on d.id = c.dot_id
+   where d.ke_hoach_id = v_id;
+  if v_kiem <> p_tong then
+    raise exception 'Ke hoach thu khong can: tong cac dot % khac tong chi phi %', v_kiem, p_tong
+      using errcode = '23514';
+  end if;
+
+  return v_id;
+end $fn$;
+
+-- ─────────────────────────── HỦY KẾ HOẠCH ───────────────────────────────────
+-- Hủy KHÔNG xóa những đợt đã lên hóa đơn phát hành: tiền đó đã báo tới cư dân,
+-- gỡ nó bằng một nút bấm là làm hóa đơn họ đang cầm nói khác sổ. Đợt chưa tới
+-- kỳ thì dừng hẳn — generate_invoices lọc theo huy_luc is null.
+create or replace function huy_ke_hoach_thu(p_id uuid, p_ly_do text)
+returns jsonb language plpgsql security definer set search_path = public as $fn$
+declare v_pj uuid; v_huy timestamptz; v_da bigint; v_con bigint;
+begin
+  select project_id, huy_luc into v_pj, v_huy from ke_hoach_thu where id = p_id for update;
+  if v_pj is null then
+    raise exception 'Khong tim thay ke hoach thu %', p_id using errcode = '02000';
+  end if;
+  if not (is_bql_manager(v_pj) or is_bqt(v_pj)) then
+    raise exception 'Chi truong BQL hoac BQT moi huy duoc' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_ly_do), '') = '' then
+    raise exception 'Phai ghi ly do huy' using errcode = '22023';
+  end if;
+  if v_huy is not null then
+    raise exception 'Ke hoach thu nay da huy roi' using errcode = '23505';
+  end if;
+
+  select coalesce(sum(c.so_tien) filter (where i.id is not null and i.status <> 'draft'), 0),
+         coalesce(sum(c.so_tien) filter (where i.id is null or i.status = 'draft'), 0)
+    into v_da, v_con
+    from dot_thu_can c
+    join ke_hoach_thu_dot d on d.id = c.dot_id
+    left join invoices i on i.unit_id = c.unit_id and i.period = d.ky
+   where d.ke_hoach_id = p_id;
+
+  update ke_hoach_thu set huy_luc = clock_timestamp(), huy_boi = auth.uid(),
+                          ly_do_huy = btrim(p_ly_do)
+   where id = p_id;
+
+  return jsonb_build_object('da_len_hoa_don', v_da, 'dung_thu', v_con);
+end $fn$;
+
+-- ─────────────────────────── ĐỌC ────────────────────────────────────────────
+-- Ba con số, và CỐ Ý KHÔNG CÓ con số "đã thu".
+--
+-- Đợt thu nằm chung một hóa đơn với phí quản lý và tiền nước. Cư dân chuyển
+-- thiếu một phần thì không có cách nào biết phần thiếu đó thuộc dòng nào —
+-- mọi cách chia đều là bịa. Nên màn hình nói cái nói được: bao nhiêu đã lên
+-- hóa đơn, bao nhiêu chưa tới kỳ, và số căn còn nợ hóa đơn có chứa đợt thu.
+create or replace function ke_hoach_thu_ds(p_project uuid)
+returns table (
+  id uuid, ten text, tong_chi_phi bigint, cach_chia text, so_dot int,
+  ky_bat_dau date, nghi_quyet text, ngay_nq date, so_can int,
+  lap_luc timestamptz, huy_luc timestamptz, ly_do_huy text,
+  da_len_hoa_don bigint, chua_toi_ky bigint,
+  so_can_con_no int, dot_da_qua int
+) language sql stable security definer set search_path = public as $fn$
+  select k.id, k.ten, k.tong_chi_phi, k.cach_chia, k.so_dot, k.ky_bat_dau,
+         k.nghi_quyet, k.ngay_nq, k.so_can, k.lap_luc, k.huy_luc, k.ly_do_huy,
+         coalesce(t.da, 0), coalesce(t.chua, 0),
+         coalesce(t.con_no, 0)::int, coalesce(t.dot_qua, 0)::int
+    from ke_hoach_thu k
+    left join lateral (
+      select coalesce(sum(c.so_tien) filter (where i.id is not null and i.status <> 'draft'), 0) as da,
+             coalesce(sum(c.so_tien) filter (where i.id is null or i.status = 'draft'), 0) as chua,
+             count(distinct c.unit_id) filter (
+               where i.id is not null and i.status <> 'draft'
+                 and i.total_amount > i.paid_amount) as con_no,
+             count(distinct d.id) filter (where d.ky <= date_trunc('month', current_date)::date) as dot_qua
+        from ke_hoach_thu_dot d
+        join dot_thu_can c on c.dot_id = d.id
+        left join invoices i on i.unit_id = c.unit_id and i.period = d.ky
+       where d.ke_hoach_id = k.id
+    ) t on true
+   where k.project_id = p_project and is_staff(p_project)
+   order by k.lap_luc desc;
+$fn$;
+
+-- Chi tiết một kế hoạch: từng căn, từng đợt, kèm tình trạng HÓA ĐƠN chứa nó.
+create or replace function ke_hoach_thu_chi_tiet(p_id uuid)
+returns table (
+  unit_id uuid, ma_can text, dien_tich numeric, thu_tu int, ky date,
+  so_tien bigint, hoa_don_id uuid, hoa_don_trang_thai text,
+  hoa_don_tong bigint, hoa_don_da_tra bigint
+) language sql stable security definer set search_path = public as $fn$
+  select c.unit_id, c.ma_can, c.dien_tich, d.thu_tu, d.ky, c.so_tien,
+         i.id, i.status::text, i.total_amount, i.paid_amount
+    from ke_hoach_thu k
+    join ke_hoach_thu_dot d on d.ke_hoach_id = k.id
+    join dot_thu_can c on c.dot_id = d.id
+    left join invoices i on i.unit_id = c.unit_id and i.period = d.ky
+   where k.id = p_id and is_staff(k.project_id)
+   order by c.ma_can, d.thu_tu;
+$fn$;
+
+-- Màn cư dân: các đợt của CHÍNH CĂN MÌNH, kèm hóa đơn chứa nó.
+create or replace function tra_gop_cua_toi()
+returns table (
+  ke_hoach_id uuid, ten text, nghi_quyet text, so_dot int,
+  unit_id uuid, ma_can text, tong_phai_tra bigint,
+  thu_tu int, ky date, so_tien bigint,
+  hoa_don_id uuid, hoa_don_trang_thai text,
+  hoa_don_tong bigint, hoa_don_da_tra bigint, huy_luc timestamptz
+) language sql stable security definer set search_path = public as $fn$
+  select k.id, k.ten, k.nghi_quyet, k.so_dot,
+         c.unit_id, c.ma_can,
+         (select sum(c2.so_tien) from dot_thu_can c2
+            join ke_hoach_thu_dot d2 on d2.id = c2.dot_id
+           where d2.ke_hoach_id = k.id and c2.unit_id = c.unit_id),
+         d.thu_tu, d.ky, c.so_tien,
+         i.id, i.status::text, i.total_amount, i.paid_amount, k.huy_luc
+    from ke_hoach_thu k
+    join ke_hoach_thu_dot d on d.ke_hoach_id = k.id
+    join dot_thu_can c on c.dot_id = d.id
+    left join invoices i on i.unit_id = c.unit_id and i.period = d.ky
+   where xem_duoc_tien_cua_can(c.unit_id)
+   order by k.lap_luc desc, c.ma_can, d.thu_tu;
+$fn$;
+
+-- ── RLS ──
+alter table ke_hoach_thu     enable row level security;
+alter table ke_hoach_thu_dot enable row level security;
+alter table dot_thu_can      enable row level security;
+-- Khoản chi chung của cả tòa: ai ở trong khu cũng đọc được kế hoạch và lịch.
+-- Giấu đi thì con số trên hóa đơn của họ không có chỗ nào tra ngược lại.
+create policy kht_read on ke_hoach_thu for select
+  using (is_staff(project_id) or o_trong_du_an(project_id));
+create policy kht_dot_read on ke_hoach_thu_dot for select
+  using (exists (select 1 from ke_hoach_thu k where k.id = ke_hoach_thu_dot.ke_hoach_id));
+-- Số tiền của TỪNG CĂN thì theo đúng luật xem tiền của căn đó — cùng vị từ với
+-- hóa đơn và phiếu thu, không viết lại lần thứ ba.
+create policy dtc_read on dot_thu_can for select
+  using (xem_duoc_tien_cua_can(unit_id)
+         or is_staff((select k.project_id from ke_hoach_thu k
+                        join ke_hoach_thu_dot d on d.ke_hoach_id = k.id
+                       where d.id = dot_thu_can.dot_id)));
+
+create trigger trg_audit_ke_hoach_thu after insert or update or delete on ke_hoach_thu
+  for each row execute function ghi_nhat_ky('project_id');

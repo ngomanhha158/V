@@ -5,7 +5,7 @@ import { ThemeToggle } from './theme-toggle'
 import { NutRa } from './nut-ra'
 import {
   IcBanGiao, IcBieuDo, IcCanHo, IcCheck, IcDoiSoat, IcHoaDon, IcLich, IcLoa, IcNguoi, IcNha, IcNhap, IcQR,
-  IcBieuQuyet, IcDatCho, IcKet, IcKhach, IcKien, IcPhieuThu, IcSach, IcSo, IcTaiVe, IcThe, IcTien,
+  IcBieuQuyet, IcChiaDot, IcDatCho, IcKet, IcKhach, IcKien, IcPhieuThu, IcSach, IcSo, IcTaiVe, IcThe, IcTien,
   IcToaNha, IcXe, IcYeuCau,
 } from '@/components/icons'
 
@@ -57,6 +57,7 @@ export function BqlShell({
       <NavDoc href={`${base}/bql/doi-soat`} icon={<IcDoiSoat />}>Đối soát tiền về</NavDoc>
       <NavDoc href={`${base}/bql/phieu-thu`} icon={<IcPhieuThu />}>Phiếu thu</NavDoc>
       <NavDoc href={`${base}/bql/quy-bao-tri`} icon={<IcKet />}>Quỹ bảo trì 2%</NavDoc>
+      <NavDoc href={`${base}/bql/tra-gop`} icon={<IcChiaDot />}>Thu theo đợt</NavDoc>
       <NavDoc href={`${base}/bql/ban-giao`} icon={<IcBanGiao />}>Chốt sổ bàn giao</NavDoc>
       <NavDoc href={`${base}/bql/xuat`} icon={<IcTaiVe />}>Xuất Excel</NavDoc>
 

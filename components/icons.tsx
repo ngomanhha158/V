@@ -200,3 +200,12 @@ export const IcBieuQuyet = (p: SVGProps<SVGSVGElement>) => (
     <path d="M9.5 6.5h5" /><path d="M10 16h4" />
   </I>
 )
+
+/** Ba cột tiền thấp dần theo thời gian: một khoản trải ra thành nhiều kỳ.
+ *  Khác IcTien (một khoản) và IcHoaDon (tờ giấy đòi tiền). */
+export const IcChiaDot = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M4 20h16" /><path d="M6 20v-5h3v5" /><path d="M11 20v-8h3v8" />
+    <path d="M16 20v-11h3v11" /><path d="M5 6h6M8 3.5v5" />
+  </I>
+)
