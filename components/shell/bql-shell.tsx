@@ -5,7 +5,7 @@ import { ThemeToggle } from './theme-toggle'
 import { NutRa } from './nut-ra'
 import {
   IcBanGiao, IcBieuDo, IcCanHo, IcCheck, IcDoiSoat, IcHoaDon, IcLich, IcLoa, IcNguoi, IcNha, IcNhap, IcQR,
-  IcBieuQuyet, IcCaTruc, IcChiaDot, IcDatCho, IcKho, IcThiCong, IcKet, IcKhach, IcKien, IcPhieuThu, IcSach, IcSo, IcTaiVe, IcThe, IcTien,
+  IcBaoCao, IcBieuQuyet, IcCaTruc, IcChiaDot, IcDatCho, IcKho, IcThiCong, IcKet, IcKhach, IcKien, IcPhieuThu, IcSach, IcSo, IcTaiVe, IcThe, IcTien,
   IcToaNha, IcXe, IcYeuCau,
 } from '@/components/icons'
 
@@ -70,6 +70,7 @@ export function BqlShell({
       <NavDoc href={`${base}/bql/duyet-chu-ho`} icon={<IcNguoi />}>Duyệt chủ hộ</NavDoc>
       <NavDoc href={`${base}/bql/go-live`} icon={<IcCheck />}>Sẵn sàng go-live</NavDoc>
       <NavDoc href={`${base}/bql/poster`} icon={<IcQR />}>Poster QR</NavDoc>
+      <NavDoc href={`${base}/bql/bao-cao`} icon={<IcBaoCao />}>Báo cáo quý</NavDoc>
       <NavDoc href={`${base}/bql/nhat-ky`} icon={<IcSo />}>Nhật ký kiểm toán</NavDoc>
 
       <Muc nhan="Dữ liệu" />

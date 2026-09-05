@@ -166,6 +166,10 @@ grant select on phieu_kho, phieu_kho_dong to authenticated;
 -- đi qua hàm definer — vòng đời tiền ký quỹ chỉ cân được khi mọi lần cộng trừ
 -- đều qua một cửa. RLS (dktc_read) cho cư dân thấy đăng ký của căn mình.
 grant select on dang_ky_thi_cong to authenticated;
+-- Báo cáo quý (§26). CẢ KHU đọc được: đây là thứ BQT mang ra họp với cư dân,
+-- giấu nó đi thì mỗi lần họp lại quay về cãi nhau về con số. Không cấp ghi —
+-- báo cáo là bản chụp đóng băng, sinh ra qua hàm và không sửa được sau đó.
+grant select on bao_cao_quy to authenticated;
 grant select on dat_tien_ich to authenticated;
 -- Bảng tin và cẩm nang: RLS (announcement_staff_write / document_staff_write)
 -- quyết định chỉ BQL ghi được. Cấp quyền bảng ở đây là chưa đủ để ai cũng sửa.
@@ -324,6 +328,14 @@ grant execute on function huy_thi_cong(uuid, text)                            to
 grant execute on function thi_cong_ds(uuid, text)                             to authenticated;
 grant execute on function thi_cong_hom_nay(uuid)                              to authenticated;
 grant execute on function thi_cong_cua_toi()                                  to authenticated;
+-- Báo cáo quý (§26). tinh_bao_cao_quy KHÔNG cấp: nó là phần tính không kiểm
+-- quyền, chỉ dành cho lap_bao_cao_quy và job nền. sinh_bao_cao_quy cũng không
+-- cấp — nó là job nền, gọi bằng service_role qua /api/cron.
+grant execute on function moc_quy(int, int)                                   to authenticated;
+grant execute on function quy_cua(date)                                       to authenticated;
+grant execute on function lap_bao_cao_quy(uuid, int, int)                     to authenticated;
+grant execute on function huy_bao_cao_quy(uuid, text)                         to authenticated;
+grant execute on function bao_cao_quy_ds(uuid)                                to authenticated;
 
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là

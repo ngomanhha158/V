@@ -233,3 +233,11 @@ export const IcThiCong = (p: SVGProps<SVGSVGElement>) => (
     <path d="M3 3h4M5 3v4" />
   </I>
 )
+
+/** Trang giấy có biểu đồ cột: báo cáo định kỳ, khác IcBieuDo là màn hình sống. */
+export const IcBaoCao = (p: SVGProps<SVGSVGElement>) => (
+  <I {...p}>
+    <path d="M5 3h9l5 5v13H5z" /><path d="M14 3v5h5" />
+    <path d="M8.5 17v-3M12 17v-5M15.5 17v-2" />
+  </I>
+)

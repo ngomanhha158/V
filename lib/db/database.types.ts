@@ -1251,6 +1251,43 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      bao_cao_quy: {
+        Row: {
+          id: string
+          project_id: string
+          nam: number
+          quy: number
+          tu_ngay: string
+          den_ngay: string
+          hoa_don_phai_thu: number
+          hoa_don_da_thu: number
+          cong_no_cuoi_quy: number
+          so_can: number
+          so_can_no: number
+          quy_bao_tri_dau: number
+          quy_bao_tri_cuoi: number
+          quy_chi_trong_quy: number
+          chi_vat_tu: number
+          so_yeu_cau: number
+          so_yeu_cau_xong: number
+          so_yeu_cau_dung_han: number
+          so_danh_gia: number
+          tong_diem: number
+          so_thi_cong: number
+          so_ban_giao_ca: number
+          so_ban_giao_chua_ky: number
+          ghi_chu: string | null
+          lap_luc: string
+          lap_boi: string | null
+          audit_den: number | null
+          huy_luc: string | null
+          huy_boi: string | null
+          ly_do_huy: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       dang_ky_thi_cong: {
         Row: {
           id: string
@@ -1934,6 +1971,43 @@ export type Database = {
           huy_luc: string | null
           ly_do_huy: string | null
           ghi_chu: string | null
+        }[]
+      }
+      sinh_bao_cao_quy: { Args: Record<string, never>; Returns: number }
+      moc_quy: { Args: { p_nam: number; p_quy: number }; Returns: { tu: string; den: string }[] }
+      quy_cua: { Args: { p_ngay: string }; Returns: { nam: number; quy: number }[] }
+      lap_bao_cao_quy: { Args: { p_project: string; p_nam: number; p_quy: number }; Returns: string }
+      huy_bao_cao_quy: { Args: { p_id: string; p_ly_do: string }; Returns: undefined }
+      bao_cao_quy_ds: {
+        Args: { p_project: string }
+        Returns: {
+          id: string
+          nam: number
+          quy: number
+          tu_ngay: string
+          den_ngay: string
+          hoa_don_phai_thu: number
+          hoa_don_da_thu: number
+          cong_no_cuoi_quy: number
+          so_can: number
+          so_can_no: number
+          quy_bao_tri_dau: number
+          quy_bao_tri_cuoi: number
+          quy_chi_trong_quy: number
+          chi_vat_tu: number
+          so_yeu_cau: number
+          so_yeu_cau_xong: number
+          so_yeu_cau_dung_han: number
+          so_danh_gia: number
+          tong_diem: number
+          so_thi_cong: number
+          so_ban_giao_ca: number
+          so_ban_giao_chua_ky: number
+          lap_luc: string
+          nguoi_lap: string | null
+          audit_den: number | null
+          huy_luc: string | null
+          ly_do_huy: string | null
         }[]
       }
       duoc_thi_cong: {

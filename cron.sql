@@ -17,6 +17,7 @@
 --   don-ma-dang-nhap          -> /api/cron/don-ma-dang-nhap     0 20 * * *
 --   don-so-ra-vao             -> /api/cron/don-so-ra-vao        30 19 * * *
 --   nhac-kien-hang            -> /api/cron/nhac-kien-hang       0 11 * * *
+--   bao-cao-quy               -> /api/cron/bao-cao-quy         0 19 4 1,4,7,10 *
 --
 -- Thêm job ở đây mà quên thêm lịch bên Railway thì nó KHÔNG chạy, và không có
 -- gì báo — đó là lý do bảng đối chiếu nằm ngay đầu file chứ không nằm trong

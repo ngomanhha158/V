@@ -5833,3 +5833,272 @@ create policy dktc_read on dang_ky_thi_cong for select
 
 create trigger trg_audit_dktc after insert or update or delete on dang_ky_thi_cong
   for each row execute function ghi_nhat_ky('unit_id');
+
+-- ═══════════════ 26. BÁO CÁO BAN QUẢN TRỊ HÀNG QUÝ ══════════════════════════
+-- BQT họp quý cần một bộ số liệu tổng hợp. Hiện phải ngồi chụp từng màn hình
+-- dashboard ghép lại, mỗi người chụp một lúc nên các con số không cùng thời
+-- điểm, và biên bản họp ghi một bộ số không ai dựng lại được.
+--
+-- CHỐT LỚN NHẤT: BÁO CÁO LÀ MỘT BẢN CHỤP ĐÓNG BĂNG, KHÔNG PHẢI MỘT TRUY VẤN.
+-- Cả điểm của nó là biên bản họp và báo cáo phải nói cùng một con số mãi mãi.
+-- Mở lại báo cáo quý III sau ba tháng mà thấy con số khác thì biên bản quý III
+-- thành sai — và không ai sửa được biên bản đã ký.
+--
+-- Hệ quả: hàm sinh báo cáo chạy MỘT LẦN cho mỗi quý, và chạy lại thì từ chối
+-- chứ không ghi đè. Muốn số mới thì hủy bản cũ kèm lý do rồi sinh lại — cùng
+-- lối với chốt sổ bàn giao (§20).
+
+create table if not exists bao_cao_quy (
+  id          uuid primary key default gen_random_uuid(),
+  project_id  uuid not null references projects(id) on delete cascade,
+  nam         int not null check (nam between 2020 and 2100),
+  quy         int not null check (quy between 1 and 4),
+  tu_ngay     date not null,
+  den_ngay    date not null,
+
+  -- Tiền
+  hoa_don_phai_thu bigint not null default 0,
+  hoa_don_da_thu   bigint not null default 0,
+  cong_no_cuoi_quy bigint not null default 0,
+  so_can           int not null default 0,
+  so_can_no        int not null default 0,
+  quy_bao_tri_dau  bigint not null default 0,
+  quy_bao_tri_cuoi bigint not null default 0,
+  quy_chi_trong_quy bigint not null default 0,
+  chi_vat_tu       bigint not null default 0,
+
+  -- Vận hành
+  so_yeu_cau       int not null default 0,
+  so_yeu_cau_xong  int not null default 0,
+  so_yeu_cau_dung_han int not null default 0,
+  so_danh_gia      int not null default 0,
+  tong_diem        int not null default 0,
+  so_thi_cong      int not null default 0,
+  so_ban_giao_ca   int not null default 0,
+  so_ban_giao_chua_ky int not null default 0,
+
+  ghi_chu     text,
+  lap_luc     timestamptz not null default clock_timestamp(),
+  lap_boi     uuid references profiles(id),
+  -- Neo vào nhật ký kiểm toán: bản báo cáo nói về quá khứ, và nó phải gắn được
+  -- vào một điểm kiểm chứng lại được.
+  audit_den   bigint,
+  huy_luc     timestamptz, huy_boi uuid references profiles(id), ly_do_huy text,
+  constraint huy_phai_co_ly_do check ((huy_luc is null) = (ly_do_huy is null))
+);
+-- MỘT QUÝ MỘT BÁO CÁO CÒN HIỆU LỰC. Hai bản cho cùng một quý là hai bộ số cùng
+-- tự xưng là sự thật của quý đó.
+create unique index if not exists bao_cao_quy_mot_ban
+  on bao_cao_quy (project_id, nam, quy) where huy_luc is null;
+
+-- Mốc đầu và cuối của một quý. Viết một lần ở đây thay vì rải date_trunc khắp
+-- nơi — lệch một ngày ở biên quý là lệch cả một tháng tiền.
+create or replace function moc_quy(p_nam int, p_quy int)
+returns table (tu date, den date)
+language sql immutable set search_path = public as $fn$
+  select make_date(p_nam, (p_quy - 1) * 3 + 1, 1),
+         (make_date(p_nam, (p_quy - 1) * 3 + 1, 1) + interval '3 month' - interval '1 day')::date;
+$fn$;
+
+create or replace function quy_cua(p_ngay date)
+returns table (nam int, quy int)
+language sql immutable set search_path = public as $fn$
+  select extract(year from p_ngay)::int,
+         ((extract(month from p_ngay)::int - 1) / 3) + 1;
+$fn$;
+
+-- ─────────────────────────── SINH BÁO CÁO ───────────────────────────────────
+-- Phần TÍNH, không kiểm quyền. Tách ra vì job nền chạy bằng service_role — ở đó
+-- auth.uid() là NULL nên nó không qua nổi cửa is_bqt. Chép phép tính sang một
+-- hàm thứ hai thì thành hai bản sao của một phép tính TIỀN, và đó đúng là chỗ
+-- chờ sẵn để sửa một bên rồi quên bên kia.
+-- KHÔNG cấp execute cho authenticated: cửa vào của người dùng là hàm bên dưới.
+create or replace function tinh_bao_cao_quy(p_project uuid, p_nam int, p_quy int)
+returns uuid language plpgsql security definer set search_path = public as $fn$
+declare
+  v_id uuid; v_tu date; v_den date; r record;
+  v_phai bigint; v_thu bigint; v_no bigint; v_can int; v_can_no int;
+  v_dau bigint; v_cuoi bigint; v_chi bigint; v_vt bigint;
+  v_yc int; v_xong int; v_dung int; v_dg int; v_diem int;
+  v_tc int; v_bg int; v_chua_ky int;
+begin
+  if p_quy not between 1 and 4 then
+    raise exception 'Quy phai tu 1 den 4' using errcode = '22023';
+  end if;
+  select tu, den into v_tu, v_den from moc_quy(p_nam, p_quy);
+  -- Không lập báo cáo cho một quý chưa kết thúc: con số của nửa quý đặt cạnh
+  -- con số của quý đủ là một phép so sánh sai mà nhìn rất hợp lý.
+  if v_den >= current_date then
+    raise exception 'Quy %/% chua ket thuc (het ngay %)', p_quy, p_nam, to_char(v_den, 'DD/MM/YYYY')
+      using errcode = '22023';
+  end if;
+
+  -- ── Tiền ──
+  -- Hóa đơn của các KỲ TRONG QUÝ. `paid_amount` là con số HÔM NAY chứ không
+  -- phải lúc cuối quý — và ở đây thế là đúng: báo cáo lập sau khi quý đã đóng,
+  -- BQT cần biết rốt cuộc quý đó thu được bao nhiêu, kể cả tiền về muộn.
+  select coalesce(sum(i.total_amount), 0), coalesce(sum(i.paid_amount), 0)
+    into v_phai, v_thu
+    from invoices i
+   where i.project_id = p_project and i.status <> 'draft'
+     and i.period between v_tu and v_den;
+
+  select coalesce(sum(i.total_amount - i.paid_amount), 0),
+         count(distinct i.unit_id) filter (where i.total_amount > i.paid_amount)
+    into v_no, v_can_no
+    from invoices i
+   where i.project_id = p_project and i.status <> 'draft'
+     and i.period <= v_den and i.total_amount > i.paid_amount;
+
+  select count(*)::int into v_can
+    from units u join buildings b on b.id = u.building_id where b.project_id = p_project;
+
+  select coalesce(sum(g.so_tien), 0) into v_dau
+    from quy_bao_tri_giao_dich g where g.project_id = p_project and g.ngay < v_tu;
+  select coalesce(sum(g.so_tien), 0) into v_cuoi
+    from quy_bao_tri_giao_dich g where g.project_id = p_project and g.ngay <= v_den;
+  select coalesce(-sum(g.so_tien), 0) into v_chi
+    from quy_bao_tri_giao_dich g
+   where g.project_id = p_project and g.loai = 'chi' and g.ngay between v_tu and v_den;
+
+  select coalesce(sum(p.tong_tien), 0) into v_vt
+    from phieu_kho p
+   where p.project_id = p_project and p.loai = 'xuat'
+     and p.luc >= v_tu::timestamptz and p.luc < (v_den + 1)::timestamptz;
+
+  -- ── Vận hành ──
+  select count(*)::int,
+         count(*) filter (where t.status in ('resolved','closed'))::int,
+         -- ĐÚNG HẠN tính trên số đã xong, và chỉ đếm khi có cả hạn lẫn mốc xong.
+         -- Ticket không đặt hạn mà đếm là đúng hạn thì tỷ lệ SLA tự đẹp lên.
+         count(*) filter (where t.status in ('resolved','closed')
+                            and t.resolved_at is not null and t.sla_resolve_due is not null
+                            and t.resolved_at <= t.sla_resolve_due)::int
+    into v_yc, v_xong, v_dung
+    from tickets t
+   where t.project_id = p_project
+     and t.created_at >= v_tu::timestamptz and t.created_at < (v_den + 1)::timestamptz;
+
+  select count(*)::int, coalesce(sum(t.rating), 0)::int into v_dg, v_diem
+    from tickets t
+   where t.project_id = p_project and t.rating is not null
+     and t.created_at >= v_tu::timestamptz and t.created_at < (v_den + 1)::timestamptz;
+
+  select count(*)::int into v_tc
+    from dang_ky_thi_cong d
+   where d.project_id = p_project and d.trang_thai <> 'tu_choi'
+     and d.tu_ngay between v_tu and v_den;
+
+  select count(*)::int, count(*) filter (where b.ky_nhan_luc is null)::int
+    into v_bg, v_chua_ky
+    from ban_giao_ca b
+   where b.project_id = p_project
+     and b.luc >= v_tu::timestamptz and b.luc < (v_den + 1)::timestamptz;
+
+  insert into bao_cao_quy (
+    project_id, nam, quy, tu_ngay, den_ngay,
+    hoa_don_phai_thu, hoa_don_da_thu, cong_no_cuoi_quy, so_can, so_can_no,
+    quy_bao_tri_dau, quy_bao_tri_cuoi, quy_chi_trong_quy, chi_vat_tu,
+    so_yeu_cau, so_yeu_cau_xong, so_yeu_cau_dung_han, so_danh_gia, tong_diem,
+    so_thi_cong, so_ban_giao_ca, so_ban_giao_chua_ky,
+    lap_boi, audit_den)
+  values (p_project, p_nam, p_quy, v_tu, v_den,
+    v_phai, v_thu, v_no, v_can, v_can_no,
+    v_dau, v_cuoi, v_chi, v_vt,
+    v_yc, v_xong, v_dung, v_dg, v_diem,
+    v_tc, v_bg, v_chua_ky,
+    auth.uid(), (select max(id) from audit_log where project_id = p_project))
+  returning id into v_id;
+  return v_id;
+end $fn$;
+
+create or replace function huy_bao_cao_quy(p_id uuid, p_ly_do text)
+returns void language plpgsql security definer set search_path = public as $fn$
+declare v_pj uuid; v_huy timestamptz;
+begin
+  select project_id, huy_luc into v_pj, v_huy from bao_cao_quy where id = p_id for update;
+  if v_pj is null then
+    raise exception 'Khong tim thay bao cao %', p_id using errcode = '02000';
+  end if;
+  if not (is_bql_manager(v_pj) or is_bqt(v_pj)) then
+    raise exception 'Chi truong BQL hoac BQT moi huy duoc' using errcode = '42501';
+  end if;
+  if coalesce(btrim(p_ly_do), '') = '' then
+    raise exception 'Phai ghi ly do huy bao cao' using errcode = '22023';
+  end if;
+  if v_huy is not null then
+    raise exception 'Bao cao nay da huy roi' using errcode = '23505';
+  end if;
+  update bao_cao_quy set huy_luc = clock_timestamp(), huy_boi = auth.uid(),
+                         ly_do_huy = btrim(p_ly_do)
+   where id = p_id;
+end $fn$;
+
+-- Cửa vào của người dùng: kiểm quyền rồi gọi phần tính.
+create or replace function lap_bao_cao_quy(p_project uuid, p_nam int, p_quy int)
+returns uuid language plpgsql security definer set search_path = public as $fn$
+begin
+  if not (is_bql_manager(p_project) or is_bqt(p_project)) then
+    raise exception 'Chi truong BQL hoac BQT moi lap duoc bao cao quy' using errcode = '42501';
+  end if;
+  return tinh_bao_cao_quy(p_project, p_nam, p_quy);
+end $fn$;
+
+-- Job nền: ngày 5 tháng đầu của quý — sinh báo cáo cho quý VỪA KẾT THÚC.
+-- Chạy lại được: unique index chặn bản thứ hai, và hàm nuốt đúng lỗi đó.
+create or replace function sinh_bao_cao_quy() returns int
+language plpgsql security definer set search_path = public as $fn$
+declare p record; v_nam int; v_quy int; v_dem int := 0;
+begin
+  select nam, quy into v_nam, v_quy from quy_cua((current_date - interval '1 month')::date);
+  for p in select id from projects loop
+    -- Một dự án hỏng không được chặn các dự án còn lại: job nền chạy cho cả hệ
+    -- thống, và dừng ở dự án thứ nhất là 40 khu còn lại không có báo cáo.
+    begin
+      perform tinh_bao_cao_quy(p.id, v_nam, v_quy);
+      v_dem := v_dem + 1;
+    exception
+      when unique_violation then null;   -- quý này đã có báo cáo, bỏ qua
+      when others then null;
+    end;
+  end loop;
+  return v_dem;
+end $fn$;
+
+-- ─────────────────────────── ĐỌC ────────────────────────────────────────────
+create or replace function bao_cao_quy_ds(p_project uuid)
+returns table (id uuid, nam int, quy int, tu_ngay date, den_ngay date,
+               hoa_don_phai_thu bigint, hoa_don_da_thu bigint, cong_no_cuoi_quy bigint,
+               so_can int, so_can_no int,
+               quy_bao_tri_dau bigint, quy_bao_tri_cuoi bigint,
+               quy_chi_trong_quy bigint, chi_vat_tu bigint,
+               so_yeu_cau int, so_yeu_cau_xong int, so_yeu_cau_dung_han int,
+               so_danh_gia int, tong_diem int, so_thi_cong int,
+               so_ban_giao_ca int, so_ban_giao_chua_ky int,
+               lap_luc timestamptz, nguoi_lap text, audit_den bigint,
+               huy_luc timestamptz, ly_do_huy text)
+language sql stable security definer set search_path = public as $fn$
+  select b.id, b.nam, b.quy, b.tu_ngay, b.den_ngay,
+         b.hoa_don_phai_thu, b.hoa_don_da_thu, b.cong_no_cuoi_quy,
+         b.so_can, b.so_can_no,
+         b.quy_bao_tri_dau, b.quy_bao_tri_cuoi, b.quy_chi_trong_quy, b.chi_vat_tu,
+         b.so_yeu_cau, b.so_yeu_cau_xong, b.so_yeu_cau_dung_han,
+         b.so_danh_gia, b.tong_diem, b.so_thi_cong,
+         b.so_ban_giao_ca, b.so_ban_giao_chua_ky,
+         b.lap_luc, pr.full_name, b.audit_den, b.huy_luc, b.ly_do_huy
+    from bao_cao_quy b
+    left join profiles pr on pr.id = b.lap_boi
+   where b.project_id = p_project
+     and (is_staff(p_project) or o_trong_du_an(p_project))
+   order by b.nam desc, b.quy desc, b.lap_luc desc;
+$fn$;
+
+-- ── RLS ──
+alter table bao_cao_quy enable row level security;
+-- CẢ KHU ĐỌC ĐƯỢC. Báo cáo quý là thứ BQT mang ra họp với cư dân; giấu nó đi
+-- thì mỗi lần họp lại quay về cãi nhau về con số thay vì bàn về việc.
+create policy bcq_read on bao_cao_quy for select
+  using (is_staff(project_id) or o_trong_du_an(project_id));
+
+create trigger trg_audit_bao_cao_quy after insert or update or delete on bao_cao_quy
+  for each row execute function ghi_nhat_ky('project_id');
