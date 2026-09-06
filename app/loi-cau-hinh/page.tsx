@@ -48,11 +48,20 @@ export default async function Page() {
         <p className="font-semibold text-ink">Đặt ở đâu</p>
         <p className="mt-1">
           Railway → service <code className="num">v</code> → tab <em>Variables</em>.
-          Bước 6 của <code className="num">railway/GD1-runbook.sh</code> liệt kê đủ
-          sáu biến: <code className="num">POSTGREST_URL</code>,{' '}
+          Trong <code className="num">railway/GD1-runbook.sh</code>:{' '}
+          <strong className="text-ink">phần B4</strong> có{' '}
+          <code className="num">POSTGREST_URL</code>,{' '}
           <code className="num">AUTH_JWT_SECRET</code>, <code className="num">SMTP_URL</code>,{' '}
-          <code className="num">SMTP_FROM</code>, <code className="num">ANH_DIR</code>,{' '}
-          <code className="num">CRON_SECRET</code>.
+          <code className="num">SMTP_FROM</code>; <strong className="text-ink">B5</strong> có{' '}
+          <code className="num">ANH_DIR</code> kèm Volume phải gắn; và{' '}
+          <strong className="text-ink">B6</strong> có <code className="num">CRON_SECRET</code>.
+        </p>
+        <p className="mt-2">
+          Hai biến đầu là hai biến duy nhất chặn app chạy — đặt xong là màn này
+          biến mất. Bốn biến còn lại chỉ tắt từng phần: không có SMTP thì không
+          gửi được thư đăng nhập, không có <code className="num">ANH_DIR</code>{' '}
+          thì ảnh hỏng hóc mất sau mỗi lần deploy, không có{' '}
+          <code className="num">CRON_SECRET</code> thì job nền không chạy.
         </p>
         <p className="mt-2">
           <code className="num">AUTH_JWT_SECRET</code> phải{' '}
