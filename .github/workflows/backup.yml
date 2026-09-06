@@ -78,7 +78,14 @@ jobs:
         run: |
           set -euo pipefail
           KICH_THUOC=$(stat -c%s "$TEN")
-          SO_BANG=$(pg_restore --list "$TEN" | grep -c 'TABLE DATA' || true)
+          # Đọc danh mục MỘT LẦN vào biến rồi soi bằng chuỗi, KHÔNG nối ống sang
+          # `grep -q`. `grep -q` thoát ngay khi thấy dòng khớp, pg_restore còn
+          # đang ghi thì ăn SIGPIPE, và dưới `set -o pipefail` cả ống trả về 141
+          # — tức là ống ĐỎ đúng lúc grep TÌM THẤY. Job này khi đó trượt với câu
+          # "bản dump không có auth.users" trên một bản dump hoàn toàn tốt, rồi
+          # không upload gì cả. Đã tái hiện được trên Postgres 16: 141, mọi lần.
+          DANH_MUC=$(pg_restore --list "$TEN")
+          SO_BANG=$(grep -c 'TABLE DATA' <<< "$DANH_MUC" || true)
           echo "Kích thước: $KICH_THUOC bytes, $SO_BANG bảng có dữ liệu"
           if [ "$KICH_THUOC" -lt 2000 ]; then
             echo "::error::Bản dump chỉ $KICH_THUOC bytes — gần như chắc chắn hỏng."
@@ -92,7 +99,7 @@ jobs:
           # Đếm riêng schema auth: nó chỉ có 2 bảng nên ngưỡng 10 ở trên không
           # bao giờ bắt được trường hợp thiếu đúng nó — mà thiếu đúng nó là bản
           # khôi phục không ai đăng nhập được.
-          if ! pg_restore --list "$TEN" | grep -q 'TABLE DATA auth users'; then
+          if [[ "$DANH_MUC" != *'TABLE DATA auth users'* ]]; then
             echo "::error::Bản dump không có auth.users. Khôi phục từ bản này thì không ai đăng nhập được."
             exit 1
           fi

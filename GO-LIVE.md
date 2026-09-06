@@ -160,6 +160,19 @@ Job tự kiểm bản dump có nội dung thật (đếm số bảng có dữ li
 Không có bước đó thì một bản dump rỗng vẫn upload thành công và ba tháng sau
 mới phát hiện suốt thời gian đó không có backup nào.
 
+**Khôi phục: `railway/KHOI-PHUC-runbook.sh <file.dump> <url database đích>`.**
+Có backup ba năm rồi phát hiện không khôi phục được là kiểu hỏng kinh điển nhất
+của backup — workflow trên chỉ chứng minh bản dump ĐƯỢC TẠO RA và không rỗng,
+không chứng minh nó DÙNG ĐƯỢC. Runbook đã diễn tập trọn vẹn trên PostgreSQL
+16.13: dump một DB có tài khoản thật → khôi phục vào database trắng → đăng nhập
+đúng mật khẩu thành công, sai mật khẩu bị từ chối, phân công BQL còn nguyên.
+Bước cuối của nó kiểm đúng chuyện đó chứ không đếm dòng: một bản khôi phục đủ
+hóa đơn mà không ai đăng nhập được thì vẫn là hỏng.
+
+Role KHÔNG nằm trong bản dump (`pg_dump` không bao giờ dump role) và quyền cũng
+không (`--no-privileges`) — nên runbook chạy `railway/00_compat.sql` trước để dựng role,
+rồi `auth_hooks.sql` + `railway/03_auth.sql` sau để cấp lại quyền.
+
 ### 4. Dữ liệu trên DB đang là dữ liệu MẪU
 
 Hiện có: dự án "Sunrise Riverside", 2 tòa P1/P2, 24 căn — đều do `seed.sql`
