@@ -17,7 +17,7 @@ declare
   hang_xom uuid := '99990000-0000-0000-0000-00000006000c';
   u_a uuid; u_b uuid; u_x uuid;
   k1 uuid; ma1 text; k2 uuid; ma2 text; k3 uuid; ma3 text; k4 uuid; ma4 text;
-  r record; n int; ty numeric;
+  r record; n int; ty numeric; gio_vao timestamptz;
 begin
   insert into projects (id, name) values (p_k, 'Khu khach'), (p_x, 'Khu ngoai');
   insert into buildings (id, project_id, code, name) values
@@ -114,13 +114,27 @@ begin
   select * into r from quet_khach(ma1, true);
   if r.vao_luc is null then raise exception 'FAIL 5: quet that ma khong ghi gio vao'; end if;
   if r.trang_thai <> 'trong_toa' then raise exception 'FAIL 5b: vao roi ma trang thai la %', r.trang_thai; end if;
+  gio_vao := r.vao_luc;
 
   select * into r from quet_khach(ma1, true);
   if r.ra_luc is null then raise exception 'FAIL 5c: quet lan hai khong ghi gio ra'; end if;
   if r.trang_thai <> 'da_ra' then raise exception 'FAIL 5d: ra roi ma trang thai la %', r.trang_thai; end if;
+
   -- Giờ vào KHÔNG được ghi đè bởi lần quét thứ hai.
+  --
+  -- So THẲNG với giá trị đã đọc, chứ không so `vao_luc < ra_luc`. Cách cũ thực
+  -- ra đang kiểm tra ĐỒNG HỒ CÓ NHÍCH hay không, không phải kiểm tra chuyện ghi
+  -- đè: hai lệnh quét chạy sát nhau, và `clock_timestamp()` chỉ nhích theo mili
+  -- giây, nên trên máy chạy nhanh cả hai rơi vào cùng một mốc và bài test đỏ
+  -- trong khi hàm hoàn toàn đúng. Đã đỏ đúng như vậy trên CI.
   select vao_luc, ra_luc into r from khach_tham where id = k1;
-  if r.vao_luc >= r.ra_luc then raise exception 'FAIL 5e: gio vao bi ghi de bang gio ra'; end if;
+  if r.vao_luc is distinct from gio_vao then
+    raise exception 'FAIL 5e: lan quet thu hai ghi de gio vao (% -> %)', gio_vao, r.vao_luc;
+  end if;
+  if r.ra_luc is null then raise exception 'FAIL 5f: so khong luu gio ra'; end if;
+  if r.ra_luc < r.vao_luc then
+    raise exception 'FAIL 5g: gio ra (%) truoc gio vao (%)', r.ra_luc, r.vao_luc;
+  end if;
 
   -- ── 6. Mã dùng xong thì thôi ──
   select * into r from quet_khach(ma1, true);
