@@ -13,7 +13,7 @@
 export type TrangThai =
   | 'cho' | 'sai' | 'het_han' | 'qua_nhieu'
   | 'sai_mat_khau' | 'chua_dat_mat_khau'
-  | 'khong_gui_duoc' | 'chua_co_sms' | 'mang' | 'la'
+  | 'khong_gui_duoc' | 'chua_co_sms' | 'mang' | 'he_thong' | 'la'
 
 /** "47 giây", "3 phút" — làm tròn LÊN. Nói "2 phút" cho 121 giây rồi để người
  *  ta bấm ở giây thứ 120 và lại bị chặn là hỏng đúng lúc họ đã kiên nhẫn. */
@@ -48,6 +48,13 @@ const CAU: Record<TrangThai, string> = {
     + 'đăng ký với ban quản lý, hoặc đăng nhập bằng mật khẩu.',
 
   mang: 'Không kết nối được tới máy chủ. Kiểm tra mạng rồi thử lại.',
+
+  // Khác 'mang' ở chỗ: mạng của NGƯỜI DÙNG thì họ tự xử được, còn cái này thì
+  // không — và khác 'la' ở chỗ 'la' bảo họ thử lại, mà thử lại không bao giờ
+  // qua được. Câu này phải đẩy họ đi báo người sửa được, ngay từ lần đầu.
+  he_thong: 'Hệ thống đang không đọc được dữ liệu đăng nhập. Đây là sự cố của '
+    + 'hệ thống, không phải bạn nhập sai — thử lại cũng sẽ như vậy. Báo ban '
+    + 'quản lý để họ kiểm tra máy chủ.',
 
   la: 'Có lỗi không rõ. Thử lại giúp em, nếu vẫn vậy thì báo ban quản lý.',
 }

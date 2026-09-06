@@ -82,15 +82,50 @@ export async function POST(
   }
 
   const db = await createAdminClient()
-  const { data: project } = await db.from('projects').select('id').limit(1).maybeSingle()
-  if (!project) {
-    return NextResponse.json({ success: false, message: 'Chua co du an' }, { status: 500 })
-  }
 
+  // KHU NÀO NHẬN TIỀN NÀY — tra theo SỐ TÀI KHOẢN tiền vừa về, từng giao dịch
+  // một. Trước đây chỗ này lấy `projects ... limit 1`: đúng khi cả hệ thống có
+  // một khu, nhưng với khu thứ hai thì tiền của cư dân khu B rơi vào sổ khu A
+  // tùy thứ tự Postgres trả về. Không phải màn hình hiện nhầm — là tiền ghi
+  // nhầm sổ của một khách hàng khác, và không có gì báo cho tới lúc đối soát.
+  //
+  // Một gói tin có thể chứa giao dịch của nhiều tài khoản, nên tra theo từng
+  // dòng chứ không tra một lần cho cả gói.
   const ketQua = []
   for (const g of ds) {
+    const { data: duAn, error: loiTra } = await db.rpc('du_an_nhan_tien', {
+      p_account: g.accountNumber ?? null,
+    })
+    if (loiTra) {
+      console.error('[webhook] du_an_nhan_tien loi', {
+        nhaCungCap: nha_cung_cap, providerRef: g.providerRef, code: loiTra.code,
+      })
+      return NextResponse.json(
+        { success: false, message: 'Loi noi bo, vui long gui lai', da_xu_ly: ketQua.length },
+        { status: 500 },
+      )
+    }
+    if (!duAn) {
+      // THÀ TỪ CHỐI CÒN HƠN ĐOÁN. 400 chứ không 500: bắn lại không giúp gì cho
+      // tới khi có người khai số tài khoản này cho một khu, nên mời nhà cung
+      // cấp retry vô hạn chỉ làm nhật ký của họ đầy lên.
+      //
+      // Câu lỗi gọi thẳng số tài khoản: nó hiện trong bảng điều khiển của nhà
+      // cung cấp, và đó là chỗ BQL nhìn thấy. "Không xác định được khu" trống
+      // không thì họ không có gì để lần.
+      console.error('[webhook] khong tra duoc khu', {
+        nhaCungCap: nha_cung_cap, providerRef: g.providerRef, account: g.accountNumber,
+      })
+      return NextResponse.json({
+        success: false,
+        message: `Khong biet tai khoan ${g.accountNumber ?? '(trong)'} thuoc khu nao. `
+          + 'Truong BQL khai so tai khoan nhan tien o man "Khu dang quan ly".',
+        da_xu_ly: ketQua.length,
+      }, { status: 400 })
+    }
+
     const { data, error } = await db.rpc('ghi_nhan_tien_ve', {
-      p_project: project.id,
+      p_project: duAn,
       p_provider: nha_cung_cap,
       p_provider_ref: g.providerRef,
       p_amount: g.amount,

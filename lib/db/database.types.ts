@@ -1984,6 +1984,16 @@ export type Database = {
         }[]
       }
       duoc_quan_ly: { Args: { p_project: string }; Returns: boolean }
+      // §28 Tài khoản nhận tiền của từng khu.
+      tk_nhan_tien: {
+        Args: { p_project: string }
+        Returns: { bin: string | null; so_tk: string | null; chu_tk: string | null }[]
+      }
+      dat_tk_nhan_tien: {
+        Args: { p_project: string; p_bin: string; p_so_tk: string; p_ten?: string | null }
+        Returns: undefined
+      }
+      du_an_nhan_tien: { Args: { p_account: string | null }; Returns: string | null }
       sinh_bao_cao_quy: { Args: Record<string, never>; Returns: number }
       moc_quy: { Args: { p_nam: number; p_quy: number }; Returns: { tu: string; den: string }[] }
       quy_cua: { Args: { p_ngay: string }; Returns: { nam: number; quy: number }[] }

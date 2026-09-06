@@ -22,7 +22,7 @@ Không phải kế hoạch — là những gì đã kiểm và những gì còn 
 | Backup | GitHub Actions dump hằng ngày, gồm cả schema `auth` |
 | Lưu trữ ảnh | Volume của service `v`, phục vụ qua `/api/anh` — hỏi lại quyền từng lần xem |
 | Quyền `anon` | **Không có bảng nào** — request không JWT không đọc được gì |
-| Bộ test | 26 file SQL độc lập + cả ngăn xếp Railway + 293 test JS, xanh trên CI mỗi lần push |
+| Bộ test | 28 file SQL độc lập + cả ngăn xếp Railway + 293 test JS, xanh trên CI mỗi lần push |
 | Giao diện | 67 route thật (chưa kể bản demo), build sạch, sáng/tối |
 
 Tám job nền và giờ chạy (giờ VN). Đặt thiếu một cái thì nó KHÔNG chạy và
@@ -175,16 +175,38 @@ bằng tên tòa thật. Sau đó:
 1. Tạo tòa thật ở màn `/bql`
 2. Import căn hộ thật từ Excel ở `/bql/import` — cột bắt buộc: Tòa, Mã căn, Tầng
 3. Sửa biểu phí ở `/bql/billing` cho khớp mức thu thật của tòa
+3b. Khai **số tài khoản nhận tiền** của khu ở `/bql/khu` — thiếu thì hóa đơn
+   không có mã QR, và với nhiều khu thì webhook từ chối tiền về
 4. Ngồi với BQL chốt lại 10 dòng SLA — số hiện tại là mặc định khởi tạo, không
    phải cam kết ai đã đồng ý
 
-### 5. Đối soát ngân hàng còn làm tay
+### 5. Đối soát ngân hàng — đã tự động, cần khai TÀI KHOẢN CỦA TỪNG KHU
 
-Webhook gạch nợ tự động (N19–N20) chưa làm, vì chưa chốt **SePay hay Casso**.
-Hai bên khác nhau cả định dạng payload lẫn cách xác thực chữ ký.
+Webhook gạch nợ **đã làm**, nhận được cả **SePay lẫn Casso** —
+`/api/webhook/bank/sepay` và `/api/webhook/bank/casso`. Điền khóa nào thì
+đường đó sống; chưa điền thì endpoint **từ chối**, không phải cho qua.
 
-Không chặn go-live: cư dân vẫn quét QR chuyển tiền được, chỉ là BQL phải đối
-chiếu sao kê và nhập tay. Với 24 căn thì chịu được; vài trăm căn thì không.
+Cư dân quét QR trên hóa đơn, chuyển đúng nội dung `VB <mã căn> <kỳ>`, và tiền
+tự gạch vào hóa đơn của căn đó. Nội dung sai định dạng thì giao dịch nằm ở
+`/bql/doi-soat` chờ BQL gán tay — cố ý: dò lỏng rồi tự gạch là tiền chạy nhầm căn.
+
+**Việc phải làm: khai số tài khoản nhận tiền cho TỪNG KHU** ở màn
+`/bql/khu` (chỉ trưởng BQL đổi được). Webhook tra khu theo **số tài khoản tiền
+vừa về**:
+
+| Tình huống | Xử lý |
+|---|---|
+| Số tài khoản khớp một khu | Ghi vào sổ khu đó |
+| Cả hệ thống chỉ có **một** khu | Ghi vào khu đó, kể cả khi chưa khai — giữ cho bản cài một khu chạy như cũ |
+| Nhiều khu, không khớp khu nào | **Từ chối 400**, câu lỗi gọi thẳng số tài khoản |
+
+Từ chối chứ không đoán: đoán một khu là ghi tiền vào sổ của khách hàng khác,
+và cái sai đó chỉ lộ ra lúc đối soát cuối tháng — khi khu này thừa tiền và khu
+kia thiếu đúng chừng ấy.
+
+Ba biến `VBUILDING_BANK_*` giờ là **đường lùi** cho bản cài một khu. Từ khu thứ
+hai trở đi, mỗi khu phải khai tài khoản riêng, nếu không mã QR của mọi khu đều
+trỏ về một tài khoản.
 
 ## Thứ tự chạy
 

@@ -340,6 +340,14 @@ grant execute on function bao_cao_quy_ds(uuid)                                to
 grant execute on function du_an_cua_toi()                                     to authenticated;
 grant execute on function duoc_quan_ly(uuid)                                  to authenticated;
 
+-- §28 Tài khoản nhận tiền của từng khu.
+-- `du_an_nhan_tien` CHỈ cho service_role: nó là đường webhook dùng để hỏi
+-- "tiền về tài khoản này là của khu nào", và câu trả lời đó ghép số tài khoản
+-- với tên khách hàng — không việc gì để một cư dân tra được.
+grant execute on function du_an_nhan_tien(text)                               to service_role;
+grant execute on function dat_tk_nhan_tien(uuid, text, text, text)            to authenticated;
+grant execute on function tk_nhan_tien(uuid)                                  to authenticated;
+
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là
 -- tự ghi tiền vào hệ thống mà chẳng cần chuyển khoản đồng nào. Route handler

@@ -20,9 +20,15 @@ export async function middleware(request: NextRequest) {
   // handler. Bắt chúng đi qua vòng kiểm phiên là mọi lần gọi đều bị đá về
   // /login: tiền của cư dân biến mất khỏi hệ thống, và job nền im lặng không
   // chạy suốt nhiều tháng.
+  //
+  // /api/health cũng thoát ra ở đây, và vì một lý do riêng: nó là endpoint DUY
+  // NHẤT trả lời được "máy này đang ra sao" khi mọi thứ khác đã hỏng. Không
+  // thoát sớm thì màn /loi-cau-hinh nuốt luôn nó, và health check trả về 200
+  // kèm một trang HTML — Railway đọc 200 rồi báo deploy khỏe mạnh, trong khi
+  // app không dùng được một màn nào. Đã mất một buổi dò vì đúng chuyện này.
   const duong = request.nextUrl.pathname
   if (duong.startsWith('/demo') || duong.startsWith('/api/webhook/')
-      || duong.startsWith('/api/cron/')) {
+      || duong.startsWith('/api/cron/') || duong === '/api/health') {
     return NextResponse.next({ request })
   }
 

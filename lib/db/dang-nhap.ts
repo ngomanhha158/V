@@ -61,7 +61,15 @@ export async function guiMa(
 export async function vaoBangMa(danhTinh: string, ma: string): Promise<KetQua> {
   const admin = await createAdminClient()
   const { data, error } = await admin.rpc('auth_kiem_ma', { p_danh_tinh: danhTinh, p_ma: ma })
-  if (error) return { ok: false, tt: 'la' }
+  // DATABASE HỎNG KHÔNG PHẢI LÀ MÃ SAI. Trước đây chỗ này trả 'la' — người
+  // dùng đọc "có lỗi không rõ, thử lại giúp em" và thử lại mãi, trong khi
+  // nguyên nhân là PostgREST không với tới được hoặc AUTH_JWT_SECRET không
+  // trùng PGRST_JWT_SECRET. Không ai vào được, và không câu chữ nào trên màn
+  // hình chỉ về phía đó. Ghi log để còn dò, và nói thẳng cho người dùng.
+  if (error) {
+    console.error('auth_kiem_ma loi:', { code: error.code, message: error.message })
+    return { ok: false, tt: 'he_thong' }
+  }
   const hang = data?.[0]
   if (hang?.trang_thai === 'ok' && hang.uid) return { ok: true, uid: hang.uid }
   return { ok: false, tt: hang?.trang_thai ?? 'sai' }
@@ -72,7 +80,12 @@ export async function vaoBangMatKhau(danhTinh: string, matKhau: string): Promise
   const { data, error } = await admin.rpc('auth_kiem_mat_khau', {
     p_danh_tinh: danhTinh, p_mat_khau: matKhau,
   })
-  if (error) return { ok: false, tt: 'la' }
+  // Như trên: hỏng hệ thống khác sai mật khẩu. Gộp hai thứ đó làm một là để
+  // người dùng đi đổi mật khẩu trong lúc máy chủ mới là thứ đang hỏng.
+  if (error) {
+    console.error('auth_kiem_mat_khau loi:', { code: error.code, message: error.message })
+    return { ok: false, tt: 'he_thong' }
+  }
   if (!data) return { ok: false, tt: 'sai_mat_khau' }
   return { ok: true, uid: data }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { kiemCauHinh } from '@/lib/db/env'
 
 /**
  * Health check cho Railway.
@@ -24,6 +25,23 @@ export const dynamic = 'force-dynamic'
  */
 const BAN_BUILD = (process.env.RAILWAY_GIT_COMMIT_SHA ?? '').slice(0, 7) || 'khong-ro'
 
+/**
+ * VẪN TRẢ 200 KHI THIẾU CẤU HÌNH — cố ý.
+ *
+ * Trả 5xx thì Railway giết container và không promote bản deploy nào nữa; lúc
+ * đó không còn chỗ nào đọc được là thiếu biến gì, và người dựng hệ thống kẹt
+ * cứng. Tiến trình VẪN đang sống, nên câu trả lời trung thực là 200 — kèm
+ * đúng danh sách biến còn thiếu để người đọc biết ngay phải làm gì.
+ *
+ * Chỉ TÊN biến, không bao giờ giá trị. Tên vốn đã nằm trong .env.example.
+ */
 export function GET() {
-  return NextResponse.json({ ok: true, at: new Date().toISOString(), ban: BAN_BUILD })
+  const thieu = kiemCauHinh()
+  return NextResponse.json({
+    ok: true,
+    at: new Date().toISOString(),
+    ban: BAN_BUILD,
+    cau_hinh: thieu.length === 0 ? 'du' : 'thieu',
+    ...(thieu.length > 0 ? { thieu } : {}),
+  })
 }

@@ -7,7 +7,7 @@ import { doiCho, loiDangNhap, type TrangThai } from './auth-loi.ts'
 // người dùng nhận đúng cái chuỗi mã máy.
 const HET: TrangThai[] = [
   'cho', 'sai', 'het_han', 'qua_nhieu', 'sai_mat_khau', 'chua_dat_mat_khau',
-  'khong_gui_duoc', 'chua_co_sms', 'mang', 'la',
+  'khong_gui_duoc', 'chua_co_sms', 'mang', 'he_thong', 'la',
 ]
 
 test('mọi trạng thái đều có câu tiếng Việt riêng, không ai rơi vào câu chung', () => {
@@ -56,4 +56,18 @@ test('bị khóa vì dò thì chỉ ra lối khác, không để người ta k�
 test('lỗi hệ thống nói rõ là lỗi hệ thống', () => {
   // Người ta mặc định cho là mình gõ sai. Không nói ra thì họ gõ lại mãi.
   assert.match(loiDangNhap('khong_gui_duoc'), /không phải do bạn/)
+})
+
+test('sự cố hệ thống nói rõ là KHÔNG phải lỗi người dùng, và đừng thử lại', () => {
+  const c = loiDangNhap('he_thong')
+  // Ba việc câu này phải làm: phủ nhận lỗi người dùng, nói thử lại vô ích, và
+  // chỉ đúng người sửa được. Thiếu vế thứ hai thì họ bấm lại hai chục lần.
+  assert.match(c, /không phải bạn/)
+  assert.match(c, /thử lại cũng sẽ như vậy/)
+  assert.match(c, /ban quản lý/)
+  // Và phải KHÁC câu sai mã / sai mật khẩu — gộp vào đó là dắt người dùng đi
+  // sửa mật khẩu trong lúc máy chủ mới là thứ hỏng.
+  assert.notEqual(c, loiDangNhap('sai'))
+  assert.notEqual(c, loiDangNhap('sai_mat_khau'))
+  assert.notEqual(c, loiDangNhap('la'))
 })

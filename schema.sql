@@ -6152,3 +6152,122 @@ create or replace function duoc_quan_ly(p_project uuid)
 returns boolean language sql stable security definer set search_path = public as $fn$
   select p_project is not null and is_staff(p_project);
 $fn$;
+
+-- ═════════════ 28. TÀI KHOẢN NHẬN TIỀN LÀ CỦA TỪNG KHU ═════════════
+-- Hai lỗ hổng do §27 (nhiều khu) mở ra mà chính §27 không bịt:
+--
+--   1. WEBHOOK NGÂN HÀNG GHI TIỀN VÀO KHU NÀO CŨNG ĐƯỢC. Nó đang lấy
+--      `projects ... limit 1` dưới quyền service_role. Với một khu thì đúng;
+--      với khu thứ hai thì tiền của cư dân khu B rơi vào sổ khu A tùy thứ tự
+--      Postgres trả về. Đây không phải màn hình hiện nhầm — đây là tiền ghi
+--      nhầm sổ của một khách hàng khác, và không có gì báo.
+--
+--   2. MÃ QR CỦA MỌI KHU LÀ MỘT. `bankConfig()` đọc một biến môi trường duy
+--      nhất, nên cư dân khu B quét QR ra số tài khoản của khu A và chuyển
+--      tiền vào đó thật.
+--
+-- Cả hai đều quy về một chuyện: số tài khoản nhận tiền là THUỘC TÍNH CỦA KHU,
+-- không phải cấu hình của cả cài đặt. Đưa nó về bảng projects rồi thì webhook
+-- có cái để tra, và mỗi khu sinh đúng QR của mình.
+alter table projects
+  add column if not exists bank_bin     text,
+  add column if not exists bank_account text,
+  add column if not exists bank_name    text;
+
+-- BIN và số tài khoản đi với nhau: thiếu một trong hai thì không dựng được mã
+-- QR, mà nửa cấu hình còn khó dò hơn không cấu hình gì.
+alter table projects drop constraint if exists tk_du_doi;
+alter table projects add constraint tk_du_doi check (
+  (bank_bin is null) = (bank_account is null)
+);
+
+-- Số tài khoản chỉ chứa chữ số. Người nhập hay chép cả dấu cách từ app ngân
+-- hàng; webhook thì gửi chuỗi số trần. Không chuẩn hóa thì hai bên không bao
+-- giờ khớp và tiền treo vĩnh viễn ở "chưa xác định được khu".
+alter table projects drop constraint if exists tk_chi_chu_so;
+alter table projects add constraint tk_chi_chu_so check (
+  bank_account is null or bank_account ~ '^[0-9]{4,32}$'
+);
+alter table projects drop constraint if exists bin_chi_chu_so;
+alter table projects add constraint bin_chi_chu_so check (
+  bank_bin is null or bank_bin ~ '^[0-9]{6}$'
+);
+
+-- MỘT SỐ TÀI KHOẢN CHỈ THUỘC MỘT KHU. Hai khu khai cùng số thì không cách nào
+-- biết tiền về là của khu nào — và lúc đó lỗi đã nằm trong sổ sách rồi.
+create unique index if not exists du_an_mot_tai_khoan
+  on projects (bank_account) where bank_account is not null;
+
+/**
+ * Tiền về tài khoản này là của khu nào.
+ *
+ * DEFINER và không hỏi quyền: webhook chạy dưới service_role, nơi auth.uid()
+ * là NULL. Hàm chỉ TRA CỨU, không sửa gì.
+ *
+ * Luật, theo đúng thứ tự:
+ *   1. Khớp số tài khoản -> đúng khu đó. Đây là đường chính.
+ *   2. Cả hệ thống có ĐÚNG MỘT khu -> khu đó. Giữ cho bản cài một khu chạy
+ *      như cũ, kể cả khi chưa ai khai số tài khoản vào bảng.
+ *   3. Còn lại -> NULL. Nhiều khu mà không khớp được thì THÀ TỪ CHỐI: đoán
+ *      một khu là ghi tiền vào sổ của khách hàng khác, và cái sai đó không
+ *      lộ ra cho tới lúc đối soát cuối tháng.
+ */
+create or replace function du_an_nhan_tien(p_account text)
+returns uuid language plpgsql stable security definer set search_path = public as $fn$
+declare v_so text; v_id uuid; v_dem int;
+begin
+  v_so := nullif(regexp_replace(coalesce(p_account, ''), '[^0-9]', '', 'g'), '');
+  if v_so is not null then
+    select id into v_id from projects where bank_account = v_so;
+    if v_id is not null then return v_id; end if;
+  end if;
+
+  select count(*) into v_dem from projects;
+  if v_dem = 1 then
+    select id into v_id from projects;
+    return v_id;
+  end if;
+  return null;
+end $fn$;
+
+/**
+ * BQL khai tài khoản nhận tiền của khu.
+ *
+ * CHỈ TRƯỞNG BQL. Đây là chỗ quyết định tiền của cư dân chảy về đâu — không
+ * phải một ô cấu hình như tên tòa. Nhân viên trực ban đổi được số tài khoản
+ * thì cả tòa chuyển tiền cho người đó mà không ai nghi ngờ gì.
+ *
+ * Truyền số rỗng để XÓA (quay về dùng biến môi trường).
+ */
+create or replace function dat_tk_nhan_tien(
+  p_project uuid, p_bin text, p_so_tk text, p_ten text default null
+) returns void language plpgsql security definer set search_path = public as $fn$
+declare v_bin text; v_tk text;
+begin
+  if not is_bql_manager(p_project) then
+    raise exception 'Chi truong BQL moi doi duoc tai khoan nhan tien'
+      using errcode = '42501';
+  end if;
+
+  v_bin := nullif(regexp_replace(coalesce(p_bin, ''), '[^0-9]', '', 'g'), '');
+  v_tk  := nullif(regexp_replace(coalesce(p_so_tk, ''), '[^0-9]', '', 'g'), '');
+  if (v_bin is null) <> (v_tk is null) then
+    raise exception 'Phai co ca ma ngan hang (BIN) lan so tai khoan'
+      using errcode = '22023';
+  end if;
+
+  update projects
+     set bank_bin = v_bin, bank_account = v_tk,
+         bank_name = nullif(btrim(coalesce(p_ten, '')), '')
+   where id = p_project;
+end $fn$;
+
+/** Tài khoản nhận tiền của khu, cho màn hóa đơn và màn cài đặt. */
+create or replace function tk_nhan_tien(p_project uuid)
+returns table (bin text, so_tk text, chu_tk text)
+language sql stable security definer set search_path = public as $fn$
+  select p.bank_bin, p.bank_account, p.bank_name
+    from projects p
+   where p.id = p_project
+     and (is_staff(p_project) or o_trong_du_an(p_project));
+$fn$;
