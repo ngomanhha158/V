@@ -22,7 +22,7 @@ Không phải kế hoạch — là những gì đã kiểm và những gì còn 
 | Backup | GitHub Actions dump hằng ngày, gồm cả schema `auth` |
 | Lưu trữ ảnh | Volume của service `v`, phục vụ qua `/api/anh` — hỏi lại quyền từng lần xem |
 | Quyền `anon` | **Không có bảng nào** — request không JWT không đọc được gì |
-| Bộ test | 29 file SQL độc lập + cả ngăn xếp Railway + 294 test JS, xanh trên CI mỗi lần push |
+| Bộ test | 30 file SQL độc lập + cả ngăn xếp Railway + 294 test JS, xanh trên CI mỗi lần push |
 | Giao diện | 67 route thật (chưa kể bản demo), build sạch, sáng/tối |
 
 Tám job nền và giờ chạy (giờ VN). Đặt thiếu một cái thì nó KHÔNG chạy và
@@ -124,8 +124,10 @@ Thứ tự bắt buộc — không đảo được:
 
    Không còn phải chờ họ "tự đăng nhập một lần" như hồi Supabase: `auth.users`
    giờ là bảng của chính mình, tạo thẳng được, và trigger tự dựng `profiles`.
-3. Điền `v_email` (và `v_du_an` nếu DB còn trống) trong `bootstrap_bql.sql`
-   rồi chạy file đó
+3. Điền `v_email` trong `bootstrap_bql.sql` rồi chạy file đó. `v_du_an` là
+   tên khu: DB còn trống thì script tự tạo khu đó; DB đã có **từ hai khu**
+   thì `v_du_an` phải khớp đúng tên một khu — script không tự chọn hộ nữa,
+   vì "khu đầu bảng" khi có hai khu là chọn bừa
 4. Báo họ đăng nhập bằng mật khẩu tạm, rồi tự đổi ở màn Người dùng
 
 `bootstrap_bql.sql` cố ý chạy bằng quyền `postgres`: `staff_assignments`
