@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
 import { duAnBQL } from '@/lib/du-an'
 import { InvoiceActions, ReadingsForm } from './forms'
+import { NhapChiSo } from './nhap-chi-so'
 import {
   Bang, Button, Card, CardHead, Input, PageHead, Pill, Stat, Td, Th, Tr, Trong, vnd,
 } from '@/components/ui'
@@ -33,22 +34,42 @@ export default async function Billing({
   const period = /^\d{4}-\d{2}$/.test(sp.period ?? '') ? sp.period! : thisMonth
   const periodDate = `${period}-01`
 
-  const [{ data: feeTypes }, { data: units }, { data: readings }, { data: invoices }] = await Promise.all([
-    db.from('fee_types').select('id, code, name, calc_method').order('code'),
-    db.from('units').select('id, code').order('code'),
-    db.from('meter_readings').select('unit_id, fee_type_id, prev_index, curr_index').eq('period', periodDate),
-    db.from('invoices').select('id, status, total_amount, unit_id, units(code)').eq('period', periodDate).order('status'),
-  ])
+  // Kỳ TRƯỚC, để lấy chỉ số cũ. "Chỉ số cũ" của tháng này CHÍNH LÀ chỉ số mới
+  // của tháng trước — không phải một con số BQL phải tự nhớ. Trước đây trang chỉ
+  // đọc đúng kỳ đang chọn, nên lần nhập đầu của mỗi tháng ô "chỉ số cũ" trống
+  // trơn cho cả 240 căn.
+  const [ky, thang] = period.split('-').map(Number)
+  const truoc = thang === 1 ? `${ky - 1}-12-01` : `${ky}-${String(thang - 1).padStart(2, '0')}-01`
+
+  const [{ data: feeTypes }, { data: units }, { data: readings }, { data: readingsTruoc }, { data: invoices }] =
+    await Promise.all([
+      db.from('fee_types').select('id, code, name, calc_method').order('code'),
+      // Căn CỦA KHU ĐANG XEM. Trước đây câu này không lọc gì: người quản lý
+      // hai khu mở màn Biểu phí ghi tên khu A, mà bảng chỉ số bên dưới liệt kê
+      // căn của cả hai khu trộn lẫn — và ô "đã nhập chỉ số 25/49" đếm luôn
+      // những căn không thuộc khu đang xem.
+      db.from('units').select('id, code, buildings!inner(project_id)')
+        .eq('buildings.project_id', project.id).order('code'),
+      db.from('meter_readings').select('unit_id, fee_type_id, prev_index, curr_index').eq('period', periodDate),
+      db.from('meter_readings').select('unit_id, fee_type_id, curr_index').eq('period', truoc),
+      db.from('invoices').select('id, status, total_amount, unit_id, units(code)').eq('period', periodDate).order('status'),
+    ])
 
   const metered = (feeTypes ?? []).filter((f) => f.calc_method === 'metered')
   const firstMetered = metered[0]?.id
   const byUnit = new Map(
     (readings ?? []).filter((r) => r.fee_type_id === firstMetered).map((r) => [r.unit_id, r]),
   )
+  const cuoiKyTruoc = new Map(
+    (readingsTruoc ?? []).filter((r) => r.fee_type_id === firstMetered).map((r) => [r.unit_id, r.curr_index]),
+  )
   const rows = (units ?? []).map((u) => ({
     unit_id: u.id,
     code: u.code,
-    prev: byUnit.get(u.id)?.prev_index ?? null,
+    // Đã nhập kỳ này thì giữ nguyên (BQL đang sửa); chưa thì lấy chỉ số cuối kỳ
+    // trước. Null nghĩa là căn này chưa từng có chỉ số nào — công tơ mới lắp,
+    // và người nhập phải tự gõ số khởi điểm chứ hệ thống không đoán hộ.
+    prev: byUnit.get(u.id)?.prev_index ?? cuoiKyTruoc.get(u.id) ?? null,
     curr: byUnit.get(u.id)?.curr_index ?? null,
   }))
 
@@ -89,6 +110,7 @@ export default async function Billing({
       </div>
 
       <ReadingsForm period={period} feeTypes={metered} rows={rows} />
+      <NhapChiSo period={period} feeTypes={metered} />
       <InvoiceActions period={period} />
 
       <Card>
