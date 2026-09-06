@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
 import { duAnBQL } from '@/lib/du-an'
-import { bankConfig } from '@/lib/bank'
+import { bankConfigKhu } from '@/lib/bank'
 import {
   Card, CardHead, Hop, LinkButton, PageHead, Pill, Stat, Trong, cx, soVN,
 } from '@/components/ui'
@@ -73,7 +73,7 @@ export default async function GoLive() {
     )
   }
   const d = rows[0]
-  const bank = bankConfig()
+  const bank = await bankConfigKhu(project.id)
 
   // Biến môi trường đọc ở SERVER. Không đưa giá trị nào ra màn hình — chỉ nói
   // "đã điền" hay "chưa": màn này BQL mở được, mà khóa thì không phải việc của họ.

@@ -1,9 +1,11 @@
+import { createClient } from '@/lib/db/server'
 import { khuDangXem } from '@/lib/du-an'
 import { canhBaoKhu, nenHienHopChon, soLieuKhu, type Khu } from '@/lib/khu'
-import { Hop, PageHead, Card, Pill, cx } from '@/components/ui'
+import { Hop, PageHead, Card, CardHead, Pill, cx } from '@/components/ui'
 import { IcCheck, IcToaNha } from '@/components/icons'
 import { tenVaiTro } from '@/lib/vai-tro'
 import { chonKhu } from '../chon-khu'
+import { FormTaiKhoan } from './form-tk'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +18,15 @@ export const dynamic = 'force-dynamic'
  */
 export default async function Page() {
   const { dang, ds, loi } = await khuDangXem()
+
+  // Tài khoản nhận tiền của khu ĐANG XEM. Chỉ khu đang xem, không phải cả
+  // danh sách: khai tài khoản là việc làm một lần lúc dựng khu, còn bày sáu ô
+  // nhập cho sáu khu trên cùng một màn là mời người ta gõ nhầm dòng.
+  const db = await createClient()
+  const { data: tkRows } = dang
+    ? await db.rpc('tk_nhan_tien', { p_project: dang.id })
+    : { data: null }
+  const tk = (tkRows ?? [])[0]
 
   return (
     <div className="space-y-5">
@@ -85,6 +96,31 @@ export default async function Page() {
           )
         })}
       </div>
+
+      {dang && (
+        <Card>
+          <CardHead
+            title={`Tài khoản nhận tiền — ${dang.name}`}
+            sub="Mã QR trên hóa đơn của khu này trỏ vào đúng tài khoản khai ở đây"
+            xuongDong
+          />
+          {!tk?.so_tk && (
+            <div className="px-4 pt-4">
+              <Hop tone="canh" title="Khu này chưa khai tài khoản riêng">
+                Đang dùng tài khoản cấu hình chung của cả cài đặt. Với một khu thì
+                không sao; từ khu thứ hai trở đi thì mỗi khu phải có tài khoản
+                riêng, nếu không tiền về không biết vào sổ của khu nào.
+              </Hop>
+            </div>
+          )}
+          <FormTaiKhoan
+            khu={dang.id}
+            bin={tk?.bin ?? ''}
+            soTk={tk?.so_tk ?? ''}
+            chuTk={tk?.chu_tk ?? ''}
+          />
+        </Card>
+      )}
 
       {nenHienHopChon(ds) && (
         <Hop tone="trung" title="Lựa chọn này lưu ở đâu">

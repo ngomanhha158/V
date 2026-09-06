@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import QRCode from 'qrcode'
 import { createClient } from '@/lib/db/server'
 import { buildVietQr, paymentRef } from '@/lib/vietqr'
-import { bankConfig } from '@/lib/bank'
+import { bankConfigKhu } from '@/lib/bank'
 import { Card, CardHead, Hop, PageHead, Pill, cx, ngayVN, vnd } from '@/components/ui'
 import { IcTrai } from '@/components/icons'
 
@@ -15,7 +15,7 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
 
   const { data: inv } = await db
     .from('invoices')
-    .select('id, period, total_amount, paid_amount, status, due_date, units(code)')
+    .select('id, project_id, period, total_amount, paid_amount, status, due_date, units(code)')
     .eq('id', id)
     .maybeSingle()
   if (!inv) notFound()
@@ -44,7 +44,7 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
 
   const conLai = inv.total_amount - inv.paid_amount
   const tre = conLai > 0 && String(inv.due_date) < new Date().toISOString().slice(0, 10)
-  const bank = bankConfig()
+  const bank = await bankConfigKhu(inv.project_id)
 
   // QR chỉ có nghĩa khi còn nợ. Trả xong rồi mà vẫn hiện QR là mời người ta
   // chuyển thừa một lần nữa.
