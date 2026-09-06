@@ -348,6 +348,9 @@ grant execute on function du_an_nhan_tien(text)                               to
 grant execute on function dat_tk_nhan_tien(uuid, text, text, text)            to authenticated;
 grant execute on function tk_nhan_tien(uuid)                                  to authenticated;
 
+-- §29 Khu cư dân đang ở (mặt cư dân của du_an_cua_toi).
+grant execute on function khu_toi_o()                                         to authenticated;
+
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là
 -- tự ghi tiền vào hệ thống mà chẳng cần chuyển khoản đồng nào. Route handler

@@ -1984,6 +1984,8 @@ export type Database = {
         }[]
       }
       duoc_quan_ly: { Args: { p_project: string }; Returns: boolean }
+      // §29 Khu cư dân đang ở.
+      khu_toi_o: { Args: Record<string, never>; Returns: { id: string; name: string }[] }
       // §28 Tài khoản nhận tiền của từng khu.
       tk_nhan_tien: {
         Args: { p_project: string }

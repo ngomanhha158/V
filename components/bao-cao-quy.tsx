@@ -35,7 +35,7 @@ export function BaoCaoQuy({
         }
         sub={`${ngayVN(b.tu_ngay)} – ${ngayVN(b.den_ngay)} · lập ${ngayGioVN(b.lap_luc)}${b.nguoi_lap ? ` bởi ${b.nguoi_lap}` : ''}`}
       />
-      <div className="space-y-4 p-4">
+      <div className="@container space-y-4 p-4">
         {daHuy && (
           <Hop tone="trung" title="Bản này đã hủy">
             Lý do: {b.ly_do_huy?.trim() || 'không ghi'}. Bản vẫn nằm lại vì biên bản
@@ -43,7 +43,14 @@ export function BaoCaoQuy({
           </Hop>
         )}
 
-        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Chia cột theo bề rộng CỦA THẺ, không theo bề rộng cửa sổ. Cùng một
+            thẻ này nằm trong khung rộng ~1540px ở màn BQL và ~630px ở màn cư
+            dân; `lg:grid-cols-4` chỉ nhìn cửa sổ nên ở màn cư dân nó ép bốn cột
+            vào 630px, mỗi ô còn 113px chỗ chữ trong khi "132.000.000đ" cần
+            151px — đuôi số tiền bị cắt đúng trên tờ báo cáo người ta mang ra
+            đối chiếu với biên bản họp. Bốn cột chỉ bật từ @4xl (896px bề rộng
+            thẻ), đủ chỗ cho cả số hàng tỷ. */}
+        <dl className="grid gap-3 @md:grid-cols-2 @4xl:grid-cols-4">
           {chi.map((c) => (
             <div key={c.khoa} className="rounded-card border border-line bg-sunken px-3.5 py-3">
               <dt className="text-[0.75rem] font-medium text-muted">{c.nhan}</dt>

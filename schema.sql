@@ -6271,3 +6271,26 @@ language sql stable security definer set search_path = public as $fn$
    where p.id = p_project
      and (is_staff(p_project) or o_trong_du_an(p_project));
 $fn$;
+
+-- ══════════ 29. CƯ DÂN CŨNG CÓ THỂ Ở NHIỀU KHU ══════════
+-- §27 làm phần BQL: người quản lý nhiều khu chọn được khu đang xem. Phía CƯ DÂN
+-- thì vẫn còn nguyên mẫu cũ `projects ... limit 1`.
+--
+-- RLS đã chặn rò rỉ — sau §27 câu đó chỉ trả về khu người ta thật sự có mặt.
+-- Nên hỏng ở đây KHÔNG phải lộ dữ liệu, mà là MẤT ĐƯỜNG ĐI: người sở hữu căn ở
+-- hai khu chỉ vào được một khu, và không có nút nào dẫn sang khu kia. Họ không
+-- thấy báo lỗi gì cả — chỉ thấy một nửa tài sản của mình không tồn tại.
+--
+-- Cách chữa KHÔNG phải thêm một hộp chọn nữa. Cư dân không "trực" ở khu nào cả;
+-- họ chỉ có vài căn. Bày HẾT ra, ghi tên khu lên từng khối. Người một khu thấy
+-- đúng như cũ, người hai khu thấy cả hai — không cần học thêm thứ gì.
+create or replace function khu_toi_o()
+returns table (id uuid, name text)
+language sql stable security definer set search_path = public as $fn$
+  select distinct p.id, p.name
+    from projects p
+    join buildings b on b.project_id = p.id
+    join units u on u.building_id = b.id
+   where u.id in (select current_unit_ids())
+   order by p.name;
+$fn$;
