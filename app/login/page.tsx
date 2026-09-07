@@ -4,7 +4,7 @@ import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { cachDangNhap } from '@/lib/auth-method'
 import { normalizeEmail, toE164VN } from '@/lib/phone'
-import { goYNguoiSua, loiDangNhap } from '@/lib/auth-loi'
+import { BIET_TRANG_THAI, goYNguoiSua, loiDangNhap } from '@/lib/auth-loi'
 import { Button, Field, Hop, Input } from '@/components/ui'
 import { IcTrai } from '@/components/icons'
 
@@ -19,18 +19,22 @@ const LOI_URL: Record<string, string> = {
 }
 
 /** Gọi một endpoint đăng nhập. Trả về trạng thái mà lib/auth-loi.ts hiểu. */
-async function goi(duong: string, than: object): Promise<{ tt: string; giay?: number }> {
+/** Máy chủ gửi kèm `cau` (câu cho người dùng) và `goY` (gợi ý cho người sửa).
+ *  Bản cũ của route chưa gửi hai thứ đó, nên vẫn để optional. */
+async function goi(
+  duong: string, than: object,
+): Promise<{ tt: string; giay?: number; cau?: string; goY?: string | null }> {
   try {
     const r = await fetch(duong, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(than),
     })
-    return (await r.json()) as { tt: string; giay?: number }
+    return (await r.json()) as { tt: string; giay?: number; cau?: string; goY?: string | null }
   } catch {
     // Mất mạng giữa chừng. Phân biệt với lỗi máy chủ, vì hai bên làm hai việc
     // khác nhau: một bên bật lại wifi, một bên gọi ban quản lý.
-    return { tt: 'mang' }
+    return { tt: 'mang', cau: loiDangNhap('mang') }
   }
 }
 
@@ -54,9 +58,7 @@ function LoginForm() {
   const [matKhau, setMatKhau] = useState('')
   const [daGui, setDaGui] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Giữ MÃ trạng thái bên cạnh câu chữ: câu chữ cho cư dân đọc, còn mã mới
-  // biết được có phải sự cố hệ thống không để hiện khối gợi ý cho người sửa.
-  const [maLoi, setMaLoi] = useState<string | null>(null)
+  const [goY, setGoY] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const loiUrl = LOI_URL[useSearchParams().get('loi') ?? '']
 
@@ -71,6 +73,27 @@ function LoginForm() {
       ? 'Địa chỉ email không hợp lệ.'
       : 'Số điện thoại không hợp lệ. Nhập số di động 10 chữ số, ví dụ 0901234567.')
 
+  /**
+   * Hiện lỗi: ƯU TIÊN câu chữ máy chủ gửi kèm.
+   *
+   * Tra ở trình duyệt là cách cũ, và nó hỏng đúng lúc cần nhất: máy chủ vừa
+   * thêm một trạng thái, còn tab người dùng vẫn giữ bản JS trước đó — trạng
+   * thái mới tra không ra, rơi vào "có lỗi không rõ, thử lại giúp em", mà thử
+   * lại là đúng thứ không bao giờ qua được. Gặp thật ngay lần deploy đầu sau
+   * khi thêm ba nhánh he_thong_*.
+   */
+  function hienLoi(r: { tt: string; giay?: number; cau?: string; goY?: string | null }) {
+    if (r.cau) { setError(r.cau); setGoY(r.goY ?? null); return }
+    // Máy chủ bản cũ: tra bảng như trước. Nhưng nếu trạng thái LẠ HẲN thì nói
+    // thẳng là bản trong máy đã cũ — chứ không bảo họ thử lại.
+    if (!BIET_TRANG_THAI.has(r.tt)) {
+      setError('Bản trong trình duyệt đã cũ hơn máy chủ nên chưa đọc được câu trả lời. '
+        + 'Tải lại trang (Ctrl+Shift+R) rồi thử lại.')
+      setGoY(null); return
+    }
+    setError(loiDangNhap(r.tt, r.giay)); setGoY(goYNguoiSua(r.tt))
+  }
+
   /** Vào được rồi thì tải lại cả trang chứ không router.replace: cookie phiên
    *  vừa được máy chủ đặt, mà bộ nhớ đệm RSC của lần điều hướng trước thì chưa
    *  biết gì về nó. Đi bằng router là có lúc rơi vào màn "chưa đăng nhập" ngay
@@ -80,11 +103,12 @@ function LoginForm() {
   async function gui() {
     const v = chuanHoa()
     if (!v) return loiDanhTinh()
-    setBusy(true); setError(null); setMaLoi(null)
-    const { tt, giay } = await goi('/api/auth/ma', { danhTinh: v })
+    setBusy(true); setError(null); setGoY(null)
+    const r = await goi('/api/auth/ma', { danhTinh: v })
+    const { tt } = r
     setBusy(false)
     if (tt === 'ok') return setDaGui(true)
-    setError(loiDangNhap(tt, giay)); setMaLoi(tt)
+    hienLoi(r)
     // Bị chặn vì vừa gửi rồi: mở luôn ô nhập mã. Họ ĐANG cầm một mã trong tay,
     // bắt quay lại màn nhập email là bắt họ chờ hết một chu kỳ vô ích.
     if (tt === 'cho') setDaGui(true)
@@ -93,27 +117,29 @@ function LoginForm() {
   async function xacNhan() {
     const v = chuanHoa()
     if (!v) return
-    setBusy(true); setError(null); setMaLoi(null)
-    const { tt, giay } = await goi('/api/auth/vao', { danhTinh: v, ma: code })
+    setBusy(true); setError(null); setGoY(null)
+    const r = await goi('/api/auth/vao', { danhTinh: v, ma: code })
+    const { tt } = r
     if (tt === 'ok') return vaoNha()
     setBusy(false)
-    setError(loiDangNhap(tt, giay)); setMaLoi(tt)
+    hienLoi(r)
   }
 
   async function dangNhapMatKhau() {
     const v = chuanHoa()
     if (!v) return loiDanhTinh()
-    setBusy(true); setError(null); setMaLoi(null)
-    const { tt, giay } = await goi('/api/auth/vao', { danhTinh: v, matKhau })
+    setBusy(true); setError(null); setGoY(null)
+    const r = await goi('/api/auth/vao', { danhTinh: v, matKhau })
+    const { tt } = r
     if (tt === 'ok') return vaoNha()
     setBusy(false)
-    setError(loiDangNhap(tt, giay)); setMaLoi(tt)
+    hienLoi(r)
   }
 
   /** Đổi lối vào thì dọn sạch trạng thái của lối cũ, không để lẫn. */
   function doiCheDo(sang: CheDo) {
     setCheDo(sang)
-    setDaGui(false); setCode(''); setMatKhau(''); setError(null); setMaLoi(null)
+    setDaGui(false); setCode(''); setMatKhau(''); setError(null); setGoY(null)
   }
 
   const guiDi = () => { laMatKhau ? dangNhapMatKhau() : daGui ? xacNhan() : gui() }
@@ -194,13 +220,13 @@ function LoginForm() {
 
                 Cố ý KHÔNG hiện ở lỗi sai mật khẩu: dựng một khối kỹ thuật ở đó
                 là dọa người dùng bằng một sự cố không tồn tại. */}
-            {goYNguoiSua(maLoi ?? '') && (
+            {goY && (
               <div className="rounded-card border border-line bg-sunken px-3.5 py-3">
                 <p className="text-[0.75rem] font-semibold tracking-wide text-muted uppercase">
                   Dành cho người quản trị
                 </p>
                 <p className="num mt-1.5 text-[0.8125rem] leading-relaxed text-muted">
-                  {goYNguoiSua(maLoi ?? '')}
+                  {goY}
                 </p>
               </div>
             )}
@@ -212,7 +238,7 @@ function LoginForm() {
             {!laMatKhau && daGui && !busy && (
               <button
                 type="button"
-                onClick={() => { setDaGui(false); setCode(''); setError(null); setMaLoi(null) }}
+                onClick={() => { setDaGui(false); setCode(''); setError(null); setGoY(null) }}
                 className="inline-flex w-full items-center justify-center gap-1 text-[0.8125rem] font-medium text-muted hover:text-ink"
               >
                 <IcTrai width={14} height={14} />
