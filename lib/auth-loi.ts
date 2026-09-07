@@ -133,6 +133,39 @@ export function goYNguoiSua(tt: string): string | null {
  */
 export const BIET_TRANG_THAI: ReadonlySet<string> = new Set(Object.keys(CAU))
 
+/**
+ * Đọc câu trả lời của endpoint đăng nhập, KỂ CẢ khi nó không phải câu trả lời.
+ *
+ * Trước đây màn đăng nhập chỉ gọi r.json() rồi bọc trong try/catch, và mọi thứ
+ * không parse được đều thành 'mang' — "kiểm tra mạng rồi thử lại". Nhưng thân
+ * không phải JSON gần như luôn có nghĩa là route ĐÃ NÉM LỖI và Next trả về
+ * trang lỗi 500: máy chủ sập, mà màn hình đi đổ cho wifi của người dùng. Tệ
+ * hơn nữa, lỗi kiểu đó xảy ra TRƯỚC khi chạm database nên không sinh dòng log
+ * auth_* nào — người đi sửa lọc log theo đúng chỗ được chỉ và thấy trống trơn,
+ * rồi kết luận nhầm là request chưa tới được app.
+ *
+ * `than` là thân JSON đã parse, hoặc null nếu không parse được.
+ */
+export function docTraLoiDangNhap(
+  status: number,
+  than: Record<string, unknown> | null,
+): { tt: string; giay?: number; cau?: string; goY?: string | null; maLoi?: string } {
+  if (than && typeof than.tt === 'string') {
+    return than as { tt: string; giay?: number; cau?: string; goY?: string | null; maLoi?: string }
+  }
+  // Không có `tt` để mà tin. Nói đúng cái đang xảy ra, và đưa mã HTTP ra màn
+  // quản trị — đó là manh mối duy nhất còn lại khi app chưa kịp ghi log gì.
+  return {
+    tt: 'he_thong',
+    cau: loiDangNhap('he_thong'),
+    goY: `App trả HTTP ${status} mà không kèm dữ liệu — nó hỏng TRƯỚC khi chạm `
+      + 'database, nên sẽ KHÔNG có dòng log auth_* nào để tìm. Thường là thiếu '
+      + 'hoặc sai biến môi trường lúc khởi tạo. Mở /api/health xem thiếu biến '
+      + 'nào, rồi đọc log service `v` tìm stack trace gần nhất.',
+    maLoi: `HTTP ${status}`,
+  }
+}
+
 export function loiDangNhap(tt: string, giay = 0): string {
   if (tt === 'cho') {
     return `Vừa gửi rồi — chờ ${doiCho(giay)} nữa mới gửi lại được. `

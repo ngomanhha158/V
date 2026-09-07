@@ -4,7 +4,7 @@ import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { cachDangNhap } from '@/lib/auth-method'
 import { normalizeEmail, toE164VN } from '@/lib/phone'
-import { BIET_TRANG_THAI, goYNguoiSua, loiDangNhap } from '@/lib/auth-loi'
+import { BIET_TRANG_THAI, docTraLoiDangNhap, goYNguoiSua, loiDangNhap } from '@/lib/auth-loi'
 import { Button, Field, Hop, Input } from '@/components/ui'
 import { IcTrai } from '@/components/icons'
 
@@ -30,10 +30,16 @@ async function goi(
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(than),
     })
-    return (await r.json()) as { tt: string; giay?: number; cau?: string; goY?: string | null; maLoi?: string }
+    // Thân hỏng KHÔNG phải là mất mạng. Route ném lỗi thì Next trả trang 500,
+    // và json() ném — trước đây cả hai ca rơi chung vào 'mang', tức là màn
+    // hình đổ cho wifi của người dùng trong lúc máy chủ đang sập.
+    let body: Record<string, unknown> | null = null
+    try { body = await r.json() } catch { body = null }
+    return docTraLoiDangNhap(r.status, body)
   } catch {
-    // Mất mạng giữa chừng. Phân biệt với lỗi máy chủ, vì hai bên làm hai việc
-    // khác nhau: một bên bật lại wifi, một bên gọi ban quản lý.
+    // CHỈ tới đây khi fetch tự nó ném: mạng đứt thật, chưa có phản hồi nào.
+    // Phân biệt với lỗi máy chủ, vì hai bên làm hai việc khác nhau: một bên
+    // bật lại wifi, một bên gọi ban quản lý.
     return { tt: 'mang', cau: loiDangNhap('mang') }
   }
 }
