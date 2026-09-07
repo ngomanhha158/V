@@ -119,7 +119,7 @@ begin
   -- RLS, nó không cho quyền bảng, và `revoke execute ... from public` trong
   -- auth_hooks.sql còn gỡ nốt quyền gọi hàm mà nó đang sống nhờ.
   -- Hệ quả: webhook trả 5xx nên tiền của cư dân biến mất khỏi hệ thống, và cả
-  -- năm job nền im lặng không chạy. Không màn nào báo.
+  -- tám job nền im lặng không chạy. Không màn nào báo.
   execute 'reset role';
   execute 'set local role service_role';
 

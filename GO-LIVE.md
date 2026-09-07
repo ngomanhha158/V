@@ -22,10 +22,10 @@ Không phải kế hoạch — là những gì đã kiểm và những gì còn 
 | Backup | GitHub Actions dump hằng ngày, gồm cả schema `auth` |
 | Lưu trữ ảnh | Volume của service `v`, phục vụ qua `/api/anh` — hỏi lại quyền từng lần xem |
 | Quyền `anon` | **Không có bảng nào** — request không JWT không đọc được gì |
-| Bộ test | 28 file SQL độc lập + cả ngăn xếp Railway + 293 test JS, xanh trên CI mỗi lần push |
-| Giao diện | 67 route thật (chưa kể bản demo), build sạch, sáng/tối |
+| Bộ test | 31 file SQL độc lập + cả ngăn xếp Railway + 313 test JS, xanh trên CI mỗi lần push |
+| Giao diện | 66 route thật (chưa kể bản demo), build sạch, sáng/tối |
 
-Tám job nền và giờ chạy (giờ VN). Đặt thiếu một cái thì nó KHÔNG chạy và
+Chín job nền và giờ chạy (giờ VN). Đặt thiếu một cái thì nó KHÔNG chạy và
 không có gì báo — bảng đối chiếu đầy đủ ở đầu `cron.sql` và bước 8 của
 `railway/GD1-runbook.sh`:
 
@@ -41,6 +41,12 @@ không có gì báo — bảng đối chiếu đầy đủ ở đầu `cron.sql`
 - `bao-cao-quy` — 02:00 ngày 5 tháng đầu mỗi quý, sinh báo cáo cho quý vừa kết
   thúc. Chạy lại nhiều lần cũng chỉ ra một bản: mỗi quý một báo cáo còn hiệu
   lực, chốt bằng index ở database chứ không bằng trí nhớ của người đặt lịch.
+- `day-thong-bao` — 15 phút/lần, đẩy thông báo ra điện thoại cư dân. **Đây là
+  thứ làm ba job nhắc ở trên có tác dụng thật**: `nhac-no`, kiện hàng về quầy
+  và kiện quá hạn đều chỉ ghi một dòng vào `notifications`, mà cư dân chỉ thấy
+  nếu tự mở app. Không đặt lịch này thì hệ thống "có nhắc nợ" đúng về mặt dữ
+  liệu và sai về mặt sự thật. Job duy nhất chạy bằng Node chứ không bằng một
+  hàm SQL — mã hoá Web Push không làm được trong Postgres.
 
 ## Chưa go-live được — và vì sao
 
@@ -71,10 +77,15 @@ NEXT_PUBLIC_VBUILDING_AUTH=email   # 'email' hoặc 'sms'; đang tạm email
 VBUILDING_BANK_BIN                 # BIN NAPAS 6 số, VD Vietcombank 970436
 VBUILDING_BANK_ACCOUNT             # số tài khoản nhận phí
 VBUILDING_BANK_NAME                # tên chủ tài khoản, in trên màn hóa đơn
+VAPID_PUBLIC_KEY                   # thông báo đẩy; sinh: npx web-push generate-vapid-keys
+VAPID_PRIVATE_KEY                  # KHOÁ BÍ MẬT, đừng commit
+VAPID_SUBJECT=mailto:bql@ten-mien-cua-ban
 ```
 
 Ba biến ngân hàng thiếu thì hóa đơn vẫn xem được, chỉ là không có mã QR và
-cư dân phải hỏi BQL số tài khoản. `SMTP_URL` thiếu thì nặng hơn nhiều: nút
+cư dân phải hỏi BQL số tài khoản. Ba biến `VAPID_*` thiếu thì thông báo vẫn
+nằm đủ trong app, chỉ là điện thoại không rung — màn Thông báo nói thẳng
+chuyện đó thay vì im lặng không có nút bật. `SMTP_URL` thiếu thì nặng hơn nhiều: nút
 "Gửi mã" báo lỗi, và lối vào duy nhất còn lại là mật khẩu BQL đặt tay.
 
 **Volume cho ảnh.** Gắn một Volume vào service `v` tại đúng `/data/ticket-photos`.
@@ -108,6 +119,26 @@ SMS để sau; lúc có thì đổi `NEXT_PUBLIC_VBUILDING_AUTH=sms` rồi deplo
 màn đăng nhập đã có sẵn cả hai đường, nhưng `/api/auth/ma` hiện trả lỗi rõ
 ràng cho số điện thoại vì chưa cắm nhà cung cấp nào.
 
+### 2b. Đăng nhập hỏng thì hỏi thẳng máy chủ
+
+```
+curl.exe -s -X POST -H "x-cron-key: <CRON_SECRET>" https://<domain>/api/chan-doan
+```
+
+`/api/health` cố ý KHÔNG chạm database, nên nó trả lời được "tiến trình còn
+sống" và "biến đã đặt" mà không trả lời được câu hay hỏng nhất: **hai khoá
+JWT có khớp nhau không**. Đó là lỗ thật: màn đăng nhập báo "hệ thống đang
+không đọc được dữ liệu đăng nhập" — đúng và trung thực với cư dân, nhưng
+người đi sửa phải mở log Railway mới biết là khoá lệch, hay chưa chạy
+`railway/03_auth.sql`, hay quên `notify pgrst`. Ba nguyên nhân, một triệu
+chứng.
+
+Endpoint này soát sáu bước theo thứ tự và **dừng ở nguyên nhân gốc**: biến môi
+trường → PostgREST có tới được → khoá JWT có khớp → lớp đăng nhập đã áp chưa →
+có ai là BQL chưa → thông báo đẩy đã bật chưa. Khóa bằng `CRON_SECRET` chứ
+không bằng phiên đăng nhập: nó phải dùng được đúng lúc không ai đăng nhập nổi.
+Không bao giờ trả về giá trị của biến nào, chỉ trả về nó có hoạt động không.
+
 ### 3. Chưa có tài khoản BQL
 
 `staff_assignments` đang rỗng. Không có ai là BQL thì toàn bộ màn `/bql`
@@ -124,8 +155,10 @@ Thứ tự bắt buộc — không đảo được:
 
    Không còn phải chờ họ "tự đăng nhập một lần" như hồi Supabase: `auth.users`
    giờ là bảng của chính mình, tạo thẳng được, và trigger tự dựng `profiles`.
-3. Điền `v_email` (và `v_du_an` nếu DB còn trống) trong `bootstrap_bql.sql`
-   rồi chạy file đó
+3. Điền `v_email` trong `bootstrap_bql.sql` rồi chạy file đó. `v_du_an` là
+   tên khu: DB còn trống thì script tự tạo khu đó; DB đã có **từ hai khu**
+   thì `v_du_an` phải khớp đúng tên một khu — script không tự chọn hộ nữa,
+   vì "khu đầu bảng" khi có hai khu là chọn bừa
 4. Báo họ đăng nhập bằng mật khẩu tạm, rồi tự đổi ở màn Người dùng
 
 `bootstrap_bql.sql` cố ý chạy bằng quyền `postgres`: `staff_assignments`
@@ -157,6 +190,19 @@ nhưng ai đọc được repo là tải được — giữ repo riêng tư.
 Job tự kiểm bản dump có nội dung thật (đếm số bảng có dữ liệu) rồi mới lưu.
 Không có bước đó thì một bản dump rỗng vẫn upload thành công và ba tháng sau
 mới phát hiện suốt thời gian đó không có backup nào.
+
+**Khôi phục: `railway/KHOI-PHUC-runbook.sh <file.dump> <url database đích>`.**
+Có backup ba năm rồi phát hiện không khôi phục được là kiểu hỏng kinh điển nhất
+của backup — workflow trên chỉ chứng minh bản dump ĐƯỢC TẠO RA và không rỗng,
+không chứng minh nó DÙNG ĐƯỢC. Runbook đã diễn tập trọn vẹn trên PostgreSQL
+16.13: dump một DB có tài khoản thật → khôi phục vào database trắng → đăng nhập
+đúng mật khẩu thành công, sai mật khẩu bị từ chối, phân công BQL còn nguyên.
+Bước cuối của nó kiểm đúng chuyện đó chứ không đếm dòng: một bản khôi phục đủ
+hóa đơn mà không ai đăng nhập được thì vẫn là hỏng.
+
+Role KHÔNG nằm trong bản dump (`pg_dump` không bao giờ dump role) và quyền cũng
+không (`--no-privileges`) — nên runbook chạy `railway/00_compat.sql` trước để dựng role,
+rồi `auth_hooks.sql` + `railway/03_auth.sql` sau để cấp lại quyền.
 
 ### 4. Dữ liệu trên DB đang là dữ liệu MẪU
 

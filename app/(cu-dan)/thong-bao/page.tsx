@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/db/server'
 import { danhDauDaDoc } from './actions'
+import { BatPush } from './bat-push'
+import { khoaCongPush } from '@/lib/push'
 import { Button, Card, PageHead, Trong, cx } from '@/components/ui'
 import { IcChuong, IcHoaDon, IcLoa, IcNguoi, IcYeuCau } from '@/components/icons'
 
@@ -50,6 +52,11 @@ export default async function ThongBao() {
           ) : undefined
         }
       />
+
+      {/* Đặt TRƯỚC danh sách. Người mở màn này là người đang quan tâm tới thông
+          báo — đúng lúc để hỏi họ có muốn nhận trên điện thoại không. Nhét
+          xuống cuối một danh sách 100 dòng thì không ai thấy. */}
+      <BatPush khoaCong={khoaCongPush()} />
 
       {!list.length ? (
         <Trong title="Chưa có thông báo nào">

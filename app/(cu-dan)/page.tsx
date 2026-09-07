@@ -17,10 +17,13 @@ export default async function Home() {
     .eq('user_id', user?.id ?? '')
 
   // Chỉ để hiện/ẩn link. RLS mới là chốt chặn thật cho trang BQL.
-  const { data: project } = await db.from('projects').select('id').limit(1).maybeSingle()
-  const { data: isStaff } = project
-    ? await db.rpc('is_staff', { p_project: project.id })
-    : { data: false }
+  //
+  // Hỏi "tôi có là nhân sự ở BẤT KỲ khu nào không", chứ không hỏi is_staff của
+  // một khu lấy đại. Người vừa quản lý khu A vừa ở khu B mà khu B lên trước
+  // thì is_staff(B) = false và link vào /bql biến mất — họ mất đường vào phần
+  // mình phụ trách, không kèm một lời giải thích nào.
+  const { data: khuQuanLy } = await db.rpc('du_an_cua_toi')
+  const isStaff = (khuQuanLy ?? []).length > 0
 
   const active = memberships?.filter((m) => m.status === 'active') ?? []
   const pending = memberships?.filter((m) => m.status === 'pending') ?? []

@@ -57,6 +57,61 @@ async function dungNgan(doi = (_f, s) => s, im = false) {
 }
 
 /**
+ * Tám job nền: tên trong bản đồ VIEC phải gọi được thật.
+ *
+ * `app/api/cron/[viec]/route.ts` gọi `db.rpc(VIEC[ten])` qua PostgREST. Đổi tên
+ * một hàm SQL mà quên sửa bản đồ thì PostgREST trả 404, route trả 500, và job
+ * đó KHÔNG BAO GIỜ chạy nữa — không màn nào báo, không test nào đỏ. Cái mất là
+ * đúng những thứ chính GO-LIVE.md cảnh báo: hóa đơn không được nhắc, ticket quá
+ * hạn không leo thang, sổ ra vào giữ mãi quá hạn lưu 90 ngày đã hứa với cư dân.
+ *
+ * Bản đồ VIEC là NGUỒN DUY NHẤT — đọc thẳng từ file route, không chép lại tên
+ * sang đây, vì chép lại là dựng đúng cái chỗ lệch mình đang đi bịt.
+ *
+ * Ba điều kiện, mất cái nào cũng ra 500 y hệt nhau:
+ *   1. hàm có thật trong schema public (PostgREST chỉ phơi schema này)
+ *   2. gọi được KHÔNG cần tham số — route gọi rpc(ten) tay không
+ *   3. service_role có EXECUTE — cron chạy bằng admin client
+ */
+async function kiemJobNen(im = false) {
+  const nguon = readFileSync(join(ROOT, 'app/api/cron/[viec]/route.ts'), 'utf8')
+  const khoi = nguon.match(/const VIEC = \{[\s\S]*?\n\} as const/)?.[0] ?? ''
+  const ten = [...khoi.matchAll(/^  '[a-z-]+': '([a-z_]+)',/gm)].map((m) => m[1])
+  if (ten.length === 0) {
+    console.error('RỖNG  không đọc được bản đồ VIEC — bài kiểm job nền vô nghĩa')
+    return false
+  }
+
+  const db = new PGlite({ extensions: { pgcrypto } })
+  try {
+    for (const f of FILES) await db.exec(readFileSync(join(ROOT, f), 'utf8'))
+    let ok = true
+    for (const ham of ten) {
+      const { rows } = await db.query(
+        `select p.pronargs - p.pronargdefaults as bat_buoc,
+                has_function_privilege('service_role', p.oid, 'EXECUTE') as goi_duoc
+           from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.proname = $1`, [ham])
+      if (rows.length === 0) {
+        console.error(`HỎNG  job nền "${ham}" không có trong schema public `
+          + '— PostgREST trả 404 và job đó không bao giờ chạy')
+        ok = false
+      } else if (!rows.some((r) => Number(r.bat_buoc) === 0)) {
+        console.error(`HỎNG  job nền "${ham}" đòi tham số — route gọi rpc() tay không`)
+        ok = false
+      } else if (!rows.some((r) => Number(r.bat_buoc) === 0 && r.goi_duoc)) {
+        console.error(`HỎNG  job nền "${ham}" không cấp EXECUTE cho service_role`)
+        ok = false
+      }
+    }
+    if (ok && !im) console.log(`OK    ${ten.length} job nền: hàm có thật, không tham số, service_role gọi được`)
+    return ok
+  } finally {
+    await db.close()
+  }
+}
+
+/**
  * Canary — chứng minh hai bài smoke KHÔNG rỗng.
  *
  * Cả hai file smoke báo kết quả bằng RAISE NOTICE, mà PGlite không đưa notice
@@ -83,7 +138,7 @@ const CANARY = [
   {
     // Nửa còn lại của cùng một lỗi. Quyền BẢNG và quyền GỌI HÀM mất độc lập
     // với nhau, nên một canary không thay được canary kia.
-    ten: 'gỡ EXECUTE của service_role (ghi_nhan_tien_ve và 5 hàm job nền)',
+    ten: 'gỡ EXECUTE của service_role (ghi_nhan_tien_ve và cả 8 hàm job nền)',
     file: 'railway/02_smoke_prod.sql',
     doi: (s) => `${s}\nrevoke execute on all functions in schema public from service_role;\n`,
     ap: 'auth_hooks.sql',
@@ -119,6 +174,11 @@ const CANARY = [
 console.log('── Ngăn xếp Railway')
 const do1 = await dungNgan()
 let ok = do1 === null
+
+if (ok) {
+  console.log('\n── Tám job nền (bản đồ VIEC ↔ catalog thật)')
+  ok = await kiemJobNen()
+}
 
 if (ok) {
   console.log('\n── Canary (mỗi dòng dưới đây PHẢI đỏ, nếu xanh là bài smoke rỗng)')

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/db/server'
+import { duAnBQL } from '@/lib/du-an'
 import { baoCao, docKy, tenTep } from '@/lib/xuat/bao-cao'
 import { dungWorkbook } from '@/lib/xuat/excel'
 import { layDong } from '@/lib/xuat/lay-du-lieu'
@@ -28,8 +29,13 @@ export async function GET(
   const { data: { user } } = await db.auth.getUser()
   if (!user) return loi(401, 'Chưa đăng nhập.')
 
-  const { data: project } = await db
-    .from('projects').select('id, name').limit(1).maybeSingle()
+  // KHU ĐANG XEM, không phải khu đầu bảng. Nút tải nằm trên /bql/xuat — một
+  // màn đã lọc theo khu đang chọn — nên file phải là của đúng khu đó. Lấy
+  // `projects ... limit 1` thì người quản lý hai khu bấm tải ở khu B mà nhận
+  // file của khu A, và file đó không nói nó là của khu nào cho tới dòng tiêu
+  // đề bên trong. Tệ hơn: nếu khu đầu bảng không phải khu họ quản lý thì họ bị
+  // TỪ CHỐI 403 ngay trên chính báo cáo của mình.
+  const project = await duAnBQL()
   if (!project) return loi(404, 'Chưa có dự án nào trong hệ thống.')
 
   // Ai xuất file này. Phải hỏi profiles chứ không đọc từ phiên: phiên chỉ mang

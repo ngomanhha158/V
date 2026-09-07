@@ -1,6 +1,8 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/db/server'
+import { sheetToRows } from '@/lib/import/xlsx'
+import { validateReadingRows, type ParsedReading, type RowIssue as ReadingIssue } from '@/lib/import/chi-so'
 import { duAnBQL } from '@/lib/du-an'
 
 export type BillingState = { error?: string; ok?: string }
@@ -77,8 +79,18 @@ export async function saveReadings(_prev: BillingState, formData: FormData): Pro
     const curr = String(value).trim()
     if (!curr) continue   // bỏ trống = chưa đọc được công tơ căn đó, không phải lỗi
 
-    const prev = String(formData.get(`prev:${unitId}`) ?? '0').trim() || '0'
+    const prev = String(formData.get(`prev:${unitId}`) ?? '').trim()
     const code = String(formData.get(`code:${unitId}`) ?? unitId.slice(0, 8))
+
+    // BỎ TRỐNG CHỈ SỐ CŨ LÀ LỖI, KHÔNG PHẢI SỐ 0. Trước đây chỗ này mặc định về
+    // '0', mà tiền nước = curr - prev: bỏ trống một ô trên công tơ đã chạy 5 năm
+    // là xuất hóa đơn cho toàn bộ số nước căn đó dùng từ ngày lắp. Hóa đơn vẫn
+    // hợp lệ, vẫn có QR, vẫn gửi đi — chỉ sai tiền. Muốn số 0 thật (công tơ mới
+    // lắp) thì gõ số 0 vào, một ký tự, và ý định đó nằm lại trong dữ liệu.
+    if (!prev) {
+      errors.push(`${code}: thiếu chỉ số cũ (công tơ mới lắp thì gõ 0)`); continue
+    }
+
     const p = Number(prev.replace(',', '.'))
     const c = Number(curr.replace(',', '.'))
 
@@ -106,4 +118,127 @@ export async function saveReadings(_prev: BillingState, formData: FormData): Pro
 
   revalidatePath('/bql/billing')
   return { ok: `Đã lưu chỉ số cho ${rows.length} căn.` }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Import chỉ số công tơ từ Excel (N15 của kế hoạch: "form + import Excel").
+//
+// Vì sao cần bên cạnh cái form: form bắt gõ tay từng căn, mỗi tháng, cho cả
+// tòa. 240 ô số, mỗi ô một lần gõ nhầm là một hóa đơn sai. Người đi đọc công tơ
+// vốn đã ghi ra giấy hoặc ra file rồi — chỗ hay sai nhất là lúc chép lại.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ReadingImportState =
+  | { phase: 'idle' }
+  | { phase: 'error'; message: string }
+  | {
+      phase: 'preview'
+      ok: ParsedReading[]; issues: ReadingIssue[]; skippedBlank: number
+      thieu: string[]; fileName: string; period: string; feeTypeId: string
+    }
+  | { phase: 'done'; saved: number }
+
+/** Chỉ số cuối kỳ TRƯỚC, để điền vào khi file không có cột "chỉ số cũ". */
+async function chiSoCuoiKyTruoc(
+  db: Awaited<ReturnType<typeof createClient>>, period: string, feeTypeId: string,
+): Promise<Record<string, number>> {
+  const [nam, thang] = period.split('-').map(Number)
+  const truoc = thang === 1 ? `${nam - 1}-12-01` : `${nam}-${String(thang - 1).padStart(2, '0')}-01`
+  const { data } = await db
+    .from('meter_readings').select('curr_index, units(code)')
+    .eq('period', truoc).eq('fee_type_id', feeTypeId)
+  const ra: Record<string, number> = {}
+  for (const r of data ?? []) {
+    const code = (r as { units?: { code?: string } }).units?.code
+    if (code) ra[code] = Number(r.curr_index)
+  }
+  return ra
+}
+
+export async function previewReadings(
+  _prev: ReadingImportState, formData: FormData,
+): Promise<ReadingImportState> {
+  const period = firstOfMonth(String(formData.get('period') ?? ''))
+  const feeTypeId = String(formData.get('fee_type_id') ?? '')
+  if (!period) return { phase: 'error', message: 'Chưa chọn kỳ.' }
+  if (!feeTypeId) return { phase: 'error', message: 'Chưa chọn loại chỉ số.' }
+
+  const file = formData.get('file')
+  if (!(file instanceof File) || file.size === 0) {
+    return { phase: 'error', message: 'Chưa chọn file.' }
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    return { phase: 'error', message: 'File lớn hơn 5MB. Tách nhỏ hoặc xóa bớt sheet thừa.' }
+  }
+
+  let rows: unknown[][]
+  try {
+    rows = await sheetToRows(await file.arrayBuffer())
+  } catch {
+    return { phase: 'error', message: 'Không đọc được file. Cần đúng định dạng .xlsx (không phải .xls hay .csv).' }
+  }
+
+  const db = await createClient()
+  // Căn CỦA KHU ĐANG XEM, không phải mọi căn RLS cho đọc. Người quản lý hai khu
+  // đọc được căn của cả hai, nên nếu chỉ dựa vào RLS thì file chỉ số của khu B
+  // nhập lúc đang xem khu A sẽ qua sạch — không dòng nào bị chặn, và chỉ số ghi
+  // vào đúng căn nhưng sai kỳ vọng của người nhập. Đây chính là điều mà chốt
+  // "căn không thuộc khu này" phải bắt được.
+  const duAn = await duAnBQL()
+  if (!duAn) return { phase: 'error', message: 'Chưa chọn khu.' }
+  const { data: units } = await db.from('units')
+    .select('code, buildings!inner(project_id)')
+    .eq('buildings.project_id', duAn.id).order('code')
+  const cuoi = await chiSoCuoiKyTruoc(db, period, feeTypeId)
+
+  const kq = validateReadingRows(rows, (units ?? []).map((u) => u.code), cuoi)
+  return {
+    phase: 'preview', ...kq,
+    fileName: file.name, period, feeTypeId,
+  }
+}
+
+export async function commitReadings(
+  _prev: ReadingImportState, formData: FormData,
+): Promise<ReadingImportState> {
+  const period = firstOfMonth(String(formData.get('period') ?? ''))
+  const feeTypeId = String(formData.get('fee_type_id') ?? '')
+  if (!period || !feeTypeId) return { phase: 'error', message: 'Thiếu kỳ hoặc loại chỉ số.' }
+
+  let ds: ParsedReading[]
+  try {
+    ds = JSON.parse(String(formData.get('payload') ?? '[]')) as ParsedReading[]
+  } catch {
+    return { phase: 'error', message: 'Dữ liệu xem trước hỏng. Tải file lên lại.' }
+  }
+  if (ds.length === 0) return { phase: 'error', message: 'Không có dòng nào để ghi.' }
+
+  const db = await createClient()
+  const duAn = await duAnBQL()
+  if (!duAn) return { phase: 'error', message: 'Chưa chọn khu.' }
+  // Đổi mã căn -> id ngay trước khi ghi, không tin id đi vòng qua trình duyệt.
+  // Vẫn lọc theo khu: giữa lúc xem trước và lúc bấm ghi, người ta đổi khu được.
+  const { data: units } = await db.from('units')
+    .select('id, code, buildings!inner(project_id)').eq('buildings.project_id', duAn.id)
+  const theoMa = new Map((units ?? []).map((u) => [u.code.toUpperCase(), u.id]))
+
+  const rows = []
+  for (const r of ds) {
+    const id = theoMa.get(r.unit_code.toUpperCase())
+    // Căn biến mất giữa lúc xem trước và lúc ghi. Hiếm, nhưng ghi thiếu một căn
+    // mà không nói gì thì tháng đó hộ đó không có hóa đơn nước.
+    if (!id) return { phase: 'error', message: `Căn "${r.unit_code}" không còn trong hệ thống. Xem lại rồi tải lên lại.` }
+    rows.push({
+      unit_id: id, fee_type_id: feeTypeId, period,
+      prev_index: r.prev_index, curr_index: r.curr_index,
+    })
+  }
+
+  const { error } = await db
+    .from('meter_readings')
+    .upsert(rows, { onConflict: 'unit_id,fee_type_id,period' })
+  if (error) return { phase: 'error', message: humanError(error, 'Không lưu được chỉ số') }
+
+  revalidatePath('/bql/billing')
+  return { phase: 'done', saved: rows.length }
 }

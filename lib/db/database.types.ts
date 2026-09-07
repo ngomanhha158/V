@@ -1984,6 +1984,25 @@ export type Database = {
         }[]
       }
       duoc_quan_ly: { Args: { p_project: string }; Returns: boolean }
+      // §29 Khu cư dân đang ở.
+      khu_toi_o: { Args: Record<string, never>; Returns: { id: string; name: string }[] }
+      // §30 Thông báo đẩy (web push).
+      push_dang_ky_may: {
+        Args: { p_endpoint: string; p_p256dh: string; p_auth: string; p_may?: string | null }
+        Returns: undefined
+      }
+      push_go_may: { Args: { p_endpoint: string }; Returns: undefined }
+      thong_bao_can_day: {
+        Args: { p_gioi_han?: number }
+        Returns: {
+          id: number; title: string; body: string | null
+          kind: string; ref_id: string | null
+          endpoint: string; p256dh: string; auth: string
+        }[]
+      }
+      thong_bao_da_day: { Args: { p_ids: number[] }; Returns: number }
+      push_go_endpoint_chet: { Args: { p_endpoints: string[] }; Returns: number }
+      push_ghi_nhan_day: { Args: { p_endpoints: string[] }; Returns: number }
       // §28 Tài khoản nhận tiền của từng khu.
       tk_nhan_tien: {
         Args: { p_project: string }

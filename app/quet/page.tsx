@@ -19,10 +19,15 @@ export const dynamic = 'force-dynamic'
 
 export default async function Page() {
   const db = await createClient()
-  const { data: project } = await db.from('projects').select('id, name').limit(1).maybeSingle()
-  const { data: laNhanSu } = project
-    ? await db.rpc('is_staff', { p_project: project.id })
-    : { data: false }
+  // Như ở màn cư dân: hỏi "có phải nhân sự ở đâu đó không". Bảo vệ trực khu B
+  // mà khu A lên trước thì màn quét thẻ đóng lại ngay giữa ca, và ở cửa thì
+  // không có ai để hỏi vì sao.
+  const { data: khuQuanLy } = await db.rpc('du_an_cua_toi')
+  const dsKhu = (khuQuanLy ?? []) as { id: string; name: string }[]
+  const laNhanSu = dsKhu.length > 0
+  // Kể TÊN các khu quét được. Bảo vệ trực nhiều khu cần biết thẻ khu nào ra
+  // kết quả đầy đủ — "dự án này" thì đúng khi có một khu và vô nghĩa khi có hai.
+  const tenKhu = dsKhu.map((k) => k.name).join(', ')
 
   return (
     <BqlShell>
@@ -31,13 +36,13 @@ export default async function Page() {
 
       {laNhanSu ? (
         <Hop tone="tot" title="Tài khoản này quét được">
-          Bạn là nhân sự của {project?.name ?? 'dự án này'}, nên kết quả quét sẽ
-          hiện đầy đủ họ tên và căn hộ.
+          Bạn là nhân sự của {tenKhu}, nên thẻ của {dsKhu.length > 1 ? 'các khu đó' : 'khu đó'} quét
+          ra đầy đủ họ tên và căn hộ.
         </Hop>
       ) : (
         <Hop tone="xau" title="Tài khoản này CHƯA quét được">
-          Bạn chưa được gán vai trò nhân sự của {project?.name ?? 'dự án'}. Quét
-          thẻ sẽ chỉ ra màn báo lỗi. Nhờ trưởng ban quản lý gán vai trò ở màn
+          Bạn chưa được gán vai trò nhân sự ở khu nào. Quét thẻ sẽ chỉ ra màn
+          báo lỗi. Nhờ trưởng ban quản lý gán vai trò ở màn
           Người dùng, rồi đăng nhập lại — <strong>làm trước khi vào ca</strong>,
           đừng để phát hiện ra lúc đang có người đứng chờ ở cửa.
         </Hop>

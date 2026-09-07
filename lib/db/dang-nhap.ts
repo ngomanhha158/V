@@ -5,6 +5,7 @@ import { ky } from './jwt.ts'
 import { biMatJwt, PHIEN_SONG_GIAY } from './env.ts'
 import { TEN_COOKIE, tuyChonCookie } from './phien.ts'
 import { guiMaDangNhap } from '@/lib/mail'
+import { phanLoaiLoiHeThong } from '@/lib/auth-loi'
 
 /**
  * Toàn bộ đường đăng nhập chạy PHÍA MÁY CHỦ, dùng client service_role.
@@ -17,7 +18,6 @@ import { guiMaDangNhap } from '@/lib/mail'
 export type KetQua =
   | { ok: true; uid: string }
   | { ok: false; tt: string; giay?: number }
-
 /** Sáu chữ số, kể cả khi bắt đầu bằng 0. randomInt của node:crypto chứ không
  *  phải Math.random: Math.random đoán được, và đoán được nghĩa là đăng nhập
  *  được vào tài khoản người khác. */
@@ -30,13 +30,22 @@ const sinhMa = () => String(randomInt(0, 1_000_000)).padStart(6, '0')
  * Trả lời khác nhau ở hai trường hợp là biến màn đăng nhập thành máy dò —
  * gõ vào một danh sách email rồi xem cái nào "gửi được" là biết ai sống ở đây.
  */
+export type KetQuaGuiMa =
+  | 'ok' | 'cho' | 'khong_gui_duoc'
+  | 'he_thong_khoa' | 'he_thong_thieu_lop' | 'he_thong_mat_ket_noi' | 'he_thong'
+
 export async function guiMa(
   danhTinh: string, goc: string,
-): Promise<{ tt: 'ok' | 'cho' | 'khong_gui_duoc'; giay?: number }> {
+): Promise<{ tt: KetQuaGuiMa; giay?: number }> {
   const ma = sinhMa()
   const admin = await createAdminClient()
   const { data, error } = await admin.rpc('auth_gui_ma', { p_danh_tinh: danhTinh, p_ma: ma })
-  if (error) return { tt: 'khong_gui_duoc' }
+  // Cùng ba nguyên nhân với lúc kiểm mã. 'khong_gui_duoc' nói về THƯ, mà ở đây
+  // thư còn chưa tới lượt — hỏng từ trước đó, ở đường ra database.
+  if (error) {
+    console.error('auth_gui_ma loi:', { code: error.code, message: error.message })
+    return { tt: phanLoaiLoiHeThong(error) }
+  }
 
   const hang = data?.[0]
   if (hang?.trang_thai === 'cho') return { tt: 'cho', giay: hang.cho_giay ?? 60 }
@@ -68,7 +77,7 @@ export async function vaoBangMa(danhTinh: string, ma: string): Promise<KetQua> {
   // hình chỉ về phía đó. Ghi log để còn dò, và nói thẳng cho người dùng.
   if (error) {
     console.error('auth_kiem_ma loi:', { code: error.code, message: error.message })
-    return { ok: false, tt: 'he_thong' }
+    return { ok: false, tt: phanLoaiLoiHeThong(error) }
   }
   const hang = data?.[0]
   if (hang?.trang_thai === 'ok' && hang.uid) return { ok: true, uid: hang.uid }
@@ -84,7 +93,7 @@ export async function vaoBangMatKhau(danhTinh: string, matKhau: string): Promise
   // người dùng đi đổi mật khẩu trong lúc máy chủ mới là thứ đang hỏng.
   if (error) {
     console.error('auth_kiem_mat_khau loi:', { code: error.code, message: error.message })
-    return { ok: false, tt: 'he_thong' }
+    return { ok: false, tt: phanLoaiLoiHeThong(error) }
   }
   if (!data) return { ok: false, tt: 'sai_mat_khau' }
   return { ok: true, uid: data }

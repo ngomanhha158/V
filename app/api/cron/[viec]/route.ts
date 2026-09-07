@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/db/admin'
 import { bangNhau } from '@/lib/bi-mat'
+import { dayThongBao } from '@/lib/push'
 
 /**
  * Job nền, gọi từ ngoài vào.
@@ -40,7 +41,20 @@ const VIEC = {
   'bao-cao-quy': 'sinh_bao_cao_quy',
 } as const
 
+/**
+ * Job phải chạy TRONG NODE, không phải một hàm SQL.
+ *
+ * Web Push đòi mã hoá ECDH + AES-GCM và ký VAPID; Postgres không làm được, nên
+ * job này không thể là một dòng trong VIEC ở trên. Vẫn để chung route và chung
+ * CRON_SECRET: tách ra một endpoint riêng là thêm một khoá nữa để quên, và
+ * thêm một chỗ nữa mà bảng đối chiếu lịch cron không nhìn tới.
+ */
+const VIEC_NODE = {
+  'day-thong-bao': dayThongBao,
+} as const
+
 type Viec = keyof typeof VIEC
+type ViecNode = keyof typeof VIEC_NODE
 
 export async function POST(
   request: NextRequest, ctx: { params: Promise<{ viec: string }> },
@@ -57,12 +71,27 @@ export async function POST(
   }
 
   const ten = (await ctx.params).viec
-  if (!(ten in VIEC)) {
-    return NextResponse.json(
-      { loi: `Không có việc "${ten}".`, co: Object.keys(VIEC) }, { status: 404 })
+  const batDau = Date.now()
+
+  if (ten in VIEC_NODE) {
+    try {
+      const so = await VIEC_NODE[ten as ViecNode]()
+      return NextResponse.json({ viec: ten, so, ms: Date.now() - batDau })
+    } catch (e) {
+      // 500 chứ không phải 200-kèm-lỗi, giống nhánh SQL bên dưới: chưa cấu hình
+      // khoá VAPID cũng rơi vào đây, và nó PHẢI làm lịch cron đỏ. Trả 200 thì
+      // lịch xanh mỗi ngày trong khi không ai nhận được thông báo nào.
+      console.error(`cron ${ten} that bai:`, e)
+      return NextResponse.json({ viec: ten, loi: (e as Error).message }, { status: 500 })
+    }
   }
 
-  const batDau = Date.now()
+  if (!(ten in VIEC)) {
+    return NextResponse.json(
+      { loi: `Không có việc "${ten}".`, co: [...Object.keys(VIEC), ...Object.keys(VIEC_NODE)] },
+      { status: 404 })
+  }
+
   const db = await createAdminClient()
   const { data, error } = await db.rpc(VIEC[ten as Viec])
   if (error) {

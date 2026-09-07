@@ -6271,3 +6271,154 @@ language sql stable security definer set search_path = public as $fn$
    where p.id = p_project
      and (is_staff(p_project) or o_trong_du_an(p_project));
 $fn$;
+
+-- ══════════ 29. CƯ DÂN CŨNG CÓ THỂ Ở NHIỀU KHU ══════════
+-- §27 làm phần BQL: người quản lý nhiều khu chọn được khu đang xem. Phía CƯ DÂN
+-- thì vẫn còn nguyên mẫu cũ `projects ... limit 1`.
+--
+-- RLS đã chặn rò rỉ — sau §27 câu đó chỉ trả về khu người ta thật sự có mặt.
+-- Nên hỏng ở đây KHÔNG phải lộ dữ liệu, mà là MẤT ĐƯỜNG ĐI: người sở hữu căn ở
+-- hai khu chỉ vào được một khu, và không có nút nào dẫn sang khu kia. Họ không
+-- thấy báo lỗi gì cả — chỉ thấy một nửa tài sản của mình không tồn tại.
+--
+-- Cách chữa KHÔNG phải thêm một hộp chọn nữa. Cư dân không "trực" ở khu nào cả;
+-- họ chỉ có vài căn. Bày HẾT ra, ghi tên khu lên từng khối. Người một khu thấy
+-- đúng như cũ, người hai khu thấy cả hai — không cần học thêm thứ gì.
+create or replace function khu_toi_o()
+returns table (id uuid, name text)
+language sql stable security definer set search_path = public as $fn$
+  select distinct p.id, p.name
+    from projects p
+    join buildings b on b.project_id = p.id
+    join units u on u.building_id = b.id
+   where u.id in (select current_unit_ids())
+   order by p.name;
+$fn$;
+
+-- ══════════ 30. THÔNG BÁO ĐẨY (WEB PUSH) ══════════
+-- Ba cơ chế nhắc đã dựng xong và không ai nhận được gì:
+--   • remind_unpaid_invoices()  — nhắc nợ T-3 / T-0 / T+3, chạy 08:00 mỗi ngày
+--   • nhan_kien_hang()          — có kiện hàng ở quầy
+--   • nhac_kien_hang()          — kiện để quá 3 ngày
+-- Cả ba ghi một dòng vào `notifications` rồi thôi. Cư dân chỉ thấy NẾU TỰ MỞ
+-- APP. Tức là "hệ thống có nhắc nợ" đúng về mặt dữ liệu và sai về mặt sự thật:
+-- người đang nợ không biết mình được nhắc.
+--
+-- §3bis của PLAN-30-NGAY.md đã chốt cách bù cho việc hoãn Zalo ZNS: kênh nào
+-- chạy được ngay mà không phụ thuộc ai duyệt thì bật kênh đó. Web push là kênh
+-- đó. Tốt trên Android và máy tính; iOS cần cư dân "Thêm vào màn hình chính"
+-- trước — nói thẳng chuyện đó ở giao diện chứ không im lặng không hoạt động.
+create table if not exists push_dang_ky (
+  id        bigserial primary key,
+  user_id   uuid not null references profiles(id) on delete cascade,
+  -- endpoint là ĐỊNH DANH của một máy+trình duyệt do nhà cung cấp push cấp.
+  -- unique để cùng một máy đăng ký lại không sinh bản ghi thứ hai — đẩy hai lần
+  -- vào một máy thì người ta thấy hai thông báo giống hệt và tắt luôn quyền.
+  endpoint  text not null unique,
+  p256dh    text not null,
+  auth      text not null,
+  -- Tên máy do người dùng tự nhận ra ("Chrome trên Android"). Không lưu nguyên
+  -- user-agent: nó là dấu vân tay, mà ở đây chỉ cần đủ để họ gỡ đúng máy cũ.
+  may       text,
+  tao_luc   timestamptz not null default now(),
+  -- Lần đẩy thành công gần nhất. Trống nghĩa là đăng ký rồi nhưng chưa từng
+  -- nhận được gì — phân biệt "chưa có thông báo nào" với "đăng ký hỏng".
+  day_luc   timestamptz
+);
+create index if not exists push_theo_nguoi on push_dang_ky (user_id);
+
+alter table push_dang_ky enable row level security;
+-- Mỗi người chỉ thấy và gỡ được máy CỦA MÌNH. Đọc được endpoint của người khác
+-- là đọc được họ dùng máy gì và đăng ký lúc nào.
+create policy push_cua_toi on push_dang_ky for select using (user_id = auth.uid());
+create policy push_tu_go   on push_dang_ky for delete using (user_id = auth.uid());
+-- Ghi đi qua RPC dưới đây, không cấp insert thẳng: khoá endpoint là thứ nhà
+-- cung cấp push tin, nên không để ai gắn endpoint của mình vào user_id người khác.
+
+alter table notifications add column if not exists sent_push_at timestamptz;
+-- Chưa đẩy = sent_push_at null. Cột riêng chứ không sửa sent_zns_at: hai kênh
+-- hỏng độc lập, gộp một cột thì bật ZNS sau này sẽ nuốt mất lịch sử của push.
+create index if not exists thong_bao_chua_day
+  on notifications (created_at) where sent_push_at is null;
+
+/**
+ * Đăng ký một máy để nhận thông báo đẩy.
+ *
+ * SECURITY DEFINER và tự gắn auth.uid(): người gọi không truyền được user_id,
+ * nên không ai đăng ký hộ máy của mình vào tài khoản người khác.
+ */
+create or replace function push_dang_ky_may(
+  p_endpoint text, p_p256dh text, p_auth text, p_may text default null)
+returns void language plpgsql volatile security definer set search_path = public as $fn$
+begin
+  if auth.uid() is null then
+    raise exception 'Chua dang nhap' using errcode = '42501';
+  end if;
+  if coalesce(trim(p_endpoint), '') = '' or coalesce(trim(p_p256dh), '') = ''
+     or coalesce(trim(p_auth), '') = '' then
+    raise exception 'Thieu khoa dang ky push' using errcode = '22023';
+  end if;
+
+  -- Cùng endpoint mà đổi người: máy dùng chung, người trước đăng xuất và người
+  -- sau đăng ký. Phải CHUYỂN chủ, không phải bỏ qua — bỏ qua là thông báo của
+  -- người trước tiếp tục hiện trên máy người sau đang cầm.
+  insert into push_dang_ky (user_id, endpoint, p256dh, auth, may)
+  values (auth.uid(), trim(p_endpoint), trim(p_p256dh), trim(p_auth), nullif(trim(p_may), ''))
+  on conflict (endpoint) do update
+    set user_id = auth.uid(), p256dh = excluded.p256dh,
+        auth = excluded.auth, may = excluded.may, tao_luc = now(), day_luc = null;
+end $fn$;
+
+/** Gỡ một máy. Chỉ gỡ được máy của chính mình — RLS lo phần đó. */
+create or replace function push_go_may(p_endpoint text)
+returns void language sql volatile security invoker set search_path = public as $fn$
+  delete from push_dang_ky where endpoint = p_endpoint;
+$fn$;
+
+/**
+ * Thông báo chưa đẩy, kèm khoá của từng máy. Chỉ service_role gọi được.
+ *
+ * Giới hạn 24 giờ: đẩy một thông báo nhắc nợ của tuần trước ra màn hình khoá
+ * thì tệ hơn là không đẩy — người ta mở ra và thấy một thứ đã cũ, rồi lần sau
+ * không mở nữa. Job nền chạy hằng ngày nên cửa sổ này luôn đủ rộng.
+ */
+create or replace function thong_bao_can_day(p_gioi_han int default 200)
+returns table (
+  id bigint, title text, body text, kind text, ref_id uuid,
+  endpoint text, p256dh text, auth text)
+language sql stable security definer set search_path = public as $fn$
+  select n.id, n.title, n.body, n.kind, n.ref_id, d.endpoint, d.p256dh, d.auth
+    from notifications n
+    join push_dang_ky d on d.user_id = n.user_id
+   where n.sent_push_at is null
+     and n.read_at is null            -- đã đọc trong app rồi thì đẩy làm gì
+     and n.created_at > now() - interval '24 hours'
+   order by n.created_at
+   limit p_gioi_han;
+$fn$;
+
+/** Đánh dấu đã đẩy. Gọi SAU khi nhà cung cấp push nhận, không phải trước. */
+create or replace function thong_bao_da_day(p_ids bigint[])
+returns int language sql volatile security definer set search_path = public as $fn$
+  with x as (
+    update notifications set sent_push_at = now()
+     where id = any(p_ids) and sent_push_at is null
+     returning 1)
+  select count(*)::int from x;
+$fn$;
+
+/** Máy từ chối (410/404 từ nhà cung cấp): gỡ hẳn. Giữ lại là mỗi ngày lại đẩy
+ *  vào một endpoint đã chết, và tỷ lệ lỗi che mất lỗi thật. */
+create or replace function push_go_endpoint_chet(p_endpoints text[])
+returns int language sql volatile security definer set search_path = public as $fn$
+  with x as (delete from push_dang_ky where endpoint = any(p_endpoints) returning 1)
+  select count(*)::int from x;
+$fn$;
+
+/** Ghi nhận đẩy thành công, để màn của cư dân phân biệt "chưa có thông báo
+ *  nào" với "đăng ký xong mà không bao giờ nhận được gì". */
+create or replace function push_ghi_nhan_day(p_endpoints text[])
+returns int language sql volatile security definer set search_path = public as $fn$
+  with x as (update push_dang_ky set day_luc = now() where endpoint = any(p_endpoints) returning 1)
+  select count(*)::int from x;
+$fn$;
