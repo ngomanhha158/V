@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { doiCho, loiDangNhap, type TrangThai } from './auth-loi.ts'
+import { doiCho, goYNguoiSua, loiDangNhap, type TrangThai } from './auth-loi.ts'
 
 // Mọi trạng thái mà railway/03_auth.sql và lib/db/dang-nhap.ts có thể trả về.
 // Danh sách này là bản hợp đồng giữa hai bên; thêm một bên mà quên bên kia là
@@ -8,6 +8,7 @@ import { doiCho, loiDangNhap, type TrangThai } from './auth-loi.ts'
 const HET: TrangThai[] = [
   'cho', 'sai', 'het_han', 'qua_nhieu', 'sai_mat_khau', 'chua_dat_mat_khau',
   'khong_gui_duoc', 'chua_co_sms', 'mang', 'he_thong', 'la',
+  'he_thong_khoa', 'he_thong_thieu_lop', 'he_thong_mat_ket_noi',
 ]
 
 test('mọi trạng thái đều có câu tiếng Việt riêng, không ai rơi vào câu chung', () => {
@@ -70,4 +71,28 @@ test('sự cố hệ thống nói rõ là KHÔNG phải lỗi người dùng, v�
   assert.notEqual(c, loiDangNhap('sai'))
   assert.notEqual(c, loiDangNhap('sai_mat_khau'))
   assert.notEqual(c, loiDangNhap('la'))
+})
+
+
+test('ba nhánh sự cố hệ thống nói ba chuyện KHÁC NHAU với cư dân', () => {
+  // Gộp lại một câu là quay về đúng chỗ cũ: một triệu chứng cho ba nguyên nhân.
+  const ba = ['he_thong_khoa', 'he_thong_thieu_lop', 'he_thong_mat_ket_noi']
+    .map((t) => loiDangNhap(t))
+  assert.equal(new Set(ba).size, 3)
+  // Và không câu nào đổ lỗi cho người đang đứng đó.
+  for (const c of ba) assert.doesNotMatch(c, /bạn nhập sai|kiểm tra lại mật khẩu/)
+})
+
+test('gợi ý cho người sửa CHỈ hiện ở ba nhánh sự cố, và có nói tên thứ phải sửa', () => {
+  // Đây là chỗ ĐƯỢC phép có tên biến — người đọc nó là người đi sửa. Bài test
+  // "không lộ mã máy" ở trên gác câu của cư dân, không gác câu này.
+  assert.match(goYNguoiSua('he_thong_khoa') ?? '', /AUTH_JWT_SECRET/)
+  assert.match(goYNguoiSua('he_thong_thieu_lop') ?? '', /03_auth\.sql|reload schema/)
+  assert.match(goYNguoiSua('he_thong_mat_ket_noi') ?? '', /POSTGREST_URL/)
+
+  // Sai mật khẩu thì KHÔNG có gì để gợi ý cho ai sửa. Hiện một khối kỹ thuật ở
+  // đó là dọa người dùng bằng một sự cố không tồn tại.
+  for (const t of ['sai_mat_khau', 'sai', 'het_han', 'cho', 'la', 'he_thong']) {
+    assert.equal(goYNguoiSua(t), null, t)
+  }
 })

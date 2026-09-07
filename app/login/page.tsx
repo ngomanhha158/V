@@ -4,7 +4,7 @@ import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { cachDangNhap } from '@/lib/auth-method'
 import { normalizeEmail, toE164VN } from '@/lib/phone'
-import { loiDangNhap } from '@/lib/auth-loi'
+import { goYNguoiSua, loiDangNhap } from '@/lib/auth-loi'
 import { Button, Field, Hop, Input } from '@/components/ui'
 import { IcTrai } from '@/components/icons'
 
@@ -54,6 +54,9 @@ function LoginForm() {
   const [matKhau, setMatKhau] = useState('')
   const [daGui, setDaGui] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Giữ MÃ trạng thái bên cạnh câu chữ: câu chữ cho cư dân đọc, còn mã mới
+  // biết được có phải sự cố hệ thống không để hiện khối gợi ý cho người sửa.
+  const [maLoi, setMaLoi] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const loiUrl = LOI_URL[useSearchParams().get('loi') ?? '']
 
@@ -77,11 +80,11 @@ function LoginForm() {
   async function gui() {
     const v = chuanHoa()
     if (!v) return loiDanhTinh()
-    setBusy(true); setError(null)
+    setBusy(true); setError(null); setMaLoi(null)
     const { tt, giay } = await goi('/api/auth/ma', { danhTinh: v })
     setBusy(false)
     if (tt === 'ok') return setDaGui(true)
-    setError(loiDangNhap(tt, giay))
+    setError(loiDangNhap(tt, giay)); setMaLoi(tt)
     // Bị chặn vì vừa gửi rồi: mở luôn ô nhập mã. Họ ĐANG cầm một mã trong tay,
     // bắt quay lại màn nhập email là bắt họ chờ hết một chu kỳ vô ích.
     if (tt === 'cho') setDaGui(true)
@@ -90,27 +93,27 @@ function LoginForm() {
   async function xacNhan() {
     const v = chuanHoa()
     if (!v) return
-    setBusy(true); setError(null)
+    setBusy(true); setError(null); setMaLoi(null)
     const { tt, giay } = await goi('/api/auth/vao', { danhTinh: v, ma: code })
     if (tt === 'ok') return vaoNha()
     setBusy(false)
-    setError(loiDangNhap(tt, giay))
+    setError(loiDangNhap(tt, giay)); setMaLoi(tt)
   }
 
   async function dangNhapMatKhau() {
     const v = chuanHoa()
     if (!v) return loiDanhTinh()
-    setBusy(true); setError(null)
+    setBusy(true); setError(null); setMaLoi(null)
     const { tt, giay } = await goi('/api/auth/vao', { danhTinh: v, matKhau })
     if (tt === 'ok') return vaoNha()
     setBusy(false)
-    setError(loiDangNhap(tt, giay))
+    setError(loiDangNhap(tt, giay)); setMaLoi(tt)
   }
 
   /** Đổi lối vào thì dọn sạch trạng thái của lối cũ, không để lẫn. */
   function doiCheDo(sang: CheDo) {
     setCheDo(sang)
-    setDaGui(false); setCode(''); setMatKhau(''); setError(null)
+    setDaGui(false); setCode(''); setMatKhau(''); setError(null); setMaLoi(null)
   }
 
   const guiDi = () => { laMatKhau ? dangNhapMatKhau() : daGui ? xacNhan() : gui() }
@@ -182,6 +185,26 @@ function LoginForm() {
               <Hop tone="xau" title="Không đăng nhập được">{error ?? loiUrl}</Hop>
             )}
 
+            {/* Khối riêng cho NGƯỜI SỬA, chỉ hiện ở ba nhánh sự cố hệ thống.
+                Người đang đứng trước màn này lúc cả tòa không ai vào được
+                thường chính là người dựng hệ thống — bảo họ "báo ban quản lý"
+                là đúng câu và vô dụng. Trước đây họ phải mở log máy chủ mới
+                biết là khoá lệch, hay thiếu lớp đăng nhập, hay không nối được.
+                Cả ba ra cùng một câu.
+
+                Cố ý KHÔNG hiện ở lỗi sai mật khẩu: dựng một khối kỹ thuật ở đó
+                là dọa người dùng bằng một sự cố không tồn tại. */}
+            {goYNguoiSua(maLoi ?? '') && (
+              <div className="rounded-card border border-line bg-sunken px-3.5 py-3">
+                <p className="text-[0.75rem] font-semibold tracking-wide text-muted uppercase">
+                  Dành cho người quản trị
+                </p>
+                <p className="num mt-1.5 text-[0.8125rem] leading-relaxed text-muted">
+                  {goYNguoiSua(maLoi ?? '')}
+                </p>
+              </div>
+            )}
+
             <Button type="submit" dang="chinh" className="w-full" disabled={khoaNut}>
               {nhan}
             </Button>
@@ -189,7 +212,7 @@ function LoginForm() {
             {!laMatKhau && daGui && !busy && (
               <button
                 type="button"
-                onClick={() => { setDaGui(false); setCode(''); setError(null) }}
+                onClick={() => { setDaGui(false); setCode(''); setError(null); setMaLoi(null) }}
                 className="inline-flex w-full items-center justify-center gap-1 text-[0.8125rem] font-medium text-muted hover:text-ink"
               >
                 <IcTrai width={14} height={14} />

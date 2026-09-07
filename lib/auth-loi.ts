@@ -14,6 +14,10 @@ export type TrangThai =
   | 'cho' | 'sai' | 'het_han' | 'qua_nhieu'
   | 'sai_mat_khau' | 'chua_dat_mat_khau'
   | 'khong_gui_duoc' | 'chua_co_sms' | 'mang' | 'he_thong' | 'la'
+  // Ba nhánh CON của 'he_thong'. Cùng một triệu chứng với cư dân, nhưng ba chỗ
+  // sửa khác hẳn nhau — và người sửa thường chính là người đang đứng trước màn
+  // này. Gộp chung một câu là bắt họ đi mở log máy chủ mới biết bắt đầu từ đâu.
+  | 'he_thong_khoa' | 'he_thong_thieu_lop' | 'he_thong_mat_ket_noi'
 
 /** "47 giây", "3 phút" — làm tròn LÊN. Nói "2 phút" cho 121 giây rồi để người
  *  ta bấm ở giây thứ 120 và lại bị chặn là hỏng đúng lúc họ đã kiên nhẫn. */
@@ -57,6 +61,48 @@ const CAU: Record<TrangThai, string> = {
     + 'quản lý để họ kiểm tra máy chủ.',
 
   la: 'Có lỗi không rõ. Thử lại giúp em, nếu vẫn vậy thì báo ban quản lý.',
+
+  // Ba câu dưới đây vẫn viết cho CƯ DÂN đọc — không tên biến, không tên hàm.
+  // Phần kỹ thuật nằm ở goYNguoiSua() bên dưới, hiện thành một khối riêng.
+  he_thong_khoa: 'Máy chủ đang từ chối chính app này, nên chưa ai đăng nhập '
+    + 'được — không riêng bạn. Đây là sai cấu hình phía hệ thống, thử lại cũng '
+    + 'sẽ như vậy. Báo ban quản lý.',
+
+  he_thong_thieu_lop: 'Phần đăng nhập chưa được cài đặt xong trên máy chủ. '
+    + 'Chưa ai vào được, và thử lại cũng sẽ như vậy. Báo ban quản lý.',
+
+  he_thong_mat_ket_noi: 'App không nối được tới máy chủ dữ liệu. Không phải '
+    + 'mạng của bạn — mạng bạn vẫn đang tải được trang này. Báo ban quản lý.',
+}
+
+/**
+ * Gợi ý cho NGƯỜI SỬA, không phải cho cư dân.
+ *
+ * Vì sao tách hẳn khỏi CAU: hai người đọc, hai ngôn ngữ. Cư dân đọc tên biến
+ * môi trường thì vô nghĩa và đáng sợ; người dựng hệ thống đọc "báo ban quản lý"
+ * thì đúng nhưng vô dụng — họ CHÍNH LÀ ban quản lý, và họ đang đứng trước màn
+ * hình này. Trước đây họ phải mở log Railway mới biết là cái nào trong ba.
+ *
+ * Chỉ trả về cho ba nhánh sự cố hệ thống. Mọi trạng thái khác trả null: sai
+ * mật khẩu thì không có gì để gợi ý cho ai sửa cả.
+ */
+export function goYNguoiSua(tt: string): string | null {
+  switch (tt) {
+    case 'he_thong_khoa':
+      return 'AUTH_JWT_SECRET của service `v` không trùng khít PGRST_JWT_SECRET '
+        + 'của service PostgREST. Copy lại nguyên vẹn — coi chừng dấu cách hoặc '
+        + 'xuống dòng dính ở cuối — rồi deploy lại.'
+    case 'he_thong_thieu_lop':
+      return 'PostgREST không thấy hàm đăng nhập. Hoặc chưa chạy '
+        + 'railway/03_auth.sql trên database, hoặc đã chạy rồi mà quên chạy tiếp: '
+        + "notify pgrst, 'reload schema'"
+    case 'he_thong_mat_ket_noi':
+      return 'Không nối được tới POSTGREST_URL. Kiểm đúng tên service PostgREST '
+        + 'kèm cổng, và PGRST_SERVER_HOST phải đặt là :: — mặc định PostgREST '
+        + 'chỉ nghe IPv4, còn mạng nội bộ Railway là IPv6.'
+    default:
+      return null
+  }
 }
 
 export function loiDangNhap(tt: string, giay = 0): string {
@@ -65,4 +111,36 @@ export function loiDangNhap(tt: string, giay = 0): string {
       + 'Kiểm tra cả hộp thư rác trong lúc chờ.'
   }
   return CAU[tt as TrangThai] ?? CAU.la
+}
+
+/**
+ * Một lỗi PostgREST -> ĐÚNG nguyên nhân, không phải "hệ thống hỏng" chung.
+ *
+ * Ở đây chứ không ở lib/db/dang-nhap.ts: file đó import next/headers nên node
+ * chạy test không nạp nổi, và một bảng phân loại không có test thì vẫn "chạy"
+ * trong khi trả về đúng một nhánh chung cho mọi thứ — tức là không làm gì cả.
+ *
+ * Ba nguyên nhân, một triệu chứng — và trước đây cả ba đều ra cùng một câu, nên
+ * người đi sửa phải mở log máy chủ mới biết bắt đầu từ đâu. Mà người đi sửa
+ * thường chính là người đang đứng trước màn đăng nhập.
+ *
+ * Phân loại theo NỘI DUNG lỗi chứ không theo mã HTTP: PostgREST trả 404 cho cả
+ * "không có hàm này" lẫn vài chuyện khác, còn chữ ký sai thì nằm trong message.
+ */
+export function phanLoaiLoiHeThong(
+  e: { code?: string; message?: string; details?: string } | null,
+): 'he_thong_khoa' | 'he_thong_thieu_lop' | 'he_thong_mat_ket_noi' | 'he_thong' {
+  const chu = `${e?.code ?? ''} ${e?.message ?? ''} ${e?.details ?? ''}`
+  // Chữ ký JWT: PostgREST trả "JWSError JWSInvalidSignature" / "JWT expired".
+  if (/jws|jwt|signature|invalid token|expired/i.test(chu)) return 'he_thong_khoa'
+  // Không thấy hàm: PGRST202, hoặc câu "Could not find the function ... in the
+  // schema cache" — bao gồm cả ca đã áp SQL mà quên notify pgrst.
+  if (e?.code === 'PGRST202' || /could not find the function|schema cache|does not exist/i.test(chu)) {
+    return 'he_thong_thieu_lop'
+  }
+  // fetch hỏng: postgrest-js gói lỗi mạng thành message "TypeError: fetch failed".
+  if (/fetch failed|econnrefused|enotfound|etimedout|network|socket/i.test(chu)) {
+    return 'he_thong_mat_ket_noi'
+  }
+  return 'he_thong'
 }
