@@ -5,8 +5,10 @@ import { guiMa } from '@/lib/db/dang-nhap'
 
 /** Như ở /api/auth/vao: gửi kèm CÂU CHỮ để tab đang giữ bản JS cũ vẫn hiện
  *  đúng thứ máy chủ muốn nói, thay vì rơi vào câu chung. */
-function traLoi(tt: string, giay?: number) {
-  return NextResponse.json({ tt, giay, cau: loiDangNhap(tt, giay ?? 0), goY: goYNguoiSua(tt) })
+function traLoi(tt: string, giay?: number, maLoi?: string) {
+  return NextResponse.json({
+    tt, giay, maLoi, cau: loiDangNhap(tt, giay ?? 0), goY: goYNguoiSua(tt),
+  })
 }
 
 /**
@@ -39,5 +41,5 @@ export async function POST(request: NextRequest) {
   const goc = request.nextUrl.origin
   const kq = await guiMa(email, goc)
   // 'ok' không phải lỗi — không kèm câu chữ, để màn hình chuyển sang ô nhập mã.
-  return kq.tt === 'ok' ? NextResponse.json(kq) : traLoi(kq.tt, kq.giay)
+  return kq.tt === 'ok' ? NextResponse.json(kq) : traLoi(kq.tt, kq.giay, kq.maLoi)
 }

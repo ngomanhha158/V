@@ -13,8 +13,10 @@ import { moPhien, vaoBangMa, vaoBangMatKhau } from '@/lib/db/dang-nhap'
  *
  * Câu chữ tính ở đây thì bản cũ hay mới cũng hiện đúng thứ máy chủ muốn nói.
  */
-function traLoi(tt: string, giay?: number) {
-  return NextResponse.json({ tt, giay, cau: loiDangNhap(tt, giay ?? 0), goY: goYNguoiSua(tt) })
+function traLoi(tt: string, giay?: number, maLoi?: string) {
+  return NextResponse.json({
+    tt, giay, maLoi, cau: loiDangNhap(tt, giay ?? 0), goY: goYNguoiSua(tt),
+  })
 }
 
 /** Đổi mã một lần hoặc mật khẩu lấy phiên đăng nhập. */
@@ -38,7 +40,7 @@ export async function POST(request: NextRequest) {
     ? await vaoBangMatKhau(danhTinh, matKhau)
     : await vaoBangMa(danhTinh, ma)
 
-  if (!kq.ok) return traLoi(kq.tt, kq.giay)
+  if (!kq.ok) return traLoi(kq.tt, kq.giay, kq.maLoi)
 
   await moPhien(kq.uid)
   return NextResponse.json({ tt: 'ok' })

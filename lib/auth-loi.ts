@@ -14,10 +14,12 @@ export type TrangThai =
   | 'cho' | 'sai' | 'het_han' | 'qua_nhieu'
   | 'sai_mat_khau' | 'chua_dat_mat_khau'
   | 'khong_gui_duoc' | 'chua_co_sms' | 'mang' | 'he_thong' | 'la'
-  // Ba nhánh CON của 'he_thong'. Cùng một triệu chứng với cư dân, nhưng ba chỗ
-  // sửa khác hẳn nhau — và người sửa thường chính là người đang đứng trước màn
-  // này. Gộp chung một câu là bắt họ đi mở log máy chủ mới biết bắt đầu từ đâu.
-  | 'he_thong_khoa' | 'he_thong_thieu_lop' | 'he_thong_mat_ket_noi'
+  // Bốn nhánh CON của 'he_thong'. Cùng một triệu chứng với cư dân, nhưng bốn
+  // chỗ sửa khác hẳn nhau — và người sửa thường chính là người đang đứng trước
+  // màn này. Gộp chung một câu là bắt họ đi mở log máy chủ mới biết bắt đầu từ
+  // đâu.
+  | 'he_thong_khoa' | 'he_thong_thieu_khoa'
+  | 'he_thong_thieu_lop' | 'he_thong_mat_ket_noi'
 
 /** "47 giây", "3 phút" — làm tròn LÊN. Nói "2 phút" cho 121 giây rồi để người
  *  ta bấm ở giây thứ 120 và lại bị chặn là hỏng đúng lúc họ đã kiên nhẫn. */
@@ -68,6 +70,10 @@ const CAU: Record<TrangThai, string> = {
     + 'được — không riêng bạn. Đây là sai cấu hình phía hệ thống, thử lại cũng '
     + 'sẽ như vậy. Báo ban quản lý.',
 
+  he_thong_thieu_khoa: 'Máy chủ dữ liệu chưa được cấu hình xong nên nó chưa '
+    + 'nhận đăng nhập của bất kỳ ai. Không riêng bạn, và thử lại cũng sẽ như '
+    + 'vậy. Báo ban quản lý.',
+
   he_thong_thieu_lop: 'Phần đăng nhập chưa được cài đặt xong trên máy chủ. '
     + 'Chưa ai vào được, và thử lại cũng sẽ như vậy. Báo ban quản lý.',
 
@@ -92,6 +98,16 @@ export function goYNguoiSua(tt: string): string | null {
       return 'AUTH_JWT_SECRET của service `v` không trùng khít PGRST_JWT_SECRET '
         + 'của service PostgREST. Copy lại nguyên vẹn — coi chừng dấu cách hoặc '
         + 'xuống dòng dính ở cuối — rồi deploy lại.'
+    // KHÁC he_thong_khoa ở chỗ phải sửa service NÀO. Gộp hai ca này lại từng
+    // đẩy người đi sửa sang đúng cái service không hỏng — họ dán lại
+    // AUTH_JWT_SECRET ba lượt, trong khi phía PostgREST không có khoá nào để
+    // mà lệch. Câu cuối nói thẳng điều đó, để không ai lặp lại vòng đó nữa.
+    case 'he_thong_thieu_khoa':
+      return 'PostgREST trả PGRST300 "Server lacks JWT secret": service '
+        + 'PostgREST CHƯA CÓ biến PGRST_JWT_SECRET — thiếu hẳn, để rỗng, hoặc '
+        + 'gõ sai tên biến. Đặt nó bằng đúng chuỗi AUTH_JWT_SECRET của service '
+        + '`v` rồi deploy lại PostgREST. Dán lại AUTH_JWT_SECRET không giải '
+        + 'quyết được gì: thiếu ở phía bên kia.'
     case 'he_thong_thieu_lop':
       return 'PostgREST không thấy hàm đăng nhập. Hoặc chưa chạy '
         + 'railway/03_auth.sql trên database, hoặc đã chạy rồi mà quên chạy tiếp: '
@@ -141,8 +157,15 @@ export function loiDangNhap(tt: string, giay = 0): string {
  */
 export function phanLoaiLoiHeThong(
   e: { code?: string; message?: string; details?: string } | null,
-): 'he_thong_khoa' | 'he_thong_thieu_lop' | 'he_thong_mat_ket_noi' | 'he_thong' {
+): 'he_thong_khoa' | 'he_thong_thieu_khoa' | 'he_thong_thieu_lop'
+  | 'he_thong_mat_ket_noi' | 'he_thong' {
   const chu = `${e?.code ?? ''} ${e?.message ?? ''} ${e?.details ?? ''}`
+  // XÉT TRƯỚC mẫu JWT chung, vì câu của ca này — "Server lacks JWT secret" —
+  // cũng chứa chữ JWT và sẽ bị mẫu kia nuốt mất. Thứ tự ở đây không phải tiểu
+  // tiết: xếp sau thì màn hình báo "hai khoá lệch nhau" trong khi sự thật là
+  // một bên không có khoá nào, và người đọc đi sửa nhầm service. Đã xảy ra
+  // thật trên production, mất ba lượt thử của người dùng.
+  if (e?.code === 'PGRST300' || /lacks jwt secret/i.test(chu)) return 'he_thong_thieu_khoa'
   // Chữ ký JWT: PostgREST trả "JWSError JWSInvalidSignature" / "JWT expired".
   if (/jws|jwt|signature|invalid token|expired/i.test(chu)) return 'he_thong_khoa'
   // Không thấy hàm: PGRST202, hoặc câu "Could not find the function ... in the

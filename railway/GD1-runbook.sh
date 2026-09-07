@@ -75,7 +75,7 @@ B2. Biến môi trường của service PostgREST:
       PGRST_DB_URI       = postgresql://authenticator:<mk A3>@postgres.railway.internal:5432/railway
       PGRST_DB_SCHEMAS   = public
       PGRST_DB_ANON_ROLE = anon
-      PGRST_JWT_SECRET   = <chuỗi ≥ 32 ký tự, tự sinh: openssl rand -base64 48>
+      PGRST_JWT_SECRET   = <chuỗi ≥ 32 ký tự, tự sinh: openssl rand -hex 32>
       PGRST_SERVER_HOST  = ::
       PGRST_SERVER_PORT  = 3000
       PGRST_DB_POOL      = 10
@@ -90,6 +90,18 @@ B2. Biến môi trường của service PostgREST:
     auth_hooks.sql không cấp cho anon một bảng nào. Tức là không token thì
     không đọc được gì — không phải "đọc được ít", mà là không có gì.
 
+    PGRST_JWT_SECRET đặt ở ĐÂY, trên service PostgREST — không phải trên `v`.
+    Quên nó thì PostgREST vẫn khởi động bình thường, vẫn xanh trên Railway, và
+    chỉ từ chối đúng một thứ: mọi request có token. Triệu chứng là không ai
+    đăng nhập được, còn dashboard thì không đỏ chỗ nào. Lỗi trả về là
+    PGRST300 "Server lacks JWT secret" — CÓ chữ JWT trong đó, nên rất dễ đọc
+    nhầm thành "hai khoá lệch nhau" rồi đi sửa AUTH_JWT_SECRET ở service kia.
+    Đã mất một buổi vì đúng chuyện này.
+
+    Dùng hex chứ không base64: cả hai đều chạy được (app ký bằng BYTE THÔ của
+    chuỗi, xem lib/db/jwt.ts), nhưng base64 có +, / và = ở cuối — đúng loại ký
+    tự hay bị nuốt hoặc dính thêm khoảng trắng lúc copy giữa hai service.
+
 B3. KHÔNG bấm "Generate Domain" cho service PostgREST.
     Nó chỉ cần nói chuyện với service `v` qua mạng nội bộ. Mở ra internet là
     đưa thẳng tầng dữ liệu ra ngoài, và từ đó chốt duy nhất còn lại là chữ ký
@@ -98,12 +110,20 @@ B3. KHÔNG bấm "Generate Domain" cho service PostgREST.
 B4. Biến môi trường của service `v` (Next.js):
 
       POSTGREST_URL      = http://postgrest.railway.internal:3000
-      AUTH_JWT_SECRET    = <ĐÚNG chuỗi PGRST_JWT_SECRET ở B2>
+      AUTH_JWT_SECRET    = <ĐÚNG chuỗi PGRST_JWT_SECRET ở B2 — B2 phải đặt trước>
       SMTP_URL           = smtps://<user>:<mk>@<host>:465     (thư đăng nhập)
       SMTP_FROM          = "BQL Toà nhà <no-reply@ten-mien-cua-anh>"
 
     AUTH_JWT_SECRET phải trùng khít PGRST_JWT_SECRET. Lệch một ký tự thì mọi
     request đều 401 và log chỉ nói "JWT invalid" — không nói là do lệch khóa.
+
+    Đặt xong nhớ bấm Apply/Deploy: Railway giữ thay đổi biến ở dạng chờ, nên
+    màn Variables hiện đúng trong khi service vẫn đang chạy giá trị cũ.
+
+    Đăng nhập hỏng thì đọc log service `v`, lọc chữ "auth_kiem" — dòng đó in
+    nguyên mã lỗi PostgREST, phân biệt được "thiếu khoá" (PGRST300) với "lệch
+    khoá" (JWSInvalidSignature) với "chưa chạy 03_auth.sql" (PGRST202). Màn
+    đăng nhập cũng in mã đó trong khối "Dành cho người quản trị".
 
 B5. Gắn Volume cho ảnh hỏng hóc, vào service `v`, mount tại:
 

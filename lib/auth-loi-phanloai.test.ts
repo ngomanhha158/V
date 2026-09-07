@@ -1,7 +1,7 @@
 // Chạy: npm run test:js
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { phanLoaiLoiHeThong } from './auth-loi.ts'
+import { goYNguoiSua, loiDangNhap, phanLoaiLoiHeThong } from './auth-loi.ts'
 
 // Câu lỗi THẬT do PostgREST 12 trả về — chép từ lần dựng lại từng ca trên
 // Postgres 16, không phải tự nghĩ ra. Đoán sai hình dạng câu lỗi thì bảng phân
@@ -9,6 +9,35 @@ import { phanLoaiLoiHeThong } from './auth-loi.ts'
 test('chữ ký JWT sai -> khoá lệch', () => {
   assert.equal(phanLoaiLoiHeThong({ message: 'JWSError JWSInvalidSignature' }), 'he_thong_khoa')
   assert.equal(phanLoaiLoiHeThong({ message: 'JWT expired' }), 'he_thong_khoa')
+})
+
+// GẶP THẬT TRÊN PRODUCTION. Người dùng dán lại AUTH_JWT_SECRET ba lượt vì màn
+// hình nói "hai khoá lệch nhau", trong khi PostgREST đang không có khoá nào —
+// một câu chứa chữ "JWT" bị mẫu chung nuốt mất. Hai ca này phải nằm cùng file
+// test và cạnh nhau: đó là chỗ duy nhất nhìn ra được rằng chúng khác nhau.
+test('PostgREST không có khoá -> thiếu khoá, KHÔNG phải khoá lệch', () => {
+  const e = { code: 'PGRST300', message: 'Server lacks JWT secret' }
+  assert.equal(phanLoaiLoiHeThong(e), 'he_thong_thieu_khoa')
+  // Không có code cũng phải ra đúng nhánh: chỉ dựa vào code là hỏng ngay khi
+  // PostgREST đổi số hiệu ở bản sau.
+  assert.equal(phanLoaiLoiHeThong({ message: 'Server lacks JWT secret' }), 'he_thong_thieu_khoa')
+})
+
+test('gợi ý của thiếu khoá chỉ đúng service, và chặn vòng dán lại vô ích', () => {
+  const g = goYNguoiSua('he_thong_thieu_khoa') ?? ''
+  assert.match(g, /PGRST_JWT_SECRET/)
+  assert.match(g, /PostgREST/)
+  // Câu chốt: nói thẳng rằng dán lại AUTH_JWT_SECRET không cứu được gì. Thiếu
+  // câu này thì người đọc thấy hai tên biến rồi lại đi sửa cái quen tay.
+  assert.match(g, /không giải quyết được gì/)
+  // Và hai nhánh phải nói hai chuyện khác nhau — trùng câu là quay lại lỗi cũ.
+  assert.notEqual(g, goYNguoiSua('he_thong_khoa'))
+})
+
+test('cư dân đọc được câu của thiếu khoá, không phải chuỗi mã máy', () => {
+  const c = loiDangNhap('he_thong_thieu_khoa')
+  assert.ok(c.length > 40, c)
+  assert.doesNotMatch(c, /PGRST|JWT|SECRET/i)
 })
 
 test('không thấy hàm -> thiếu lớp đăng nhập (gồm cả ca quên notify pgrst)', () => {

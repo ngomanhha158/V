@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/db/admin'
 import { bangNhau } from '@/lib/bi-mat'
 import { kiemCauHinh, urlPostgrest } from '@/lib/db/env'
+import { goYNguoiSua, phanLoaiLoiHeThong } from '@/lib/auth-loi'
 import { kiemCauHinhPush } from '@/lib/push'
 
 /**
@@ -62,21 +63,24 @@ export async function POST(req: NextRequest) {
 
   const db = await createAdminClient()
 
-  // ── 3. HAI KHOÁ CÓ KHỚP NHAU KHÔNG ──
+  // ── 3. TOKEN CỦA APP CÓ ĐƯỢC CHẤP NHẬN KHÔNG ──
   // Đây là câu mà không màn nào khác trả lời được. Đọc một bảng bất kỳ bằng
-  // token service_role: khoá lệch thì PostgREST từ chối chữ ký, và lỗi trả về
-  // nói "JWT" chứ không nói "thiếu quyền".
+  // token service_role: hỏng ở tầng khoá thì PostgREST từ chối, và lỗi nói
+  // "JWT" chứ không nói "thiếu quyền".
+  //
+  // DÙNG CHUNG phanLoaiLoiHeThong với màn đăng nhập, không tự khớp mẫu ở đây
+  // nữa. Trước đây mỗi bên một bộ mẫu riêng, và cả hai cùng gộp "PostgREST
+  // không có khoá" vào "hai khoá lệch nhau" — hai chỗ sai giống hệt nhau nên
+  // đối chiếu chúng với nhau cũng không lòi ra. Một bộ óc thì sửa một lần là
+  // cả hai màn cùng đúng.
   {
     const { error } = await db.from('projects').select('id').limit(1)
     const loi = error?.message ?? ''
-    const laJwt = /jwt|token|signature|expired/i.test(loi)
+    const tt = error ? phanLoaiLoiHeThong(error) : null
     them('khoa-jwt-khop', !error,
       !error ? 'PostgREST nhận token do app ký — AUTH_JWT_SECRET khớp PGRST_JWT_SECRET'
-        : laJwt
-          ? `PostgREST TỪ CHỐI token: ${loi}. AUTH_JWT_SECRET của service \`v\` `
-            + 'không trùng khít PGRST_JWT_SECRET của service PostgREST. Copy lại, '
-            + 'coi chừng dấu cách hoặc xuống dòng ở cuối.'
-          : `Đọc bảng projects hỏng: ${loi}`)
+        : `PostgREST TỪ CHỐI token (${error.code || 'khong-ro'}: ${loi}). `
+          + (goYNguoiSua(tt as string) ?? `Đọc bảng projects hỏng: ${loi}`))
     // DỪNG Ở ĐÂY nếu token bị từ chối. Chạy tiếp thì mọi bước sau cũng đỏ vì
     // đúng cái lý do này, và bốn dòng đỏ giống nhau làm người đọc mất công loại
     // trừ đúng thứ mà bước này vừa chỉ tận nơi.

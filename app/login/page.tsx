@@ -23,14 +23,14 @@ const LOI_URL: Record<string, string> = {
  *  Bản cũ của route chưa gửi hai thứ đó, nên vẫn để optional. */
 async function goi(
   duong: string, than: object,
-): Promise<{ tt: string; giay?: number; cau?: string; goY?: string | null }> {
+): Promise<{ tt: string; giay?: number; cau?: string; goY?: string | null; maLoi?: string }> {
   try {
     const r = await fetch(duong, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(than),
     })
-    return (await r.json()) as { tt: string; giay?: number; cau?: string; goY?: string | null }
+    return (await r.json()) as { tt: string; giay?: number; cau?: string; goY?: string | null; maLoi?: string }
   } catch {
     // Mất mạng giữa chừng. Phân biệt với lỗi máy chủ, vì hai bên làm hai việc
     // khác nhau: một bên bật lại wifi, một bên gọi ban quản lý.
@@ -59,6 +59,10 @@ function LoginForm() {
   const [daGui, setDaGui] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [goY, setGoY] = useState<string | null>(null)
+  // Mã lỗi thô của PostgREST, in kèm gợi ý. Gợi ý là SUY LUẬN từ chuỗi lỗi;
+  // mã này là thứ máy chủ thật sự trả về. Khi hai cái nói khác nhau thì mã
+  // đúng, và người đọc cần thấy được điều đó ngay trên màn hình.
+  const [maLoi, setMaLoi] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const loiUrl = LOI_URL[useSearchParams().get('loi') ?? '']
 
@@ -82,14 +86,15 @@ function LoginForm() {
    * lại là đúng thứ không bao giờ qua được. Gặp thật ngay lần deploy đầu sau
    * khi thêm ba nhánh he_thong_*.
    */
-  function hienLoi(r: { tt: string; giay?: number; cau?: string; goY?: string | null }) {
+  function hienLoi(r: { tt: string; giay?: number; cau?: string; goY?: string | null; maLoi?: string }) {
+    setMaLoi(r.maLoi ?? null)
     if (r.cau) { setError(r.cau); setGoY(r.goY ?? null); return }
     // Máy chủ bản cũ: tra bảng như trước. Nhưng nếu trạng thái LẠ HẲN thì nói
     // thẳng là bản trong máy đã cũ — chứ không bảo họ thử lại.
     if (!BIET_TRANG_THAI.has(r.tt)) {
       setError('Bản trong trình duyệt đã cũ hơn máy chủ nên chưa đọc được câu trả lời. '
         + 'Tải lại trang (Ctrl+Shift+R) rồi thử lại.')
-      setGoY(null); return
+      setGoY(null); setMaLoi(null); return
     }
     setError(loiDangNhap(r.tt, r.giay)); setGoY(goYNguoiSua(r.tt))
   }
@@ -103,7 +108,7 @@ function LoginForm() {
   async function gui() {
     const v = chuanHoa()
     if (!v) return loiDanhTinh()
-    setBusy(true); setError(null); setGoY(null)
+    setBusy(true); setError(null); setGoY(null); setMaLoi(null)
     const r = await goi('/api/auth/ma', { danhTinh: v })
     const { tt } = r
     setBusy(false)
@@ -117,7 +122,7 @@ function LoginForm() {
   async function xacNhan() {
     const v = chuanHoa()
     if (!v) return
-    setBusy(true); setError(null); setGoY(null)
+    setBusy(true); setError(null); setGoY(null); setMaLoi(null)
     const r = await goi('/api/auth/vao', { danhTinh: v, ma: code })
     const { tt } = r
     if (tt === 'ok') return vaoNha()
@@ -128,7 +133,7 @@ function LoginForm() {
   async function dangNhapMatKhau() {
     const v = chuanHoa()
     if (!v) return loiDanhTinh()
-    setBusy(true); setError(null); setGoY(null)
+    setBusy(true); setError(null); setGoY(null); setMaLoi(null)
     const r = await goi('/api/auth/vao', { danhTinh: v, matKhau })
     const { tt } = r
     if (tt === 'ok') return vaoNha()
@@ -139,7 +144,7 @@ function LoginForm() {
   /** Đổi lối vào thì dọn sạch trạng thái của lối cũ, không để lẫn. */
   function doiCheDo(sang: CheDo) {
     setCheDo(sang)
-    setDaGui(false); setCode(''); setMatKhau(''); setError(null); setGoY(null)
+    setDaGui(false); setCode(''); setMatKhau(''); setError(null); setGoY(null); setMaLoi(null)
   }
 
   const guiDi = () => { laMatKhau ? dangNhapMatKhau() : daGui ? xacNhan() : gui() }
@@ -228,6 +233,12 @@ function LoginForm() {
                 <p className="num mt-1.5 text-[0.8125rem] leading-relaxed text-muted">
                   {goY}
                 </p>
+                {maLoi && (
+                  <p className="num mt-2 text-[0.75rem] text-faint">
+                    Máy chủ dữ liệu trả mã: <span className="font-semibold">{maLoi}</span>
+                    {' '}— nếu mã này không khớp với gợi ý ở trên thì tin mã.
+                  </p>
+                )}
               </div>
             )}
 
@@ -238,7 +249,7 @@ function LoginForm() {
             {!laMatKhau && daGui && !busy && (
               <button
                 type="button"
-                onClick={() => { setDaGui(false); setCode(''); setError(null); setGoY(null) }}
+                onClick={() => { setDaGui(false); setCode(''); setError(null); setGoY(null); setMaLoi(null) }}
                 className="inline-flex w-full items-center justify-center gap-1 text-[0.8125rem] font-medium text-muted hover:text-ink"
               >
                 <IcTrai width={14} height={14} />

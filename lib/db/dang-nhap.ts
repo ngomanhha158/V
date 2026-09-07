@@ -17,7 +17,13 @@ import { phanLoaiLoiHeThong } from '@/lib/auth-loi'
  */
 export type KetQua =
   | { ok: true; uid: string }
-  | { ok: false; tt: string; giay?: number }
+  // maLoi: MÃ THÔ của PostgREST (PGRST300, PGRST202…), kèm nguyên vẹn ra tới
+  // màn quản trị. Chẩn đoán bên dưới chỉ là suy luận từ chuỗi lỗi, và suy luận
+  // thì sai được: "Server lacks JWT secret" từng bị đọc thành "hai khoá lệch
+  // nhau", đẩy người đi sửa dán lại khoá ba lượt ở đúng cái service không hỏng.
+  // Có mã thô in kèm thì một chẩn đoán sai còn bắt bẻ được từ ngoài màn hình,
+  // không phải mở log Railway mới biết.
+  | { ok: false; tt: string; giay?: number; maLoi?: string }
 /** Sáu chữ số, kể cả khi bắt đầu bằng 0. randomInt của node:crypto chứ không
  *  phải Math.random: Math.random đoán được, và đoán được nghĩa là đăng nhập
  *  được vào tài khoản người khác. */
@@ -32,11 +38,12 @@ const sinhMa = () => String(randomInt(0, 1_000_000)).padStart(6, '0')
  */
 export type KetQuaGuiMa =
   | 'ok' | 'cho' | 'khong_gui_duoc'
-  | 'he_thong_khoa' | 'he_thong_thieu_lop' | 'he_thong_mat_ket_noi' | 'he_thong'
+  | 'he_thong_khoa' | 'he_thong_thieu_khoa'
+  | 'he_thong_thieu_lop' | 'he_thong_mat_ket_noi' | 'he_thong'
 
 export async function guiMa(
   danhTinh: string, goc: string,
-): Promise<{ tt: KetQuaGuiMa; giay?: number }> {
+): Promise<{ tt: KetQuaGuiMa; giay?: number; maLoi?: string }> {
   const ma = sinhMa()
   const admin = await createAdminClient()
   const { data, error } = await admin.rpc('auth_gui_ma', { p_danh_tinh: danhTinh, p_ma: ma })
@@ -44,7 +51,7 @@ export async function guiMa(
   // thư còn chưa tới lượt — hỏng từ trước đó, ở đường ra database.
   if (error) {
     console.error('auth_gui_ma loi:', { code: error.code, message: error.message })
-    return { tt: phanLoaiLoiHeThong(error) }
+    return { tt: phanLoaiLoiHeThong(error), maLoi: error.code }
   }
 
   const hang = data?.[0]
@@ -77,7 +84,7 @@ export async function vaoBangMa(danhTinh: string, ma: string): Promise<KetQua> {
   // hình chỉ về phía đó. Ghi log để còn dò, và nói thẳng cho người dùng.
   if (error) {
     console.error('auth_kiem_ma loi:', { code: error.code, message: error.message })
-    return { ok: false, tt: phanLoaiLoiHeThong(error) }
+    return { ok: false, tt: phanLoaiLoiHeThong(error), maLoi: error.code }
   }
   const hang = data?.[0]
   if (hang?.trang_thai === 'ok' && hang.uid) return { ok: true, uid: hang.uid }
@@ -93,7 +100,7 @@ export async function vaoBangMatKhau(danhTinh: string, matKhau: string): Promise
   // người dùng đi đổi mật khẩu trong lúc máy chủ mới là thứ đang hỏng.
   if (error) {
     console.error('auth_kiem_mat_khau loi:', { code: error.code, message: error.message })
-    return { ok: false, tt: phanLoaiLoiHeThong(error) }
+    return { ok: false, tt: phanLoaiLoiHeThong(error), maLoi: error.code }
   }
   if (!data) return { ok: false, tt: 'sai_mat_khau' }
   return { ok: true, uid: data }
