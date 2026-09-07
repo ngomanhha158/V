@@ -1,7 +1,9 @@
 // Chạy: npm run test:js
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { goYNguoiSua, loiDangNhap, phanLoaiLoiHeThong } from './auth-loi.ts'
+import {
+  docTraLoiDangNhap, goYNguoiSua, loiDangNhap, phanLoaiLoiHeThong,
+} from './auth-loi.ts'
 
 // Câu lỗi THẬT do PostgREST 12 trả về — chép từ lần dựng lại từng ca trên
 // Postgres 16, không phải tự nghĩ ra. Đoán sai hình dạng câu lỗi thì bảng phân
@@ -67,4 +69,35 @@ test('thứ tự xét: chữ ký sai được nhận trước, dù câu lỗi c�
   assert.equal(
     phanLoaiLoiHeThong({ message: 'JWSError JWSInvalidSignature', details: 'schema cache' }),
     'he_thong_khoa')
+})
+
+// ── Đọc câu trả lời của endpoint, kể cả khi nó không phải câu trả lời ──
+// Ca này sinh ra từ một lần dò thật: người dựng hệ thống lọc log theo đúng chỗ
+// được chỉ và thấy TRỐNG TRƠN, rồi kết luận "request chưa tới được app". Thật
+// ra route đã ném lỗi trước khi chạm database — không có gì để mà ghi log.
+
+test('route ném lỗi (500, thân không phải JSON) -> lỗi hệ thống, KHÔNG phải mạng', () => {
+  const r = docTraLoiDangNhap(500, null)
+  assert.equal(r.tt, 'he_thong')
+  // Đây là điểm chốt: bảo người dùng đi kiểm tra wifi trong lúc máy chủ sập là
+  // đẩy họ đi sửa thứ không hỏng, và họ tin vì màn hình nói chắc chắn.
+  assert.notEqual(r.tt, 'mang')
+  assert.doesNotMatch(r.cau ?? '', /mạng|wifi/i)
+  // Mã HTTP phải ra tới màn quản trị: khi app chưa kịp ghi log thì đó là manh
+  // mối duy nhất còn lại.
+  assert.equal(r.maLoi, 'HTTP 500')
+  assert.match(r.goY ?? '', /KHÔNG có dòng log/)
+})
+
+test('câu trả lời thật đi qua nguyên vẹn, không bị bọc lại', () => {
+  const that = { tt: 'sai_mat_khau', cau: 'Sai mật khẩu', goY: null }
+  assert.deepEqual(docTraLoiDangNhap(200, that), that)
+  // 401 vẫn là câu trả lời hợp lệ nếu có `tt` — mã HTTP không phải thứ quyết định.
+  assert.equal(docTraLoiDangNhap(401, { tt: 'qua_nhieu', giay: 30 }).tt, 'qua_nhieu')
+})
+
+test('thân JSON nhưng không có tt -> vẫn là lỗi hệ thống', () => {
+  // Trang lỗi của Next đôi khi VẪN là JSON hợp lệ. Parse được không có nghĩa
+  // là hiểu được.
+  assert.equal(docTraLoiDangNhap(500, { error: 'Internal Server Error' }).tt, 'he_thong')
 })
