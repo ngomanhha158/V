@@ -105,6 +105,18 @@ export function goYNguoiSua(tt: string): string | null {
   }
 }
 
+/**
+ * Những trạng thái bản này BIẾT. Dùng để phân biệt "lỗi lạ thật" với "máy chủ
+ * mới hơn trình duyệt".
+ *
+ * Vì sao cần: câu chữ nằm ở trình duyệt, còn chẩn đoán thì máy chủ mới biết.
+ * Thêm một trạng thái ở máy chủ mà tab của người dùng vẫn đang giữ bản JS cũ
+ * thì trạng thái mới rơi vào câu chung "có lỗi không rõ, thử lại giúp em" —
+ * và thử lại là đúng thứ KHÔNG bao giờ qua được. Gặp thật ngay lần deploy đầu
+ * sau khi thêm ba nhánh he_thong_*.
+ */
+export const BIET_TRANG_THAI: ReadonlySet<string> = new Set(Object.keys(CAU))
+
 export function loiDangNhap(tt: string, giay = 0): string {
   if (tt === 'cho') {
     return `Vừa gửi rồi — chờ ${doiCho(giay)} nữa mới gửi lại được. `
