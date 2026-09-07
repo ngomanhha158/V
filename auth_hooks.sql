@@ -351,6 +351,22 @@ grant execute on function tk_nhan_tien(uuid)                                  to
 -- §29 Khu cư dân đang ở (mặt cư dân của du_an_cua_toi).
 grant execute on function khu_toi_o()                                         to authenticated;
 
+-- §30 Thông báo đẩy. Cư dân tự đăng ký và tự gỡ MÁY CỦA MÌNH; phần đọc hàng
+-- loạt và đánh dấu đã đẩy chỉ service_role gọi được — nó chạy trong job nền,
+-- và nó nhìn thấy endpoint của mọi người.
+grant select on push_dang_ky                                                  to authenticated;
+grant execute on function push_dang_ky_may(text, text, text, text)            to authenticated;
+grant execute on function push_go_may(text)                                   to authenticated;
+grant delete on push_dang_ky                                                  to authenticated;
+revoke execute on function thong_bao_can_day(int)         from public, anon, authenticated;
+revoke execute on function thong_bao_da_day(bigint[])     from public, anon, authenticated;
+revoke execute on function push_go_endpoint_chet(text[])  from public, anon, authenticated;
+revoke execute on function push_ghi_nhan_day(text[])      from public, anon, authenticated;
+grant execute on function thong_bao_can_day(int)                              to service_role;
+grant execute on function thong_bao_da_day(bigint[])                          to service_role;
+grant execute on function push_go_endpoint_chet(text[])                       to service_role;
+grant execute on function push_ghi_nhan_day(text[])                           to service_role;
+
 -- ghi_nhan_tien_ve / gach_no / tach_ma_can / goi_y_can KHÔNG cấp cho
 -- authenticated. ghi_nhan_tien_ve là cửa vào của webhook: ai gọi được nó là
 -- tự ghi tiền vào hệ thống mà chẳng cần chuyển khoản đồng nào. Route handler

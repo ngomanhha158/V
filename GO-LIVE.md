@@ -22,10 +22,10 @@ Không phải kế hoạch — là những gì đã kiểm và những gì còn 
 | Backup | GitHub Actions dump hằng ngày, gồm cả schema `auth` |
 | Lưu trữ ảnh | Volume của service `v`, phục vụ qua `/api/anh` — hỏi lại quyền từng lần xem |
 | Quyền `anon` | **Không có bảng nào** — request không JWT không đọc được gì |
-| Bộ test | 30 file SQL độc lập + cả ngăn xếp Railway + 306 test JS, xanh trên CI mỗi lần push |
+| Bộ test | 31 file SQL độc lập + cả ngăn xếp Railway + 306 test JS, xanh trên CI mỗi lần push |
 | Giao diện | 66 route thật (chưa kể bản demo), build sạch, sáng/tối |
 
-Tám job nền và giờ chạy (giờ VN). Đặt thiếu một cái thì nó KHÔNG chạy và
+Chín job nền và giờ chạy (giờ VN). Đặt thiếu một cái thì nó KHÔNG chạy và
 không có gì báo — bảng đối chiếu đầy đủ ở đầu `cron.sql` và bước 8 của
 `railway/GD1-runbook.sh`:
 
@@ -41,6 +41,12 @@ không có gì báo — bảng đối chiếu đầy đủ ở đầu `cron.sql`
 - `bao-cao-quy` — 02:00 ngày 5 tháng đầu mỗi quý, sinh báo cáo cho quý vừa kết
   thúc. Chạy lại nhiều lần cũng chỉ ra một bản: mỗi quý một báo cáo còn hiệu
   lực, chốt bằng index ở database chứ không bằng trí nhớ của người đặt lịch.
+- `day-thong-bao` — 15 phút/lần, đẩy thông báo ra điện thoại cư dân. **Đây là
+  thứ làm ba job nhắc ở trên có tác dụng thật**: `nhac-no`, kiện hàng về quầy
+  và kiện quá hạn đều chỉ ghi một dòng vào `notifications`, mà cư dân chỉ thấy
+  nếu tự mở app. Không đặt lịch này thì hệ thống "có nhắc nợ" đúng về mặt dữ
+  liệu và sai về mặt sự thật. Job duy nhất chạy bằng Node chứ không bằng một
+  hàm SQL — mã hoá Web Push không làm được trong Postgres.
 
 ## Chưa go-live được — và vì sao
 
@@ -71,10 +77,15 @@ NEXT_PUBLIC_VBUILDING_AUTH=email   # 'email' hoặc 'sms'; đang tạm email
 VBUILDING_BANK_BIN                 # BIN NAPAS 6 số, VD Vietcombank 970436
 VBUILDING_BANK_ACCOUNT             # số tài khoản nhận phí
 VBUILDING_BANK_NAME                # tên chủ tài khoản, in trên màn hóa đơn
+VAPID_PUBLIC_KEY                   # thông báo đẩy; sinh: npx web-push generate-vapid-keys
+VAPID_PRIVATE_KEY                  # KHOÁ BÍ MẬT, đừng commit
+VAPID_SUBJECT=mailto:bql@ten-mien-cua-ban
 ```
 
 Ba biến ngân hàng thiếu thì hóa đơn vẫn xem được, chỉ là không có mã QR và
-cư dân phải hỏi BQL số tài khoản. `SMTP_URL` thiếu thì nặng hơn nhiều: nút
+cư dân phải hỏi BQL số tài khoản. Ba biến `VAPID_*` thiếu thì thông báo vẫn
+nằm đủ trong app, chỉ là điện thoại không rung — màn Thông báo nói thẳng
+chuyện đó thay vì im lặng không có nút bật. `SMTP_URL` thiếu thì nặng hơn nhiều: nút
 "Gửi mã" báo lỗi, và lối vào duy nhất còn lại là mật khẩu BQL đặt tay.
 
 **Volume cho ảnh.** Gắn một Volume vào service `v` tại đúng `/data/ticket-photos`.

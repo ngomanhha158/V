@@ -39,11 +39,18 @@ function quet(thuMuc, ten, bo = true) {
 // Thiếu chiều ngược lại thì thêm một job vào code mà quên ghi vào doc sẽ lọt:
 // người dựng hệ thống đặt đủ số lịch doc bảo, và job mới không bao giờ chạy.
 {
-  const khoiJob = doc.match(/^Tám job nền[\s\S]*?(?=^## )/m)?.[0] ?? ''
+  // Neo vào cụm "job nền và giờ chạy", KHÔNG vào chữ số viết bằng chữ: đổi
+  // "Tám" thành "Chín" mà quên sửa chỗ này thì cả bài kiểm im lặng đọc ra 0 job
+  // và báo "doc không nhắc job nào" — một bài kiểm sai theo kiểu khó truy nhất.
+  const khoiJob = doc.match(/^[^\n]*job nền và giờ chạy[\s\S]*?(?=^## )/m)?.[0] ?? ''
   const trongDoc = [...khoiJob.matchAll(/^- `([a-z-]+)`/gm)].map((m) => m[1])
   const nguon = readFileSync('app/api/cron/[viec]/route.ts', 'utf8')
-  const khoiVIEC = nguon.match(/const VIEC = \{[\s\S]*?\n\} as const/)?.[0] ?? ''
-  const trongCode = [...khoiVIEC.matchAll(/^  '([a-z-]+)':/gm)].map((m) => m[1])
+  // HAI bản đồ: job chạy bằng hàm SQL (VIEC) và job phải chạy trong Node
+  // (VIEC_NODE — web push đòi mã hoá mà Postgres không làm được). Sót bản đồ
+  // thứ hai thì thêm một job Node vào code sẽ không ai bắt phải ghi vào doc, và
+  // lịch cron cho nó không bao giờ được đặt.
+  const khoi = (ten) => nguon.match(new RegExp(`const ${ten} = \\{[\\s\\S]*?\\n\\} as const`))?.[0] ?? ''
+  const trongCode = [...(khoi('VIEC') + khoi('VIEC_NODE')).matchAll(/^  '([a-z-]+)':/gm)].map((m) => m[1])
 
   const thieuTrongCode = trongDoc.filter((t) => !trongCode.includes(t))
   const thieuTrongDoc  = trongCode.filter((t) => !trongDoc.includes(t))
