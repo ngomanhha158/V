@@ -26,9 +26,14 @@ export async function middleware(request: NextRequest) {
   // thoát sớm thì màn /loi-cau-hinh nuốt luôn nó, và health check trả về 200
   // kèm một trang HTML — Railway đọc 200 rồi báo deploy khỏe mạnh, trong khi
   // app không dùng được một màn nào. Đã mất một buổi dò vì đúng chuyện này.
+  //
+  // /api/chan-doan cũng vậy, và nó là chỗ CẦN thoát sớm nhất: nó tồn tại để
+  // dùng đúng lúc không ai đăng nhập nổi. Bắt nó đi qua vòng kiểm phiên là công
+  // cụ chẩn đoán bị chính cái nó đi chẩn đoán chặn lại.
   const duong = request.nextUrl.pathname
   if (duong.startsWith('/demo') || duong.startsWith('/api/webhook/')
-      || duong.startsWith('/api/cron/') || duong === '/api/health') {
+      || duong.startsWith('/api/cron/') || duong === '/api/health'
+      || duong === '/api/chan-doan') {
     return NextResponse.next({ request })
   }
 

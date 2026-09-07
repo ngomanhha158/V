@@ -119,6 +119,26 @@ SMS để sau; lúc có thì đổi `NEXT_PUBLIC_VBUILDING_AUTH=sms` rồi deplo
 màn đăng nhập đã có sẵn cả hai đường, nhưng `/api/auth/ma` hiện trả lỗi rõ
 ràng cho số điện thoại vì chưa cắm nhà cung cấp nào.
 
+### 2b. Đăng nhập hỏng thì hỏi thẳng máy chủ
+
+```
+curl.exe -s -X POST -H "x-cron-key: <CRON_SECRET>" https://<domain>/api/chan-doan
+```
+
+`/api/health` cố ý KHÔNG chạm database, nên nó trả lời được "tiến trình còn
+sống" và "biến đã đặt" mà không trả lời được câu hay hỏng nhất: **hai khoá
+JWT có khớp nhau không**. Đó là lỗ thật: màn đăng nhập báo "hệ thống đang
+không đọc được dữ liệu đăng nhập" — đúng và trung thực với cư dân, nhưng
+người đi sửa phải mở log Railway mới biết là khoá lệch, hay chưa chạy
+`railway/03_auth.sql`, hay quên `notify pgrst`. Ba nguyên nhân, một triệu
+chứng.
+
+Endpoint này soát sáu bước theo thứ tự và **dừng ở nguyên nhân gốc**: biến môi
+trường → PostgREST có tới được → khoá JWT có khớp → lớp đăng nhập đã áp chưa →
+có ai là BQL chưa → thông báo đẩy đã bật chưa. Khóa bằng `CRON_SECRET` chứ
+không bằng phiên đăng nhập: nó phải dùng được đúng lúc không ai đăng nhập nổi.
+Không bao giờ trả về giá trị của biến nào, chỉ trả về nó có hoạt động không.
+
 ### 3. Chưa có tài khoản BQL
 
 `staff_assignments` đang rỗng. Không có ai là BQL thì toàn bộ màn `/bql`
