@@ -222,7 +222,12 @@ export function Stat({
         className={cx(
           // Bậc nhỏ hơn trên điện thoại: hai ô nằm cạnh nhau trong 430px, mà
           // tiền Việt viết đủ chữ số thì rất dài — "4.523.500đ" ở 30px là tràn.
-          'num mt-2 text-[1.625rem] leading-[1.05] font-semibold tracking-[-0.02em] sm:text-[1.875rem]',
+          // KHÔNG có `num` ở đây. tabular-nums ép mọi chữ số về cùng bề rộng
+          // để mắt dóng được cột — đúng cho hàng bảng và vạch trục, sai cho một
+          // con số lớn đứng một mình: chữ số 1 bị đệm thành ô rộng bằng chữ số
+          // 0, nên "121" trông rời ra từng mảnh ở cỡ hiển thị. Ở đây bốn ô nằm
+          // NGANG và đo bốn thứ khác nhau — không có cột nào để mà dóng.
+          'mt-2 text-[1.625rem] leading-[1.05] font-semibold tracking-[-0.02em] sm:text-[1.875rem]',
           tone === 'xau' ? 'text-bad' : tone === 'canh' ? 'text-warn'
             : tone === 'tot' ? 'text-ok' : 'text-ink',
         )}

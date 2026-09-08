@@ -99,3 +99,41 @@ test('có tôn trọng prefers-reduced-motion', () => {
   // và những màn chờ nó sẽ kẹt lại giữa chừng.
   assert.doesNotMatch(khoi, /transition-duration:\s*0s/)
 })
+
+// ── Chữ số: đều bề rộng ở đâu, tỉ lệ ở đâu ──────────────────────────────────
+// Hai luật ngược nhau, và cả hai đều TRÔNG NHƯ THIẾU SÓT nếu chỉ liếc qua:
+// một chỗ có `num` mà chỗ kia không. Người đọc code sau sẽ thấy chênh và
+// "sửa" cho đều — nên khoá lại ở đây kèm lý do.
+
+const UI = readFileSync(new URL('../components/ui.tsx', import.meta.url), 'utf8')
+const CHART = readFileSync(new URL('../components/chart.tsx', import.meta.url), 'utf8')
+
+/** Lấy chuỗi lớp chứa `moc`, tính cả khi nó nối nhiều dòng. */
+function lopChua(nguon: string, moc: string): string {
+  const i = nguon.indexOf(moc)
+  assert.notEqual(i, -1, `không thấy ${moc}`)
+  const dau = nguon.lastIndexOf("'", i)
+  const cuoi = nguon.indexOf("'", i)
+  return nguon.slice(dau + 1, cuoi)
+}
+
+test('con số lớn trong Stat dùng chữ số TỈ LỆ, không phải đều bề rộng', () => {
+  const lop = lopChua(UI, 'text-[1.625rem]')
+  // tabular-nums đệm chữ số 1 thành ô rộng bằng chữ số 0. Ở cỡ hiển thị thì
+  // "121" rời ra từng mảnh. Bốn ô thống kê nằm NGANG và đo bốn thứ khác nhau —
+  // không có cột dọc nào để mà dóng, nên không có gì để đánh đổi lấy chuyện đó.
+  assert.ok(!/\bnum\b/.test(lop), `Stat không được có \`num\`: "${lop}"`)
+  assert.match(lop, /text-\[1\.875rem\]/, 'vẫn phải là bậc chữ lớn')
+})
+
+test('vạch trục Y của biểu đồ dùng chữ số ĐỀU BỀ RỘNG', () => {
+  // Ngược lại: 50 / 75 / 100 xếp thành cột dọc, canh phải. Chữ số lệch bề rộng
+  // thì mép phải răng cưa và ba con số không đọc thành một trục.
+  assert.match(CHART, /className="num fill-faint text-\[0\.6875rem\]"/)
+})
+
+test('hàng bảng và cặp nhãn–giá trị VẪN đều bề rộng', () => {
+  // Đây mới là chỗ tabular-nums sinh ra để dùng: số xếp thành cột dọc thật.
+  // Bỏ nhầm ở đây thì bảng công nợ hết dóng được cột.
+  assert.match(UI, /so && 'num'/, 'ô số trong bảng mất tabular-nums')
+})
