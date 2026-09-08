@@ -168,24 +168,68 @@ export function Pill({
   )
 }
 
+// ─────────────────────────── Nhãn nhóm ───────────────────────────
+
+/**
+ * Nhãn in hoa đặt trên một nhóm khối.
+ *
+ * Chuỗi lớp này đang được chép tay ở bốn màn cư dân và thanh điều hướng — chép
+ * tay thì sớm muộn có chỗ lệch một bậc chữ và không ai nhận ra, vì chúng nằm ở
+ * bốn màn khác nhau, không bao giờ hiện cùng lúc để mà so.
+ *
+ * Quan trọng hơn: nó mở ra chỗ để GỌI TÊN các nhóm đang vô hình. Dashboard có
+ * hai nhóm số với hai ý nghĩa khác hẳn nhau — số mang đi họp, và số đang cháy
+ * lúc này — nhưng trên màn chúng vẽ y hệt nhau, chỉ có comment trong code là
+ * biết. Người đọc thấy tám ô rời rạc.
+ */
+export function NhanNhom({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <h2 className={cx(
+      'px-1 text-[0.75rem] font-semibold tracking-wider text-faint uppercase',
+      className,
+    )}>
+      {children}
+    </h2>
+  )
+}
+
 // ─────────────────────────── Ô thống kê ───────────────────────────
 
+/**
+ * ĐẢO NGƯỢC THỨ BẬC so với bản trước, và đó là điểm chính.
+ *
+ * Trước đây nhãn và dòng phụ cùng cỡ 0.8125rem với con số 1.5rem — ba tầng gần
+ * bằng nhau. Tám ô như vậy xếp thành lưới thì mắt không có chỗ bám: người đọc
+ * phải quét từng ô một để tìm thứ mình cần, mỗi lần mở màn. Trên một dashboard
+ * thì con số LÀ nội dung, nhãn chỉ để biết con số đó là gì.
+ *
+ * Nên nhãn lùi hẳn về sau (nhỏ hơn, in hoa, màu nhạt — cùng kiểu với nhãn nhóm
+ * ở thanh bên và đầu cột bảng), còn con số nhô lên: to hơn, chữ bám sát nhau
+ * hơn. Tracking âm là chuẩn typographic — chữ càng to thì khoảng cách tương
+ * đối phải càng chặt, không thì các chữ số rời ra thành từng mảnh.
+ *
+ * Dòng phụ lên text-muted: nó đang là text-faint, tương phản thấp tới mức trên
+ * màn hình ngoài sáng gần như đọc không ra — mà nó thường là chỗ giải thích con
+ * số nghĩa là gì.
+ */
 export function Stat({
   nhan, so, phu, tone = 'trung', href,
 }: { nhan: string; so: ReactNode; phu?: ReactNode; tone?: Tone; href?: string }) {
   const than = (
     <>
-      <div className="text-[0.8125rem] font-medium text-muted">{nhan}</div>
+      <div className="text-[0.75rem] font-semibold tracking-wide text-faint uppercase">{nhan}</div>
       <div
         className={cx(
-          'num mt-1.5 text-[1.5rem] leading-none font-semibold',
+          // Bậc nhỏ hơn trên điện thoại: hai ô nằm cạnh nhau trong 430px, mà
+          // tiền Việt viết đủ chữ số thì rất dài — "4.523.500đ" ở 30px là tràn.
+          'num mt-2 text-[1.625rem] leading-[1.05] font-semibold tracking-[-0.02em] sm:text-[1.875rem]',
           tone === 'xau' ? 'text-bad' : tone === 'canh' ? 'text-warn'
             : tone === 'tot' ? 'text-ok' : 'text-ink',
         )}
       >
         {so}
       </div>
-      {phu && <div className="mt-1.5 text-[0.8125rem] text-faint">{phu}</div>}
+      {phu && <div className="mt-2 text-[0.8125rem] leading-snug text-muted">{phu}</div>}
     </>
   )
   // Ô bấm được nhấc lên khỏi mặt phẳng; ô không bấm được nằm yên. Đó là cách

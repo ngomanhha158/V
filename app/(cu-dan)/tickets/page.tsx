@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/db/server'
-import { Card, LinkButton, PageHead, Pill, Trong, cx, ngayVN } from '@/components/ui'
+import { Card, LinkButton, NhanNhom, PageHead, Pill, Trong, cx, ngayVN } from '@/components/ui'
 import { IcPhai, IcThem } from '@/components/icons'
 
 export const dynamic = 'force-dynamic'
@@ -67,9 +67,7 @@ export default async function Tickets() {
           .filter((n) => n.ds.length > 0)
           .map((nhom) => (
             <section key={nhom.tieu} className="space-y-2">
-              <h2 className="px-1 text-[0.75rem] font-semibold tracking-wider text-faint uppercase">
-                {nhom.tieu} ({nhom.ds.length})
-              </h2>
+              <NhanNhom>{nhom.tieu} ({nhom.ds.length})</NhanNhom>
               <Card>
                 <ul className="divide-y divide-line">
                   {nhom.ds.map((t) => {

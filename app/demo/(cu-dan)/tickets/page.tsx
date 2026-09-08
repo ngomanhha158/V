@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { YEU_CAU } from '@/lib/demo/data'
-import { Card, LinkButton, PageHead, Pill, cx, ngayVN } from '@/components/ui'
+import { Card, LinkButton, NhanNhom, PageHead, Pill, cx, ngayVN } from '@/components/ui'
 import { IcPhai, IcThem } from '@/components/icons'
 
 export const dynamic = 'force-dynamic'
@@ -50,9 +50,7 @@ export default function DemoTickets() {
         { tieu: 'Đã hoàn thành', ds: xong },
       ].filter((n) => n.ds.length > 0).map((nhom) => (
         <section key={nhom.tieu} className="space-y-2">
-          <h2 className="px-1 text-[0.75rem] font-semibold tracking-wider text-faint uppercase">
-            {nhom.tieu} ({nhom.ds.length})
-          </h2>
+          <NhanNhom>{nhom.tieu} ({nhom.ds.length})</NhanNhom>
           <Card>
             <ul className="divide-y divide-line">
               {nhom.ds.map((y) => {
