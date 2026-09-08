@@ -123,9 +123,12 @@ export function DuongSLA({ data }: { data: ThangKPI[] }) {
                 x1={L} x2={rongVe - R} y1={y} y2={y}
                 className="stroke-line" strokeWidth={1}
               />
+              {/* num: ba vạch 50/75/100 xếp thành cột dọc, chữ số phải đều bề
+                  rộng thì mép phải mới thẳng hàng. Đây đúng là chỗ tabular-nums
+                  sinh ra để dùng — khác hẳn con số lớn đứng một mình. */}
               <text
                 x={L - 8} y={y} textAnchor="end" dominantBaseline="middle"
-                className="fill-faint text-[0.6875rem]"
+                className="num fill-faint text-[0.6875rem]"
               >
                 {v}%
               </text>

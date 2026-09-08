@@ -53,8 +53,30 @@
   --radius-card: 0.75rem;
   --radius-ctl: 0.5rem;
 
-  --shadow-card: 0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.06);
-  --shadow-pop:  0 4px 6px -2px rgb(16 24 40 / 0.03), 0 12px 16px -4px rgb(16 24 40 / 0.08);
+  /* Bóng đổ đi qua biến, KHÔNG viết thẳng — xem khối :root bên dưới. Trước đây
+     hai dòng này là hằng số dùng chung cho cả hai nền, mà chúng là bóng của
+     nền sáng: rgb(16 24 40 / 0.04) trên canvas #0b0f17 thì mắt không thấy gì.
+     Nền tối coi như không có tầng độ cao nào — mọi thẻ dán phẳng lên nền. */
+  --shadow-card: var(--s-card);
+  --shadow-pop:  var(--s-pop);
+
+  /* ── Chuyển động ──────────────────────────────────────────────────────────
+     Một bộ từ vựng, không phải mỗi component tự chế một con số. Ba nhịp:
+
+     nhanh  — phản hồi khi ngón tay/chuột đang chạm. Phải xong TRƯỚC khi người
+              ta kịp nghi ngờ là mình đã bấm chưa. Trên 150ms là bắt đầu thấy trễ.
+     vua    — hover, đổi màu. Đủ chậm để thấy là có chuyển, đủ nhanh để không cản.
+     cham   — thứ vào/ra khỏi màn hình, cần mắt kịp bám theo.
+
+     Easing là expo-out: bung nhanh rồi hãm dần. Nó giống vật có khối lượng
+     dừng lại, khác hẳn `ease` mặc định của trình duyệt — đó là khác biệt giữa
+     "có hiệu ứng" và "cảm giác đắt tiền". */
+  --ease-ra:   cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-vao:  cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-doi:  cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-nhanh: 120ms;
+  --dur-vua:   180ms;
+  --dur-cham:  280ms;
 }
 
 :root {
@@ -87,6 +109,12 @@
   --c-bad:       #b42318;
   --c-bad-soft:  #fef3f2;
   --c-bad-line:  #fecdc9;
+
+  /* Nền sáng: bóng là mực xanh-xám loãng, không phải đen. Đen thuần trên nền
+     trắng ra màu xám bẩn; pha theo màu chữ thì bóng trông như thuộc về cùng
+     một thứ ánh sáng. */
+  --s-card: 0 1px 2px 0 rgb(16 24 40 / 0.04), 0 1px 3px 0 rgb(16 24 40 / 0.06);
+  --s-pop:  0 4px 6px -2px rgb(16 24 40 / 0.03), 0 12px 16px -4px rgb(16 24 40 / 0.08);
 }
 
 /* Nền tối: KHÔNG phải nghịch đảo màu sáng. Nền đen tuyền + chữ trắng tinh gây
@@ -121,6 +149,12 @@
   --c-bad:       #fd8a80;
   --c-bad-soft:  #2a1210;
   --c-bad-line:  #4d211d;
+
+  /* Nền tối cần bóng SÂU HƠN HẲN nền sáng, không phải cùng giá trị. Trên nền
+     #0b0f17 thì bóng 4% biến mất, nên trước đây mọi thẻ dán phẳng — không còn
+     tầng nào phân biệt hộp thoại với nền phía sau. Đen đậm và toả rộng hơn. */
+  --s-card: 0 1px 2px 0 rgb(0 0 0 / 0.5), 0 2px 6px -1px rgb(0 0 0 / 0.4);
+  --s-pop:  0 6px 12px -3px rgb(0 0 0 / 0.5), 0 18px 28px -8px rgb(0 0 0 / 0.6);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -154,6 +188,12 @@
     --c-bad:       #fd8a80;
     --c-bad-soft:  #2a1210;
     --c-bad-line:  #4d211d;
+
+    /* Nền tối cần bóng SÂU HƠN HẲN nền sáng, không phải cùng giá trị. Trên nền
+       #0b0f17 thì bóng 4% biến mất, nên trước đây mọi thẻ dán phẳng — không còn
+       tầng nào phân biệt hộp thoại với nền phía sau. Đen đậm và toả rộng hơn. */
+    --s-card: 0 1px 2px 0 rgb(0 0 0 / 0.5), 0 2px 6px -1px rgb(0 0 0 / 0.4);
+    --s-pop:  0 6px 12px -3px rgb(0 0 0 / 0.5), 0 18px 28px -8px rgb(0 0 0 / 0.6);
   }
 }
 
@@ -178,13 +218,32 @@ body {
    khoảng cách tương đối càng phải chặt. */
 h1, h2, h3 { line-height: 1.25; letter-spacing: -0.018em; }
 
+/* KHÔNG đặt border-radius ở đây. Dòng `border-radius: 4px` cũ bẻ bo góc của
+   CHÍNH phần tử lúc focus, nên Chip và Pill vốn bo tròn hoàn toàn bị giật
+   thành gần vuông ngay khi người dùng Tab tới — chỉ người đi bằng bàn phím mới
+   thấy, tức là đúng nhóm mà vòng focus sinh ra để phục vụ. Trình duyệt hiện
+   đại đã tự bo `outline` theo border-radius sẵn có của phần tử. */
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
   outline: 2px solid var(--c-brand);
   outline-offset: 2px;
-  border-radius: 4px;
 }
 
 ::selection { background: var(--c-brand-line); color: var(--c-ink); }
+
+/* Tắt chuyển động cho người đã khai báo là không chịu được nó.
+   Không phải chuyện chiều chuộng: với người bị rối loạn tiền đình, hiệu ứng
+   trượt và phóng to gây chóng mặt và buồn nôn thật. Máy họ đã nói sẵn điều đó
+   ở mức hệ điều hành rồi — không nghe là mình cố tình bỏ qua.
+   Giữ 0.01ms chứ không phải 0: các trình xử lý transitionend vẫn phải chạy,
+   để 0 thì sự kiện không bao giờ bắn và có màn kẹt lại giữa chừng. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* Thanh cuộn trong vùng bảng: mảnh, không cướp sự chú ý khỏi dữ liệu. */
 .scroll-x { scrollbar-width: thin; scrollbar-color: var(--c-line-firm) transparent; }

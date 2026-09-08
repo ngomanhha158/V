@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
 import { duAnBQL } from '@/lib/du-an'
 import {
-  Card, CardHead, Chip, Hop, PageHead, Stat, Trong, cx, ngayVN, soVN, vnd, vndGon,
+  Card, CardHead, Chip, Hop, NhanNhom, PageHead, Stat, Trong, cx, ngayVN, soVN, vnd, vndGon,
 } from '@/components/ui'
 import { BangThang, ChuThichThu, CotThu, DuongSLA, type ThangKPI } from '@/components/chart'
 import { KY, khoangNgay, laKy, type KyKey } from '@/lib/ky'
@@ -82,77 +82,87 @@ export default async function Dashboard({
         ))}
       </div>
 
-      {/* ── Bốn số BQT mang đi họp ────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat
-          nhan="Đúng hạn SLA"
-          so={t.ty_le_dung_sla === null ? '—' : `${soVN(t.ty_le_dung_sla)}%`}
-          tone={toneSLA(t.ty_le_dung_sla)}
-          phu={
-            t.ticket_co_ket_luan === 0
-              ? 'chưa yêu cầu nào ngã ngũ'
-              : `${t.ticket_dung_sla}/${t.ticket_co_ket_luan} yêu cầu đã ngã ngũ`
-          }
-        />
-        <Stat
-          nhan="Thời gian xử lý"
-          so={docGio(t.gio_xu_ly_trung_vi)}
-          phu={
-            t.gio_xu_ly_trung_vi === null ? 'chưa có yêu cầu nào xong'
-              : `trung vị · chậm nhất 10% mất ${docGio(t.gio_xu_ly_p90)}`
-          }
-        />
-        <Stat
-          nhan="Điểm hài lòng"
-          so={t.diem_hai_long === null ? '—' : soVN(t.diem_hai_long, 2)}
-          phu={
-            t.so_luot_danh_gia === 0
-              ? 'chưa ai chấm điểm'
-              : `${t.so_luot_danh_gia} lượt · ${soVN(t.ty_le_danh_gia ?? 0)}% yêu cầu xong được chấm`
-          }
-        />
-        <Stat
-          nhan="Công nợ hiện tại"
-          so={vndGon(t.cong_no)}
-          tone={t.cong_no_qua_han > 0 ? 'canh' : 'trung'}
-          href="/bql/cong-no"
-          phu={
-            t.cong_no === 0 ? 'không căn nào còn nợ'
-              : `${t.so_can_no} căn · quá hạn ${vndGon(t.cong_no_qua_han)}`
-          }
-        />
-      </div>
+      {/* ── Bốn số BQT mang đi họp ──────────────────────────────────────
+          Nhãn nhóm hiện RA MÀN, không chỉ nằm trong comment. Hai khối dưới đây
+          trả lời hai câu khác hẳn nhau — "kỳ vừa rồi chạy thế nào" và "ngay lúc
+          này có gì cháy" — mà trước đây vẽ y hệt nhau, nên người đọc thấy tám ô
+          rời rạc và phải tự đoán ô nào thuộc về câu nào. */}
+      <section className="space-y-2.5">
+        <NhanNhom>Kỳ này chạy thế nào — số mang đi họp</NhanNhom>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat
+            nhan="Đúng hạn SLA"
+            so={t.ty_le_dung_sla === null ? '—' : `${soVN(t.ty_le_dung_sla)}%`}
+            tone={toneSLA(t.ty_le_dung_sla)}
+            phu={
+              t.ticket_co_ket_luan === 0
+                ? 'chưa yêu cầu nào ngã ngũ'
+                : `${t.ticket_dung_sla}/${t.ticket_co_ket_luan} yêu cầu đã ngã ngũ`
+            }
+          />
+          <Stat
+            nhan="Thời gian xử lý"
+            so={docGio(t.gio_xu_ly_trung_vi)}
+            phu={
+              t.gio_xu_ly_trung_vi === null ? 'chưa có yêu cầu nào xong'
+                : `trung vị · chậm nhất 10% mất ${docGio(t.gio_xu_ly_p90)}`
+            }
+          />
+          <Stat
+            nhan="Điểm hài lòng"
+            so={t.diem_hai_long === null ? '—' : soVN(t.diem_hai_long, 2)}
+            phu={
+              t.so_luot_danh_gia === 0
+                ? 'chưa ai chấm điểm'
+                : `${t.so_luot_danh_gia} lượt · ${soVN(t.ty_le_danh_gia ?? 0)}% yêu cầu xong được chấm`
+            }
+          />
+          <Stat
+            nhan="Công nợ hiện tại"
+            so={vndGon(t.cong_no)}
+            tone={t.cong_no_qua_han > 0 ? 'canh' : 'trung'}
+            href="/bql/cong-no"
+            phu={
+              t.cong_no === 0 ? 'không căn nào còn nợ'
+                : `${t.so_can_no} căn · quá hạn ${vndGon(t.cong_no_qua_han)}`
+            }
+          />
+        </div>
+      </section>
 
       {/* ── Đang mở ngay lúc này ──────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat
-          nhan="Yêu cầu đang mở"
-          so={t.dang_mo_hien_tai}
-          href="/bql/tickets"
-          phu="tính cả yêu cầu mở từ kỳ trước"
-        />
-        <Stat
-          nhan="Đang mở & quá hạn"
-          so={t.qua_han_hien_tai}
-          tone={t.qua_han_hien_tai > 0 ? 'xau' : 'tot'}
-          href="/bql/tickets"
-          phu={t.qua_han_hien_tai > 0 ? 'cần xử lý ngay' : 'không tồn đọng'}
-        />
-        <Stat
-          nhan="Thu trong kỳ"
-          so={tyLeThu === null ? '—' : `${tyLeThu}%`}
-          tone={tyLeThu === null ? 'trung' : tyLeThu >= 90 ? 'tot' : tyLeThu >= 70 ? 'canh' : 'xau'}
-          phu={
-            t.phai_thu_ky === 0 ? 'chưa phát hành hóa đơn kỳ này'
-              : `${vndGon(t.da_thu_ky)} / ${vndGon(t.phai_thu_ky)}`
-          }
-        />
-        <Stat
-          nhan="Tiền thực về"
-          so={vndGon(t.tien_ve_ky)}
-          phu="tiền vào tài khoản trong kỳ, gồm cả trả nợ cũ"
-        />
-      </div>
+      <section className="space-y-2.5">
+        <NhanNhom>Ngay lúc này</NhanNhom>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat
+            nhan="Yêu cầu đang mở"
+            so={t.dang_mo_hien_tai}
+            href="/bql/tickets"
+            phu="tính cả yêu cầu mở từ kỳ trước"
+          />
+          <Stat
+            nhan="Đang mở & quá hạn"
+            so={t.qua_han_hien_tai}
+            tone={t.qua_han_hien_tai > 0 ? 'xau' : 'tot'}
+            href="/bql/tickets"
+            phu={t.qua_han_hien_tai > 0 ? 'cần xử lý ngay' : 'không tồn đọng'}
+          />
+          <Stat
+            nhan="Thu trong kỳ"
+            so={tyLeThu === null ? '—' : `${tyLeThu}%`}
+            tone={tyLeThu === null ? 'trung' : tyLeThu >= 90 ? 'tot' : tyLeThu >= 70 ? 'canh' : 'xau'}
+            phu={
+              t.phai_thu_ky === 0 ? 'chưa phát hành hóa đơn kỳ này'
+                : `${vndGon(t.da_thu_ky)} / ${vndGon(t.phai_thu_ky)}`
+            }
+          />
+          <Stat
+            nhan="Tiền thực về"
+            so={vndGon(t.tien_ve_ky)}
+            phu="tiền vào tài khoản trong kỳ, gồm cả trả nợ cũ"
+          />
+        </div>
+      </section>
 
       {/* ── Xu hướng ──────────────────────────────────────────────────── */}
       <div className="grid gap-5 xl:grid-cols-2">

@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/db/server'
-import { Hop, PageHead, Trong } from '@/components/ui'
+import { Hop, NhanNhom, PageHead, Trong } from '@/components/ui'
 import { BaoCaoQuy, timQuyTruoc, type BanBaoCao } from '@/components/bao-cao-quy'
 import { khuToiO } from '@/lib/khu-cu-dan'
 
@@ -44,9 +44,7 @@ export default async function Page() {
       {theoKhu.map((t) => (
         <section key={t.khu.id} className="space-y-5">
           {nhieuKhu && (
-            <h2 className="px-1 text-[0.75rem] font-semibold tracking-wider text-faint uppercase">
-              {t.khu.name}
-            </h2>
+            <NhanNhom>{t.khu.name}</NhanNhom>
           )}
 
           {t.error && (
