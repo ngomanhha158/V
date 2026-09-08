@@ -87,7 +87,7 @@ type Dang = 'chinh' | 'phu' | 'nhat' | 'nguy'
 type Co = 'sm' | 'md'
 
 const NUT_DANG: Record<Dang, string> = {
-  chinh: 'bg-brand text-on-brand hover:bg-brand-deep border-transparent',
+  chinh: 'bg-brand text-on-brand hover:bg-brand-deep border-transparent shadow-card',
   phu: 'bg-surface text-ink border-line-firm hover:bg-sunken',
   nhat: 'bg-transparent text-muted border-transparent hover:bg-sunken hover:text-ink',
   nguy: 'bg-surface text-bad border-bad-line hover:bg-bad-soft',
@@ -96,9 +96,28 @@ const NUT_CO: Record<Co, string> = {
   sm: 'h-8 px-2.5 text-[0.8125rem] gap-1.5',
   md: 'h-10 px-3.5 text-sm gap-2',
 }
+/**
+ * Nút phải NHÚN khi bấm.
+ *
+ * Trước đây chỉ có `transition-colors`: bấm xuống không có gì nhúc nhích cho
+ * tới khi máy chủ trả lời. Trên mạng 3G ở hầm gửi xe, khoảng lặng đó dài tới
+ * mức người ta bấm lại lần hai — và với nút "Xác nhận thu tiền" thì bấm hai
+ * lần không phải chuyện thẩm mỹ nữa.
+ *
+ * 0.985 và 1px là cố ý nhỏ. Đủ để ngón tay tin là máy đã nhận, chưa đủ để
+ * thành trò biểu diễn trên một màn hình người ta nhìn tám tiếng mỗi ngày.
+ */
 const NUT_NEN =
   'inline-flex items-center justify-center rounded-ctl border font-medium ' +
-  'transition-colors disabled:pointer-events-none disabled:opacity-45 whitespace-nowrap'
+  'whitespace-nowrap select-none ' +
+  // `transition` trần, KHÔNG phải transition-[...transform]. Tailwind v4 sinh ra
+  // thuộc tính `translate`/`scale` riêng chứ không gộp vào `transform`, nên liệt
+  // kê transform là trỏ vào một thuộc tính không bao giờ đổi: nút vẫn nhún,
+  // nhưng nhún giật một nhịp thay vì chuyển mượt. Bản `transition` mặc định của
+  // v4 đã bao gồm translate/scale/rotate.
+  'transition duration-[var(--dur-nhanh)] ease-[var(--ease-ra)] ' +
+  'active:translate-y-px active:scale-[0.985] ' +
+  'disabled:pointer-events-none disabled:opacity-45'
 
 export function Button({
   dang = 'phu', co = 'md', className, ...rest
@@ -169,11 +188,17 @@ export function Stat({
       {phu && <div className="mt-1.5 text-[0.8125rem] text-faint">{phu}</div>}
     </>
   )
+  // Ô bấm được nhấc lên khỏi mặt phẳng; ô không bấm được nằm yên. Đó là cách
+  // duy nhất phân biệt hai loại ô mà không phải viết thêm chữ — trước đây cả
+  // hai trông y hệt nhau và người dùng phải rê chuột khắp bảng để dò xem cái
+  // nào bấm được.
   const lop = cx(
     'rounded-card border border-line bg-surface px-4 py-3.5 shadow-card',
-    href && 'transition-colors hover:border-line-firm hover:bg-raised',
+    href && 'block transition duration-[var(--dur-vua)] ease-[var(--ease-ra)] '
+      + 'hover:-translate-y-0.5 hover:border-line-firm hover:shadow-pop '
+      + 'active:translate-y-0 active:shadow-card',
   )
-  return href ? <Link href={href} className={cx(lop, 'block')}>{than}</Link>
+  return href ? <Link href={href} className={lop}>{than}</Link>
     : <div className={lop}>{than}</div>
 }
 
@@ -317,5 +342,110 @@ export function Doi({
       <dt className="shrink-0 text-[0.8125rem] text-muted">{nhan}</dt>
       <dd className="min-w-0 text-right text-sm font-medium text-ink">{children}</dd>
     </div>
+  )
+}
+
+// ─────────────────────────── Trạng thái đang tải ───────────────────────────
+
+/**
+ * Khung xám thay chỗ nội dung chưa về.
+ *
+ * Vì sao cần, và vì sao là thứ đáng làm nhất trong cả hệ: 116 route của app
+ * đều là server component `force-dynamic`, và KHÔNG route nào có màn chờ. Bấm
+ * sang "Công nợ" thì màn hình cũ đứng nguyên vài trăm mili-giây tới vài giây,
+ * không dấu hiệu gì. Người dùng không kết luận "đang tải" — họ kết luận "máy
+ * đơ" và bấm lại.
+ *
+ * Khung xám không làm dữ liệu về nhanh hơn một mili-giây nào. Nó chỉ trả lời
+ * đúng một câu, ngay lập tức: máy có nghe thấy bạn. Đó là chênh lệch lớn nhất
+ * giữa một app dùng được và một app dùng thấy đắt tiền.
+ *
+ * Giữ ĐÚNG hình dạng của thứ sắp thay thế nó. Khung sai kích thước thì lúc dữ
+ * liệu về, cả trang nhảy một cái — tệ hơn là không có khung nào.
+ */
+export function Khung({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden
+      // bg-line chứ không bg-sunken: sunken (#f2f4f7) nằm trên thẻ trắng chỉ
+      // chênh 4%, nhìn ra một mảng trắng hơi bẩn chứ không ra khung chờ. Khung
+      // mờ quá thì mất luôn tác dụng — người dùng vẫn thấy màn hình trống.
+      className={cx('animate-pulse rounded-ctl bg-line', className)}
+    />
+  )
+}
+
+/** Khung cho một thẻ nội dung: một dòng tiêu đề, ba dòng thân. */
+export function KhungThe({ dong = 3, className }: { dong?: number; className?: string }) {
+  return (
+    <div className={cx('rounded-card border border-line bg-surface p-4', className)}>
+      <Khung className="h-4 w-1/3" />
+      <div className="mt-3.5 space-y-2.5">
+        {Array.from({ length: dong }, (_, i) => (
+          // Dòng cuối ngắn hơn, như một đoạn văn thật. Ba dòng dài bằng nhau
+          // trông giống thanh tiến trình hơn là giống chữ.
+          <Khung key={i} className={cx('h-3', i === dong - 1 ? 'w-2/3' : 'w-full')} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** Khung cho một hàng ô thống kê. */
+export function KhungStat({ so = 4 }: { so?: number }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {Array.from({ length: so }, (_, i) => (
+        <div key={i} className="rounded-card border border-line bg-surface px-4 py-3.5">
+          <Khung className="h-3 w-24" />
+          <Khung className="mt-2.5 h-7 w-20" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Khung cho một bảng dữ liệu.
+ *
+ * Vẽ cả phần đầu bảng vì đó là thứ ổn định — tên cột không đổi theo dữ liệu.
+ * Người đọc nhận ra ngay mình đang ở bảng nào trong lúc số còn đang về.
+ */
+export function KhungBang({ dong = 6, cot = 4 }: { dong?: number; cot?: number }) {
+  return (
+    <div className="overflow-hidden rounded-card border border-line bg-surface">
+      <div className="flex gap-4 border-b border-line bg-raised px-3 py-2.5">
+        {Array.from({ length: cot }, (_, i) => <Khung key={i} className="h-3 flex-1" />)}
+      </div>
+      {Array.from({ length: dong }, (_, i) => (
+        <div key={i} className="flex gap-4 border-b border-line px-3 py-3.5 last:border-b-0">
+          {Array.from({ length: cot }, (_, j) => <Khung key={j} className="h-3.5 flex-1" />)}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Vòng xoay, cho thao tác NGẮN mà người dùng vừa tự bấm.
+ *
+ * Khác Khung ở chỗ dùng lúc nào: khung thay cho nội dung CHƯA TỪNG có trên
+ * màn; vòng xoay đứng trong nút mà người ta vừa bấm, nơi bố cục đã ổn định và
+ * chỉ còn chờ một câu trả lời.
+ */
+export function Xoay({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16" aria-hidden
+      className={cx('size-4 shrink-0 animate-spin', className)}
+    >
+      <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.25" />
+      {/* Một phần tư cung: đủ để thấy rõ chiều quay. Cung dài hơn thì lúc quay
+          nhanh trông như vòng tròn đặc và mất luôn cảm giác chuyển động. */}
+      <path
+        d="M8 1.5a6.5 6.5 0 0 1 6.5 6.5" fill="none"
+        stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+      />
+    </svg>
   )
 }
