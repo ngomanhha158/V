@@ -135,11 +135,49 @@ export function kyHienTai(now: Date = new Date()): string {
  * Tên file. Có cả kỳ lẫn thời điểm chốt: hai lần xuất cùng một kỳ vẫn ra hai
  * file khác tên, nên không ai vô tình đè lên bản đã gửi đi rồi.
  */
-export function tenTep(bc: BaoCao, ky: string | null, chotLuc: Date): string {
+/**
+ * Tên khu rút gọn cho tên tệp: "Sunrise Riverside" -> "sunrise-riverside".
+ *
+ * Bỏ dấu chứ không giữ nguyên: Content-Disposition dùng `filename="..."` là
+ * trường ASCII, chữ có dấu qua đó bị trình duyệt cắt hoặc thay bằng dấu hỏi —
+ * và người dùng nhận về một tệp tên loang lổ, không phải một lỗi.
+ *
+ * Cắt 40 ký tự: tên khu dài cộng kỳ cộng mốc chốt vượt giới hạn tên tệp của
+ * một số hệ thống, mà lúc đó phần bị cắt là phần ĐUÔI — tức là mốc chốt, đúng
+ * cái phân biệt hai lần xuất.
+ */
+export function slugKhu(ten: string): string {
+  return ten
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/, '')
+}
+
+/**
+ * `khu` là THAM SỐ BẮT BUỘC, cố ý.
+ *
+ * Trước đây tên tệp chỉ có báo cáo + kỳ + mốc chốt, không có khu. Người quản lý
+ * hai khu tải "Công nợ tháng 9" của cả hai được hai tệp TRÙNG TÊN: cái sau đè
+ * cái trước trong thư mục Tải về, im lặng. Mà kể cả không đè — mở tệp
+ * `cong-no_2026-09_...xlsx` một tuần sau thì không có cách nào biết nó là khu
+ * nào cho tới lúc mở ra đọc dòng tiêu đề bên trong.
+ *
+ * Để tham số này tuỳ chọn thì lỗi cũ quay lại lúc nào không ai biết. Bắt buộc
+ * thì TypeScript không cho dựng một tên tệp mà không nói nó thuộc khu nào.
+ */
+export function tenTep(bc: BaoCao, ky: string | null, chotLuc: Date, khu: string): string {
   const p = (n: number) => String(n).padStart(2, '0')
   const dau = `${chotLuc.getUTCFullYear()}${p(chotLuc.getUTCMonth() + 1)}${p(chotLuc.getUTCDate())}`
     + `-${p(chotLuc.getUTCHours())}${p(chotLuc.getUTCMinutes())}`
-  return [bc.tep, bc.theoKy && ky ? ky : null, dau].filter(Boolean).join('_') + '.xlsx'
+  // slug rỗng được: tên khu toàn ký tự lạ thì bỏ phần đó đi, chứ không dựng ra
+  // `cong-no__2026-09_...` với hai gạch dưới liền nhau.
+  return [bc.tep, slugKhu(khu) || null, bc.theoKy && ky ? ky : null, dau]
+    .filter(Boolean).join('_') + '.xlsx'
 }
 
 /**

@@ -94,7 +94,7 @@ function TheDemo({
       <div className="space-y-3 p-4">
         <p className="text-[0.8125rem] leading-relaxed text-muted">{bc.moTa}</p>
         <p className="font-mono text-[0.75rem] text-faint">
-          {tenTep(bc, bc.theoKy ? ky : null, new Date(chotLuc))}
+          {tenTep(bc, bc.theoKy ? ky : null, new Date(chotLuc), 'Sunrise Riverside')}
         </p>
         <button
           type="button" onClick={bat} aria-expanded={mo}
