@@ -9,7 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test:js": "node --experimental-strip-types --test \"lib/**/*.test.ts\"",
+    "test:js": "node --experimental-strip-types --test \"lib/**/*.test.ts\" \"mcp/**/*.test.ts\"",
     "test": "npm run verify && npm run verify:railway && npm run test:js && npm run verify:golive",
     "verify:golive": "node scripts/verify-golive.mjs"
   },
