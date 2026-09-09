@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  BAO_CAO, baoCao, DINH_DANG, docKy, kyHienTai, mocKy, tenTep,
+  BAO_CAO, baoCao, DINH_DANG, docKy, kyHienTai, mocKy, slugKhu, tenTep,
 } from './bao-cao.ts'
 import { dungWorkbook } from './excel.ts'
 import ExcelJS from 'exceljs'
@@ -79,17 +79,58 @@ test('tháng 12 sang năm sau, không thành tháng 13', () => {
 
 // ───────────────────────────── tên tệp ─────────────────────────────
 
+const KHU = 'Sunrise Riverside'
+
 test('tên tệp có kỳ và mốc chốt, hai lần xuất không đè lên nhau', () => {
   const bc = baoCao('so-quy')!
-  const a = tenTep(bc, '2026-09', new Date('2026-09-02T05:30:00Z'))
-  const b = tenTep(bc, '2026-09', new Date('2026-09-02T06:31:00Z'))
-  assert.equal(a, 'so-quy_2026-09_20260902-0530.xlsx')
+  const a = tenTep(bc, '2026-09', new Date('2026-09-02T05:30:00Z'), KHU)
+  const b = tenTep(bc, '2026-09', new Date('2026-09-02T06:31:00Z'), KHU)
+  assert.equal(a, 'so-quy_sunrise-riverside_2026-09_20260902-0530.xlsx')
   assert.notEqual(a, b)
 })
 
 test('báo cáo ảnh chụp thì tên tệp không có kỳ', () => {
-  const t = tenTep(baoCao('cong-no')!, '2026-09', new Date('2026-09-02T05:30:00Z'))
+  const t = tenTep(baoCao('cong-no')!, '2026-09', new Date('2026-09-02T05:30:00Z'), KHU)
+  assert.equal(t, 'cong-no_sunrise-riverside_20260902-0530.xlsx')
+})
+
+/**
+ * ĐÂY LÀ CA CHÍNH. Hai khu, cùng báo cáo, cùng kỳ, tải trong cùng một phút —
+ * trước đây ra hai tệp TRÙNG TÊN và cái sau đè cái trước trong thư mục Tải về,
+ * không một dấu hiệu nào. Người quản lý mở ra tưởng đang xem khu A.
+ */
+test('hai khu cùng báo cáo cùng kỳ -> hai tên tệp KHÁC nhau', () => {
+  const bc = baoCao('cong-no')!
+  const luc = new Date('2026-09-02T05:30:00Z')
+  const a = tenTep(bc, '2026-09', luc, 'Sunrise Riverside')
+  const b = tenTep(bc, '2026-09', luc, 'Sunrise City')
+  assert.notEqual(a, b)
+  assert.match(a, /riverside/)
+  assert.match(b, /city/)
+})
+
+test('tên khu có dấu tiếng Việt -> bỏ dấu, vì Content-Disposition là trường ASCII', () => {
+  // Giữ nguyên dấu thì trình duyệt cắt hoặc thay bằng dấu hỏi, và người dùng
+  // nhận về một tệp tên loang lổ chứ không phải một lỗi.
+  assert.equal(slugKhu('Chung cư Bình Minh'), 'chung-cu-binh-minh')
+  assert.equal(slugKhu('Khu Đô Thị Mới'), 'khu-do-thi-moi')
+  const t = tenTep(baoCao('cong-no')!, null, new Date('2026-09-02T05:30:00Z'), 'Chung cư Bình Minh')
+  assert.doesNotMatch(t, /[^\x00-\x7f]/, `tên tệp còn ký tự ngoài ASCII: ${t}`)
+})
+
+test('tên khu toàn ký tự lạ -> bỏ hẳn phần khu, không dựng ra hai gạch dưới liền', () => {
+  const t = tenTep(baoCao('cong-no')!, null, new Date('2026-09-02T05:30:00Z'), '***')
   assert.equal(t, 'cong-no_20260902-0530.xlsx')
+  assert.doesNotMatch(t, /__/)
+})
+
+test('tên khu dài bị cắt, nhưng KHÔNG cắt mất mốc chốt', () => {
+  const dai = 'Khu do thi phuc hop cao tang Vinh Loc Binh Chanh giai doan hai'
+  const t = tenTep(baoCao('cong-no')!, null, new Date('2026-09-02T05:30:00Z'), dai)
+  // Mốc chốt là thứ phân biệt hai lần xuất — cắt mất nó là mất luôn tác dụng.
+  assert.match(t, /_20260902-0530\.xlsx$/)
+  assert.ok(slugKhu(dai).length <= 40)
+  assert.doesNotMatch(t, /-_/, 'slug bị cắt giữa chừng để lại gạch nối thừa')
 })
 
 // ───────────────────────────── file dựng ra ─────────────────────────────

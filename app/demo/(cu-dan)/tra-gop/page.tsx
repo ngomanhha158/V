@@ -1,4 +1,4 @@
-import { Card, CardHead, Hop, PageHead, Pill, cx, vnd } from '@/components/ui'
+import { Card, CardHead, Hop, PageHead, Pill, SO_LON, cx, vnd } from '@/components/ui'
 import { NHAN_DOT, TONE_DOT, kyVN, loiDot, trangThaiDot } from '@/lib/tra-gop'
 import { CUA_TOI, KE_HOACH } from '@/app/demo/tra-gop-mock'
 
@@ -26,7 +26,7 @@ export default function Page() {
           <div className="flex flex-wrap gap-3">
             <div className="min-w-[9rem] flex-1 rounded-card border border-line bg-sunken px-3.5 py-3">
               <div className="text-[0.75rem] font-medium text-muted">Phần của căn bạn</div>
-              <div className="num mt-1 text-[1.25rem] leading-none font-semibold text-ink">
+              <div className={cx(SO_LON, 'mt-1 text-[1.25rem] text-ink')}>
                 {vnd(tong)}
               </div>
               <div className="num mt-1.5 text-[0.75rem] text-faint">
@@ -35,7 +35,7 @@ export default function Page() {
             </div>
             <div className="min-w-[9rem] flex-1 rounded-card border border-line bg-sunken px-3.5 py-3">
               <div className="text-[0.75rem] font-medium text-muted">Còn nằm ở các kỳ tới</div>
-              <div className="num mt-1 text-[1.25rem] leading-none font-semibold text-ink">
+              <div className={cx(SO_LON, 'mt-1 text-[1.25rem] text-ink')}>
                 {vnd(conLai)}
               </div>
             </div>

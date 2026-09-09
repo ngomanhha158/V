@@ -1,4 +1,4 @@
-import { Bang, Card, CardHead, Hop, Pill, Td, Th, Tr, Trong, cx, ngayVN, vnd } from '@/components/ui'
+import { Bang, Card, CardHead, Hop, Pill, Td, Th, Tr, Trong, SO_LON, cx, ngayVN, vnd } from '@/components/ui'
 import { loiDoiChieu, nhanLoai, tienCoDau } from '@/lib/quy'
 
 export type DongQuy = {
@@ -50,7 +50,8 @@ export function QuySo({
       <Card>
         <div className="px-4 py-4">
           <p className="text-[0.8125rem] text-muted">Số dư quỹ bảo trì</p>
-          <p className="num mt-1 text-[1.75rem] leading-none font-bold text-ink">{vnd(soDu)}</p>
+          {/* Số chủ đạo của cả trang: to nhất, và KHÔNG tabular-nums — xem SO_LON. */}
+          <p className={cx(SO_LON, 'mt-1 text-[1.75rem] font-bold text-ink')}>{vnd(soDu)}</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <Pill tone="brand">Tách khỏi phí quản lý</Pill>
             {nganHang && soTaiKhoan && (

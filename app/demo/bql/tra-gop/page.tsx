@@ -1,7 +1,4 @@
-import {
-  Bang, Card, CardHead, Field, Hop, Input, PageHead, Pill, Select, Td, Th, Tr,
-  Textarea, cx, ngayVN, vnd,
-} from '@/components/ui'
+import { Bang, Card, CardHead, Field, Hop, Input, PageHead, Pill, Select, Td, Textarea, Th, Tr, SO_LON, cx, ngayVN, vnd } from '@/components/ui'
 import { NHAN_CACH_CHIA, NHAN_DOT, TONE_DOT, ganhNang, kyVN, trangThaiDot } from '@/lib/tra-gop'
 import { CAN, KE_HOACH } from '@/app/demo/tra-gop-mock'
 
@@ -32,13 +29,13 @@ export default function Page() {
           <dl className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-card border border-line bg-sunken px-3.5 py-3">
               <dt className="text-[0.75rem] font-medium text-muted">Tổng chi phí</dt>
-              <dd className="num mt-1 text-[1.25rem] leading-none font-semibold text-ink">
+              <dd className={cx(SO_LON, 'mt-1 text-[1.25rem] text-ink')}>
                 {vnd(k.tong_chi_phi)}
               </dd>
             </div>
             <div className="rounded-card border border-line bg-sunken px-3.5 py-3">
               <dt className="text-[0.75rem] font-medium text-muted">Đã lên hóa đơn phát hành</dt>
-              <dd className="num mt-1 text-[1.25rem] leading-none font-semibold text-ink">
+              <dd className={cx(SO_LON, 'mt-1 text-[1.25rem] text-ink')}>
                 {vnd(k.da_len_hoa_don)}
               </dd>
               <dd className="num mt-1.5 text-[0.75rem] text-faint">
@@ -47,7 +44,7 @@ export default function Page() {
             </div>
             <div className="rounded-card border border-line bg-sunken px-3.5 py-3">
               <dt className="text-[0.75rem] font-medium text-muted">Chưa tới kỳ</dt>
-              <dd className="num mt-1 text-[1.25rem] leading-none font-semibold text-ink">
+              <dd className={cx(SO_LON, 'mt-1 text-[1.25rem] text-ink')}>
                 {vnd(k.chua_toi_ky)}
               </dd>
             </div>

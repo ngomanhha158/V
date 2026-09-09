@@ -193,6 +193,22 @@ export function NhanNhom({ children, className }: { children: ReactNode; classNa
   )
 }
 
+// ─────────────────────────── Số lớn ───────────────────────────
+
+/**
+ * Kiểu chữ cho MỘT CON SỐ LỚN đứng riêng — số dư quỹ, tỷ lệ thu, tiền phải trả.
+ *
+ * KHÔNG có `num` ở đây, và đó là điểm chính. tabular-nums ép mọi chữ số về cùng
+ * bề rộng để mắt dóng được cột — đúng cho hàng bảng và vạch trục, sai cho một
+ * con số lớn đứng một mình: chữ số 1 bị đệm thành ô rộng bằng chữ số 0, nên
+ * "121" trông rời ra từng mảnh ở cỡ hiển thị.
+ *
+ * KHÔNG kèm cỡ chữ. Cỡ là chuyện của ngữ cảnh và nó khác nhau có lý do: 1.25rem
+ * trong hộp nhỏ hai cột, 1.375rem trong lưới bốn ô, 1.75rem cho số chủ đạo của
+ * cả trang. Gộp hết về một cỡ là san phẳng một thứ bậc thật.
+ */
+export const SO_LON = 'leading-none font-semibold tracking-[-0.02em]'
+
 // ─────────────────────────── Ô thống kê ───────────────────────────
 
 /**
@@ -227,7 +243,7 @@ export function Stat({
           // con số lớn đứng một mình: chữ số 1 bị đệm thành ô rộng bằng chữ số
           // 0, nên "121" trông rời ra từng mảnh ở cỡ hiển thị. Ở đây bốn ô nằm
           // NGANG và đo bốn thứ khác nhau — không có cột nào để mà dóng.
-          'mt-2 text-[1.625rem] leading-[1.05] font-semibold tracking-[-0.02em] sm:text-[1.875rem]',
+          SO_LON, 'mt-2 text-[1.625rem] leading-[1.05] sm:text-[1.875rem]',
           tone === 'xau' ? 'text-bad' : tone === 'canh' ? 'text-warn'
             : tone === 'tot' ? 'text-ok' : 'text-ink',
         )}

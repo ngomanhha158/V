@@ -67,7 +67,7 @@ export async function GET(
     headers: {
       'content-type':
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'content-disposition': `attachment; filename="${tenTep(bc, ky, chotLuc)}"`,
+      'content-disposition': `attachment; filename="${tenTep(bc, ky, chotLuc, project.name)}"`,
       // Báo cáo tài chính không được nằm lại trong cache của trình duyệt hay
       // của bất kỳ proxy nào trên đường đi.
       'cache-control': 'no-store, private',
