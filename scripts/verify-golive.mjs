@@ -85,8 +85,15 @@ function quet(thuMuc, ten, bo = true) {
 
   // Chạy thật bộ JS rồi đếm, không đoán: đây là con số dễ lệch nhất vì thêm
   // một `test(...)` là nó đổi, mà chẳng ai nhớ mở doc ra sửa.
+  // Glob ĐỌC TỪ package.json, không chép lại ở đây. Bản chép tay vừa lệch
+  // thật: thêm mcp/**/*.test.ts vào `test:js` mà quên chỗ này, thế là bộ đếm
+  // chạy ít test hơn bộ test thật rồi báo doc sai — trong khi doc mới là cái
+  // đúng. Một chỗ giữ sự thật thì hết cả lớp lỗi đó.
+  const lenh = JSON.parse(readFileSync('package.json', 'utf8')).scripts['test:js']
+  const glob = [...lenh.matchAll(/"([^"]+\.test\.ts)"/g)].map((m) => m[1])
+  if (glob.length === 0) throw new Error('Không đọc được glob test từ package.json scripts["test:js"]')
   const ra = execFileSync('node',
-    ['--experimental-strip-types', '--test', 'lib/**/*.test.ts'],
+    ['--experimental-strip-types', '--test', ...glob],
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
   const soJs = Number(ra.match(/^# pass (\d+)$/m)?.[1])
   const nJs = Number(dong.match(/(\d+) test JS/)?.[1])
