@@ -1,4 +1,4 @@
-import { Card, CardHead, Hop, Pill, cx, ngayGioVN } from '@/components/ui'
+import { Card, CardHead, Hop, Pill, SO_LON, cx, ngayGioVN } from '@/components/ui'
 import {
   NHAN_DOAN, NHAN_TRANG_THAI, TONE_TRANG_THAI,
   doanThanh, giaiThichKetQua, m2, phanTram, trangThaiBQ, tyLe,
@@ -126,7 +126,10 @@ export function KetQuaBQ({
             <dt className="text-[0.75rem] font-medium text-muted">
               Tỷ lệ dự họp — trên diện tích TOÀN KHU
             </dt>
-            <dd className="num mt-1 text-[1.375rem] leading-none font-semibold text-ink">
+            {/* Nhãn ở đây CỐ Ý không in hoa như Stat: nó dùng chữ hoa để nhấn
+                nghĩa — "TOÀN KHU" so với "ĐÃ BỎ PHIẾU" — và đó chính là thứ nói
+                phần trăm này tính trên cái gì. In hoa cả nhãn là mất phần nhấn. */}
+            <dd className={cx(SO_LON, 'mt-1 text-[1.375rem] text-ink')}>
               {phanTram(k.ty_le_du_hop)}
             </dd>
             <dd className="num mt-1.5 text-[0.75rem] text-faint">
@@ -138,7 +141,7 @@ export function KetQuaBQ({
             <dt className="text-[0.75rem] font-medium text-muted">
               Tỷ lệ tán thành — trên diện tích ĐÃ BỎ PHIẾU
             </dt>
-            <dd className="num mt-1 text-[1.375rem] leading-none font-semibold text-ink">
+            <dd className={cx(SO_LON, 'mt-1 text-[1.375rem] text-ink')}>
               {phanTram(k.ty_le_tan_thanh)}
             </dd>
             <dd className="num mt-1.5 text-[0.75rem] text-faint">

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/db/server'
-import { Card, CardHead, Hop, PageHead, Pill, Trong, cx, vnd } from '@/components/ui'
+import { Card, CardHead, Hop, PageHead, Pill, Trong, SO_LON, cx, vnd } from '@/components/ui'
 import { NHAN_DOT, TONE_DOT, gomTheoKeHoach, kyVN, loiDot, trangThaiDot } from '@/lib/tra-gop'
 
 export const dynamic = 'force-dynamic'
@@ -52,13 +52,13 @@ export default async function Page() {
               <div className="flex flex-wrap gap-3">
                 <div className="min-w-[9rem] flex-1 rounded-card border border-line bg-sunken px-3.5 py-3">
                   <div className="text-[0.75rem] font-medium text-muted">Phần của căn bạn</div>
-                  <div className="num mt-1 text-[1.25rem] leading-none font-semibold text-ink">
+                  <div className={cx(SO_LON, 'mt-1 text-[1.25rem] text-ink')}>
                     {vnd(g.tong_phai_tra)}
                   </div>
                 </div>
                 <div className="min-w-[9rem] flex-1 rounded-card border border-line bg-sunken px-3.5 py-3">
                   <div className="text-[0.75rem] font-medium text-muted">Còn nằm ở các kỳ tới</div>
-                  <div className="num mt-1 text-[1.25rem] leading-none font-semibold text-ink">
+                  <div className={cx(SO_LON, 'mt-1 text-[1.25rem] text-ink')}>
                     {vnd(conLai)}
                   </div>
                 </div>

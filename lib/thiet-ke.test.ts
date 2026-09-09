@@ -137,3 +137,44 @@ test('hàng bảng và cặp nhãn–giá trị VẪN đều bề rộng', () =>
   // Bỏ nhầm ở đây thì bảng công nợ hết dóng được cột.
   assert.match(UI, /so && 'num'/, 'ô số trong bảng mất tabular-nums')
 })
+
+/**
+ * KHÔNG con số cỡ hiển thị nào được mang tabular-nums, ở BẤT KỲ file nào.
+ *
+ * Luật này từng chỉ áp cho Stat, và thế là chưa đủ: bốn màn khác tự dựng số lớn
+ * riêng — số dư quỹ, tỷ lệ thu, tiền phải trả — và cả bốn vẫn còn `num`. Sửa
+ * một primitive không sửa được những chỗ không dùng primitive đó.
+ *
+ * Ngưỡng 1.25rem: dưới mức đó chưa phải cỡ hiển thị, và ở đó `num` thường ĐÚNG
+ * — chot-so.tsx dùng 1.0625rem cho giá trị canh phải trong danh sách dọc, tức
+ * là chúng thật sự xếp thành cột.
+ */
+test('không con số cỡ hiển thị nào còn tabular-nums', async () => {
+  const { readdirSync, statSync } = await import('node:fs')
+  const goc = new URL('../', import.meta.url).pathname
+  const tep: string[] = []
+  const quet = (d: string) => {
+    for (const m of readdirSync(d)) {
+      if (m === 'node_modules' || m === '.next' || m.startsWith('.')) continue
+      const p = `${d}/${m}`
+      if (statSync(p).isDirectory()) quet(p)
+      else if (m.endsWith('.tsx')) tep.push(p)
+    }
+  }
+  quet(`${goc}app`); quet(`${goc}components`)
+
+  const pham: string[] = []
+  for (const f of tep) {
+    for (const [, lop] of readFileSync(f, 'utf8').matchAll(/className=\{?["'`]([^"'`]+)["'`]/g)) {
+      if (!/\bnum\b/.test(lop)) continue
+      // MIỄN TRỪ: tracking DƯƠNG nghĩa là con số này để đọc TỪNG KÝ TỰ, không
+      // phải để nhìn một phát ra độ lớn — số chứng từ người ta đọc qua điện
+      // thoại cho kế toán nghe. Ở đó chữ số đều bề rộng và tách nhau ra là
+      // đúng, ngược hẳn với một con số hiển thị.
+      if (/tracking-(wide|wider|widest)/.test(lop)) continue
+      const co = [...lop.matchAll(/text-\[(\d+(?:\.\d+)?)rem\]/g)].map((m) => Number(m[1]))
+      if (co.some((v) => v >= 1.25)) pham.push(`${f.replace(goc, '')}: "${lop}"`)
+    }
+  }
+  assert.deepEqual(pham, [], `số cỡ hiển thị còn tabular-nums:\n${pham.join('\n')}`)
+})

@@ -6,7 +6,7 @@ export default function NotFound() {
   return (
     <div className="grid min-h-dvh place-items-center px-4">
       <div className="text-center">
-        <p className="num text-[2.5rem] leading-none font-semibold text-line-firm">404</p>
+        <p className="text-[2.5rem] leading-none font-semibold text-line-firm">404</p>
         <h1 className="mt-3 text-lg font-semibold text-ink">Không tìm thấy trang này</h1>
         <p className="mx-auto mt-1.5 max-w-sm text-[0.8125rem] leading-relaxed text-muted">
           Đường dẫn không tồn tại, hoặc dữ liệu ở đây không thuộc quyền xem của

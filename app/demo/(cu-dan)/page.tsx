@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { CAN_CUA_TOI, HOA_DON, YEU_CAU } from '@/lib/demo/data'
-import { Card, CardHead, LinkButton, Pill, Trong, cx, ngayVN, vnd } from '@/components/ui'
+import { Card, CardHead, LinkButton, Pill, Trong, SO_LON, cx, ngayVN, vnd } from '@/components/ui'
 import { IcHoaDon, IcPhai, IcThem, IcToaNha, IcYeuCau } from '@/components/icons'
 
 export const dynamic = 'force-dynamic'
@@ -32,7 +32,7 @@ export default function DemoHome() {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="text-[0.8125rem] font-medium text-muted">Cần thanh toán</div>
-              <div className="num mt-1 text-[1.75rem] leading-none font-semibold text-ink">
+              <div className={cx(SO_LON, 'mt-1 text-[1.75rem] text-ink')}>
                 {vnd(conNo)}
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">

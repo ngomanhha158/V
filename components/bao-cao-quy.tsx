@@ -1,4 +1,4 @@
-import { Card, CardHead, Hop, Pill, cx, ngayGioVN, ngayVN, vnd } from '@/components/ui'
+import { Card, CardHead, Hop, Pill, SO_LON, cx, ngayGioVN, ngayVN, vnd } from '@/components/ui'
 import { chiSoChinh, phanTram, quyTruoc, soVoiQuyTruoc, tenQuy, tyLe, type BaoCao } from '@/lib/bao-cao'
 
 export type BanBaoCao = BaoCao & {
@@ -55,7 +55,7 @@ export function BaoCaoQuy({
             <div key={c.khoa} className="rounded-card border border-line bg-sunken px-3.5 py-3">
               <dt className="text-[0.75rem] font-medium text-muted">{c.nhan}</dt>
               <dd className={cx(
-                'num mt-1 text-[1.375rem] leading-none font-semibold',
+                SO_LON, 'mt-1 text-[1.375rem]',
                 c.tone === 'xau' ? 'text-bad' : c.tone === 'canh' ? 'text-warn'
                   : c.tone === 'tot' ? 'text-ok' : 'text-ink',
               )}>
