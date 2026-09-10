@@ -461,6 +461,35 @@ export const SAN_SANG = {
   so_hoa_don_ky_nay: 24, so_hoa_don_da_phat: 18,
 }
 
+/** m phút trước. Job nền đo bằng phút, không đo bằng ngày. */
+const phutTruoc = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
+
+/**
+ * Nhật ký job nền cho bản demo.
+ *
+ * CỐ Ý không phải chín dòng xanh mượt. Bảng này tồn tại để chỉ ra job KHÔNG
+ * chạy, nên một bản demo toàn xanh sẽ giấu đi đúng thứ nó cần cho người xem
+ * thấy. Hai dòng đỏ ở đây là hai chuyện có thật trên production: `nhac-kien-hang`
+ * chưa bao giờ được đặt Cron Service nên không có dòng nào, và `day-thong-bao`
+ * chạy được nhưng thiếu khoá VAPID nên lần nào cũng lỗi.
+ *
+ * `bao-cao-quy` chạy 40 ngày trước mà vẫn xanh: hạn của nó là một quý. Đó cũng
+ * là dòng làm mốc để biết hệ thống đã sống đủ lâu — nhờ nó mà job vắng mặt bị
+ * kết luận là hỏng chứ không phải "chưa tới lượt".
+ */
+export const JOB_CHAY = [
+  { viec: 'thu-hoi-thanh-vien', ok_luc: phutTruoc(660), ok_so: 2, ok_ms: 110, loi_luc: null, loi: null },
+  { viec: 'leo-thang-ticket', ok_luc: phutTruoc(3), ok_so: null, ok_ms: 84, loi_luc: null, loi: null },
+  { viec: 'nhac-no', ok_luc: phutTruoc(320), ok_so: 18, ok_ms: 240, loi_luc: null, loi: null },
+  { viec: 'mo-ky-bao-tri', ok_luc: phutTruoc(380), ok_so: 1, ok_ms: 95, loi_luc: null, loi: null },
+  { viec: 'don-ma-dang-nhap', ok_luc: phutTruoc(600), ok_so: 7, ok_ms: 61, loi_luc: null, loi: null },
+  { viec: 'don-so-ra-vao', ok_luc: phutTruoc(570), ok_so: 0, ok_ms: 58, loi_luc: null, loi: null },
+  { viec: 'bao-cao-quy', ok_luc: phutTruoc(40 * 24 * 60), ok_so: 1, ok_ms: 1830, loi_luc: null, loi: null },
+  { viec: 'day-thong-bao', ok_luc: null, ok_so: null, ok_ms: null,
+    loi_luc: phutTruoc(11),
+    loi: 'Chưa cấu hình push. Thiếu VAPID_PUBLIC_KEY. Sinh cặp khoá: npx web-push generate-vapid-keys' },
+]
+
 export type YeuCauChuHo = {
   membership_id: string; unit_code: string; building_code: string
   ho_ten: string; dien_thoai: string | null; email: string | null; xin_luc: string

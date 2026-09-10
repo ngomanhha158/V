@@ -6422,3 +6422,81 @@ returns int language sql volatile security definer set search_path = public as $
   with x as (update push_dang_ky set day_luc = now() where endpoint = any(p_endpoints) returning 1)
   select count(*)::int from x;
 $fn$;
+
+-- ─────────────────────────── Nhật ký job nền ─────────────────────────────────
+-- Vì sao cần: cả hệ thống job nền không có một chỗ nào nói được câu "job này
+-- có chạy không". Lịch nằm trên Railway, hàm nằm trong Postgres, và giữa hai
+-- thứ đó là một khoảng trống — quên đặt lịch thì hàm không bao giờ được gọi,
+-- và KHÔNG CÓ GÌ BÁO. Đúng cái mà đầu file cron.sql cảnh báo, và đã xảy ra
+-- thật với bao-cao-quy và day-thong-bao.
+--
+-- Một dòng cho mỗi job, ghi đè mỗi lần chạy. Không phải nhật ký dài dần: câu
+-- hỏi ở đây là "lần cuối thế nào", mà một bảng lớn dần thì lại đẻ ra việc dọn.
+--
+-- Giữ RIÊNG lần OK cuối và lần LỖI cuối. Gộp một cột thì một lần chạy hỏng xoá
+-- mất bằng chứng là job từng chạy được, và một lần chạy được che mất chuyện nó
+-- đang hỏng mỗi ngày.
+create table if not exists job_chay (
+  viec     text primary key,
+  ok_luc   timestamptz,
+  ok_so    int,          -- số dòng lần chạy thành công gần nhất đụng tới
+  ok_ms    int,
+  loi_luc  timestamptz,
+  loi      text
+);
+
+/**
+ * Có phải nhân sự BQL của BẤT KỲ dự án nào không.
+ *
+ * Khác is_staff(p_project) ở chỗ không hỏi dự án: job nền là chuyện của cả hệ
+ * thống, không thuộc dự án nào.
+ *
+ * DEFINER, cùng lý do với is_staff: policy hỏi thẳng staff_assignments thì RLS
+ * của chính bảng đó áp lên câu hỏi, và người gọi còn phải có quyền SELECT trên
+ * nó — hỏng theo kiểu policy im lặng trả 0 dòng cho đúng người được phép xem.
+ */
+create or replace function la_nhan_su()
+returns boolean language sql stable security definer set search_path = public as $fn$
+  select exists (select 1 from staff_assignments
+                  where user_id = auth.uid() and is_active);
+$fn$;
+
+alter table job_chay enable row level security;
+-- Nhân sự BQL đọc được. Không có gì riêng tư trong đây — tên job, giờ chạy, số
+-- dòng — nhưng cũng không có lý do gì để cư dân thấy tình trạng hạ tầng. Ghi
+-- thì không cấp cho ai: dòng duy nhất được phép ghi là chính lần chạy job.
+create policy job_chay_bql on job_chay for select using (la_nhan_su());
+
+/**
+ * Ghi lại một lần chạy job.
+ *
+ * Gọi từ route handler bằng client service_role, cả khi thành công lẫn khi
+ * thất bại. Ghi thất bại quan trọng hơn ghi thành công: một job đỏ mỗi 5 phút
+ * mà chỉ hiện trong log Railway thì phải có người nghĩ ra mà đi mở log.
+ *
+ * Cắt thông điệp lỗi còn 500 ký tự. Một stack trace nguyên vẹn không giúp gì
+ * thêm trên màn hình BQL, mà lại làm dòng đó không đọc nổi.
+ */
+create or replace function job_ghi_nhan(
+  p_viec text,
+  p_ok   boolean,
+  p_so   int  default null,
+  p_ms   int  default null,
+  p_loi  text default null
+) returns void language plpgsql volatile security definer set search_path = public as $fn$
+begin
+  insert into job_chay as j (viec, ok_luc, ok_so, ok_ms, loi_luc, loi)
+  values (
+    p_viec,
+    case when p_ok then now() end,
+    case when p_ok then p_so end,
+    case when p_ok then p_ms end,
+    case when p_ok then null else now() end,
+    case when p_ok then null else left(p_loi, 500) end)
+  on conflict (viec) do update set
+    ok_luc  = case when p_ok then now()          else j.ok_luc  end,
+    ok_so   = case when p_ok then p_so           else j.ok_so   end,
+    ok_ms   = case when p_ok then p_ms           else j.ok_ms   end,
+    loi_luc = case when p_ok then j.loi_luc      else now()     end,
+    loi     = case when p_ok then j.loi          else left(p_loi, 500) end;
+end $fn$;

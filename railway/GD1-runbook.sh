@@ -134,10 +134,18 @@ B5. Gắn Volume cho ảnh hỏng hóc, vào service `v`, mount tại:
     tiếp, lặng lẽ, và chỉ lộ ra lúc có người mở lại một yêu cầu cũ để đối chất.
 
 B6. Job nền. Ảnh Postgres của Railway không có pg_cron, nên cron.sql KHÔNG
-    dùng ở đây. Thay bằng 7 Cron Service, mỗi cái chạy đúng một dòng curl.
+    dùng ở đây. Thay bằng Cron Service, MỖI DÒNG TRONG BẢNG DƯỚI MỘT SERVICE,
+    mỗi service chạy đúng một dòng curl.
+
+    KHÔNG đếm số service bằng câu chữ ở đây. Trước đây chỗ này ghi "7 Cron
+    Service" rồi liệt kê 8 dòng, và bảng lại thiếu hẳn day-thong-bao — người
+    dựng làm theo con số, tạo 7 cái, và hai job còn lại không bao giờ chạy.
+    Không màn nào báo, không test nào đỏ, mất đúng 3 tháng mới lộ ra.
+    Có test giữ bảng này khớp lib/job-nen.ts; sửa một bên mà quên bên kia là
+    CI đỏ.
 
     Đặt biến CRON_SECRET cho service `v` trước (openssl rand -base64 32), rồi
-    tạo 8 service từ image `curlimages/curl:latest`, mỗi service một lịch:
+    tạo service từ image `curlimages/curl:latest`, mỗi service một lịch:
 
       Tên service            Lịch (UTC)      Đường
       cron-nhac-no           0 1 * * *       /api/cron/nhac-no
@@ -148,14 +156,21 @@ B6. Job nền. Ảnh Postgres của Railway không có pg_cron, nên cron.sql KH
       cron-don-so-ra-vao     30 19 * * *     /api/cron/don-so-ra-vao
       cron-nhac-kien         0 11 * * *      /api/cron/nhac-kien-hang
       cron-bao-cao-quy       0 19 4 1,4,7,10 * /api/cron/bao-cao-quy
+      cron-day-thong-bao     */15 * * * *    /api/cron/day-thong-bao
 
     Việc `don-so-ra-vao` là hạn lưu 90 ngày của sổ ra vào khách. Quên đặt thì sổ
     giữ mãi — tức là đúng cái mà màn Khách thăm đang hứa với cư dân là sẽ không
     làm.
 
-    Việc cuối chạy 02:00 giờ VN ngày 5 tháng đầu mỗi quý (19:00 UTC ngày 4) và
-    sinh báo cáo cho quý VỪA KẾT THÚC. Chạy lại nhiều lần cũng chỉ ra một bản:
-    mỗi quý một báo cáo còn hiệu lực, chốt bằng index ở database.
+    Việc `bao-cao-quy` chạy 02:00 giờ VN ngày 5 tháng đầu mỗi quý (19:00 UTC
+    ngày 4) và sinh báo cáo cho quý VỪA KẾT THÚC. Chạy lại nhiều lần cũng chỉ ra
+    một bản: mỗi quý một báo cáo còn hiệu lực, chốt bằng index ở database.
+
+    Việc cuối, `day-thong-bao`, là thứ làm ba job nhắc ở trên có tác dụng thật:
+    nhắc nợ, kiện hàng về quầy và kiện quá hạn đều chỉ ghi một dòng vào bảng
+    notifications, mà cư dân chỉ thấy nếu tự mở app. Nó ĐÒI ba biến VAPID_*;
+    chưa có thì mỗi lần chạy đều đỏ — cố ý, vì "đã đẩy 0 thông báo" mà xanh là
+    đúng kiểu hỏng lặng lẽ mà cả hệ thống này đang đi dọn.
 
     Start command của mỗi service (thay <đường> và dùng tên miền công khai của
     service `v`):

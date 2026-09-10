@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/db/admin'
 import { bangNhau } from '@/lib/bi-mat'
 import { dayThongBao } from '@/lib/push'
+import { JOB, type TenJob } from '@/lib/job-nen'
+import type { Client } from '@/lib/db/postgrest'
 
 /**
  * Job nền, gọi từ ngoài vào.
@@ -15,46 +17,57 @@ import { dayThongBao } from '@/lib/push'
  * Chốt chặn là CRON_SECRET, không phải phiên đăng nhập — Railway Cron Service
  * gọi vào đây thì làm gì có cookie nào. Cùng lý do với webhook ngân hàng, và
  * middleware cho cả hai đi qua ở cùng một chỗ.
+ *
+ * Danh sách job và lịch nằm ở lib/job-nen.ts, không nằm ở đây: cùng một danh
+ * sách đó còn phải trả lời cho màn go-live câu "job nào chưa từng chạy", và
+ * hai bản chép tay thì sớm muộn cũng lệch.
  */
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 /**
- * Tên đường dẫn tiếng Việt, không phải tên hàm SQL. Hai lý do: lịch cron đọc
- * được mà không cần mở repo, và đổi tên hàm SQL không làm chết một lịch đã đặt
- * trên Railway mà không ai nhớ ra để sửa.
- */
-const VIEC = {
-  'thu-hoi-thanh-vien': 'expire_memberships',
-  'leo-thang-ticket': 'escalate_overdue_tickets',
-  'nhac-no': 'remind_unpaid_invoices',
-  'mo-ky-bao-tri': 'mo_ky_bao_tri',
-  'don-ma-dang-nhap': 'auth_don_ma',
-  // Hạn lưu 90 ngày của sổ ra vào (§17). Quên đặt lịch này thì sổ giữ mãi —
-  // tức là đúng cái mà tính năng khách thăm hứa với cư dân là sẽ không làm.
-  'don-so-ra-vao': 'xoa_khach_cu',
-  // Nhắc kiện hàng để quá hạn ở quầy (§19). Hàm tự chống nhắc trùng trong 20
-  // tiếng, nên chạy nhiều lần một ngày cũng không spam cư dân.
-  'nhac-kien-hang': 'nhac_kien_hang',
-  // Báo cáo quý cho BQT (§26). Đặt lịch ngày 5 tháng đầu mỗi quý — hàm tự tìm
-  // quý VỪA KẾT THÚC, và chạy lại thì bỏ qua vì đã có bản cho quý đó.
-  'bao-cao-quy': 'sinh_bao_cao_quy',
-} as const
-
-/**
  * Job phải chạy TRONG NODE, không phải một hàm SQL.
  *
  * Web Push đòi mã hoá ECDH + AES-GCM và ký VAPID; Postgres không làm được, nên
- * job này không thể là một dòng trong VIEC ở trên. Vẫn để chung route và chung
- * CRON_SECRET: tách ra một endpoint riêng là thêm một khoá nữa để quên, và
- * thêm một chỗ nữa mà bảng đối chiếu lịch cron không nhìn tới.
+ * job này mang `ham: null` trong danh mục và được nối vào đây. Vẫn chung route
+ * và chung CRON_SECRET: tách ra một endpoint riêng là thêm một khoá nữa để
+ * quên, và thêm một chỗ nữa mà bảng đối chiếu lịch cron không nhìn tới.
  */
-const VIEC_NODE = {
+const VIEC_NODE: Record<string, () => Promise<unknown>> = {
   'day-thong-bao': dayThongBao,
-} as const
+}
 
-type Viec = keyof typeof VIEC
-type ViecNode = keyof typeof VIEC_NODE
+/**
+ * Con số trả về cho lần chạy này.
+ *
+ * Hàm SQL trả thẳng một số dòng. Job Node trả một bảng phân tích, mà con số
+ * trả lời được câu "nó có làm gì không" là số thông báo ĐẨY ĐI ĐƯỢC — không
+ * phải số máy đã gỡ hay số lỗi lặt vặt.
+ */
+function soDong(kq: unknown): number | null {
+  if (typeof kq === 'number') return kq
+  if (kq && typeof kq === 'object' && 'gui' in kq && typeof kq.gui === 'number') {
+    return kq.gui
+  }
+  return null
+}
+
+/**
+ * Ghi lại lần chạy này để màn go-live thấy được.
+ *
+ * KHÔNG ném lỗi ra ngoài: ghi sổ hỏng không được phép làm một job chạy đúng bị
+ * đánh là đỏ. Nhưng phải kêu trong log — bảng trống mà mọi job vẫn xanh là một
+ * kiểu hỏng lặng lẽ mới, đúng thứ bảng này sinh ra để dẹp.
+ */
+async function ghiNhan(
+  db: Client, viec: string, ok: boolean,
+  so: number | null, ms: number, loi: string | null,
+) {
+  const { error } = await db.rpc('job_ghi_nhan', {
+    p_viec: viec, p_ok: ok, p_so: so, p_ms: ms, p_loi: loi,
+  })
+  if (error) console.error(`khong ghi duoc lan chay ${viec}:`, error.message)
+}
 
 export async function POST(
   request: NextRequest, ctx: { params: Promise<{ viec: string }> },
@@ -71,36 +84,46 @@ export async function POST(
   }
 
   const ten = (await ctx.params).viec
+  if (!(ten in JOB)) {
+    return NextResponse.json(
+      { loi: `Không có việc "${ten}".`, co: Object.keys(JOB) }, { status: 404 })
+  }
+  const job = JOB[ten as TenJob]
   const batDau = Date.now()
 
-  if (ten in VIEC_NODE) {
-    try {
-      const so = await VIEC_NODE[ten as ViecNode]()
-      return NextResponse.json({ viec: ten, so, ms: Date.now() - batDau })
-    } catch (e) {
-      // 500 chứ không phải 200-kèm-lỗi, giống nhánh SQL bên dưới: chưa cấu hình
-      // khoá VAPID cũng rơi vào đây, và nó PHẢI làm lịch cron đỏ. Trả 200 thì
-      // lịch xanh mỗi ngày trong khi không ai nhận được thông báo nào.
-      console.error(`cron ${ten} that bai:`, e)
-      return NextResponse.json({ viec: ten, loi: (e as Error).message }, { status: 500 })
+  // Dựng client TRƯỚC khi chạy: thiếu AUTH_JWT_SECRET thì cả nhánh SQL lẫn
+  // nhánh Node đều hỏng ở bước này, và lúc đó cũng không ghi sổ được — nên trả
+  // 500 ngay thay vì chạy nửa vời rồi im.
+  let db: Client
+  try {
+    db = await createAdminClient()
+  } catch (e) {
+    console.error(`cron ${ten} khong ket noi duoc:`, e)
+    return NextResponse.json({ viec: ten, loi: (e as Error).message }, { status: 500 })
+  }
+
+  try {
+    let kq: unknown
+    if (job.ham === null) {
+      kq = await VIEC_NODE[ten]()
+    } else {
+      const { data, error } = await db.rpc(job.ham)
+      if (error) throw new Error(error.message)
+      kq = data
     }
-  }
-
-  if (!(ten in VIEC)) {
-    return NextResponse.json(
-      { loi: `Không có việc "${ten}".`, co: [...Object.keys(VIEC), ...Object.keys(VIEC_NODE)] },
-      { status: 404 })
-  }
-
-  const db = await createAdminClient()
-  const { data, error } = await db.rpc(VIEC[ten as Viec])
-  if (error) {
+    // `so` là số dòng hàm đó đụng tới. Một lịch cron không nói ra con số nào thì
+    // "đã chạy" và "chạy mà không làm gì" nhìn giống hệt nhau trong log.
+    const so = soDong(kq)
+    const ms = Date.now() - batDau
+    await ghiNhan(db, ten, true, so, ms, null)
+    return NextResponse.json({ viec: ten, so, ms })
+  } catch (e) {
     // Trả 500 chứ không phải 200-kèm-lỗi: Railway đánh dấu lần chạy là thất bại
     // và log giữ lại. Trả 200 thì lịch cứ xanh trong khi việc thì không chạy.
-    console.error(`cron ${ten} that bai:`, error)
-    return NextResponse.json({ viec: ten, loi: error.message }, { status: 500 })
+    // Chưa cấu hình khoá VAPID cũng rơi vào đây, và nó PHẢI làm lịch cron đỏ.
+    const loi = (e as Error).message
+    console.error(`cron ${ten} that bai:`, e)
+    await ghiNhan(db, ten, false, null, Date.now() - batDau, loi)
+    return NextResponse.json({ viec: ten, loi }, { status: 500 })
   }
-  // `so` là số dòng hàm đó đụng tới. Một lịch cron không nói ra con số nào thì
-  // "đã chạy" và "chạy mà không làm gì" nhìn giống hệt nhau trong log.
-  return NextResponse.json({ viec: ten, so: data ?? null, ms: Date.now() - batDau })
 }

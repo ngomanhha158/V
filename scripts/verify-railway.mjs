@@ -57,28 +57,33 @@ async function dungNgan(doi = (_f, s) => s, im = false) {
 }
 
 /**
- * Tám job nền: tên trong bản đồ VIEC phải gọi được thật.
+ * Job nền: tên hàm khai trong danh mục phải gọi được thật.
  *
- * `app/api/cron/[viec]/route.ts` gọi `db.rpc(VIEC[ten])` qua PostgREST. Đổi tên
- * một hàm SQL mà quên sửa bản đồ thì PostgREST trả 404, route trả 500, và job
+ * `app/api/cron/[viec]/route.ts` gọi `db.rpc(job.ham)` qua PostgREST. Đổi tên
+ * một hàm SQL mà quên sửa danh mục thì PostgREST trả 404, route trả 500, và job
  * đó KHÔNG BAO GIỜ chạy nữa — không màn nào báo, không test nào đỏ. Cái mất là
  * đúng những thứ chính GO-LIVE.md cảnh báo: hóa đơn không được nhắc, ticket quá
  * hạn không leo thang, sổ ra vào giữ mãi quá hạn lưu 90 ngày đã hứa với cư dân.
  *
- * Bản đồ VIEC là NGUỒN DUY NHẤT — đọc thẳng từ file route, không chép lại tên
- * sang đây, vì chép lại là dựng đúng cái chỗ lệch mình đang đi bịt.
+ * `lib/job-nen.ts` là NGUỒN DUY NHẤT — đọc thẳng từ đó, không chép lại tên sang
+ * đây, vì chép lại là dựng đúng cái chỗ lệch mình đang đi bịt. Không đếm số job
+ * bằng tay ở bất cứ dòng nào trong bài kiểm này, cùng lý do.
  *
  * Ba điều kiện, mất cái nào cũng ra 500 y hệt nhau:
  *   1. hàm có thật trong schema public (PostgREST chỉ phơi schema này)
  *   2. gọi được KHÔNG cần tham số — route gọi rpc(ten) tay không
  *   3. service_role có EXECUTE — cron chạy bằng admin client
+ *
+ * `ham: null` là job chạy trong Node (Web Push), không có hàm SQL nào để kiểm ở
+ * đây — nhưng nó vẫn phải nằm trong danh mục, và test lib/job-nen.test.ts giữ
+ * phần đó.
  */
 async function kiemJobNen(im = false) {
-  const nguon = readFileSync(join(ROOT, 'app/api/cron/[viec]/route.ts'), 'utf8')
-  const khoi = nguon.match(/const VIEC = \{[\s\S]*?\n\} as const/)?.[0] ?? ''
-  const ten = [...khoi.matchAll(/^  '[a-z-]+': '([a-z_]+)',/gm)].map((m) => m[1])
+  const nguon = readFileSync(join(ROOT, 'lib/job-nen.ts'), 'utf8')
+  const khoi = nguon.match(/export const JOB = \{[\s\S]*?\n\} as const/)?.[0] ?? ''
+  const ten = [...khoi.matchAll(/^    ham: '([a-z_]+)',$/gm)].map((m) => m[1])
   if (ten.length === 0) {
-    console.error('RỖNG  không đọc được bản đồ VIEC — bài kiểm job nền vô nghĩa')
+    console.error('RỖNG  không đọc được danh mục JOB — bài kiểm job nền vô nghĩa')
     return false
   }
 
@@ -86,6 +91,22 @@ async function kiemJobNen(im = false) {
   try {
     for (const f of FILES) await db.exec(readFileSync(join(ROOT, f), 'utf8'))
     let ok = true
+
+    // Sổ ghi lần chạy. Không gọi được nó thì mọi job vẫn chạy, nhưng màn
+    // go-live không thấy dòng nào và kết luận "chưa job nào chạy" — một lời
+    // báo động sai, tệ hơn im lặng vì nó dạy người ta bỏ qua màu đỏ.
+    const { rows: soRows } = await db.query(
+      `select has_function_privilege('service_role', p.oid, 'EXECUTE') as goi_duoc
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'job_ghi_nhan'`)
+    if (soRows.length === 0) {
+      console.error('HỎNG  không có job_ghi_nhan — màn go-live sẽ báo mọi job đều chưa chạy')
+      ok = false
+    } else if (!soRows.some((r) => r.goi_duoc)) {
+      console.error('HỎNG  job_ghi_nhan không cấp EXECUTE cho service_role')
+      ok = false
+    }
+
     for (const ham of ten) {
       const { rows } = await db.query(
         `select p.pronargs - p.pronargdefaults as bat_buoc,
@@ -138,7 +159,7 @@ const CANARY = [
   {
     // Nửa còn lại của cùng một lỗi. Quyền BẢNG và quyền GỌI HÀM mất độc lập
     // với nhau, nên một canary không thay được canary kia.
-    ten: 'gỡ EXECUTE của service_role (ghi_nhan_tien_ve và cả 8 hàm job nền)',
+    ten: 'gỡ EXECUTE của service_role (ghi_nhan_tien_ve và mọi hàm job nền)',
     file: 'railway/02_smoke_prod.sql',
     doi: (s) => `${s}\nrevoke execute on all functions in schema public from service_role;\n`,
     ap: 'auth_hooks.sql',
@@ -176,7 +197,7 @@ const do1 = await dungNgan()
 let ok = do1 === null
 
 if (ok) {
-  console.log('\n── Tám job nền (bản đồ VIEC ↔ catalog thật)')
+  console.log('\n── Job nền (danh mục lib/job-nen.ts ↔ catalog thật)')
   ok = await kiemJobNen()
 }
 

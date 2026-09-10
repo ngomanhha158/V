@@ -22,12 +22,17 @@ Không phải kế hoạch — là những gì đã kiểm và những gì còn 
 | Backup | GitHub Actions dump hằng ngày, gồm cả schema `auth` |
 | Lưu trữ ảnh | Volume của service `v`, phục vụ qua `/api/anh` — hỏi lại quyền từng lần xem |
 | Quyền `anon` | **Không có bảng nào** — request không JWT không đọc được gì |
-| Bộ test | 31 file SQL độc lập + cả ngăn xếp Railway + 337 test JS, xanh trên CI mỗi lần push |
+| Bộ test | 32 file SQL độc lập + cả ngăn xếp Railway + 354 test JS, xanh trên CI mỗi lần push |
 | Giao diện | 66 route thật (chưa kể bản demo), build sạch, sáng/tối |
 
-Chín job nền và giờ chạy (giờ VN). Đặt thiếu một cái thì nó KHÔNG chạy và
-không có gì báo — bảng đối chiếu đầy đủ ở đầu `cron.sql` và bước 8 của
-`railway/GD1-runbook.sh`:
+Chín job nền và giờ chạy (giờ VN). Bảng đối chiếu đầy đủ ở đầu `cron.sql`, bảng
+Cron Service ở bước B6 của `railway/GD1-runbook.sh`, và danh mục gốc mà cả hai
+phải khớp là `lib/job-nen.ts` — lệch một dòng giữa ba nơi đó là CI đỏ.
+
+Đặt thiếu một cái thì nó không chạy. Trước đây chuyện đó **không có gì báo**;
+giờ màn `/bql/go-live` có bảng "Job nền" đọc thẳng từ lần chạy thật của từng
+job, nên một job chưa bao giờ được gọi tới sẽ hiện đỏ ngay ở đó thay vì im
+lặng suốt tới kỳ hóa đơn sau:
 
 - `thu-hoi-thanh-vien` — 00:05 mỗi ngày, thu quyền hợp đồng hết hạn
 - `leo-thang-ticket` — 5 phút/lần, leo thang yêu cầu quá hạn SLA

@@ -1859,11 +1859,51 @@ export type Database = {
           },
         ]
       }
+      // Nhật ký job nền. Một dòng mỗi job, ghi đè mỗi lần chạy. Không có
+      // Insert/Update dùng được: quyền ghi không cấp cho ai, chỉ job_ghi_nhan
+      // bằng service_role mới đụng vào được.
+      job_chay: {
+        Row: {
+          viec: string
+          ok_luc: string | null
+          ok_so: number | null
+          ok_ms: number | null
+          loi_luc: string | null
+          loi: string | null
+        }
+        Insert: {
+          viec: string
+          ok_luc?: string | null
+          ok_so?: number | null
+          ok_ms?: number | null
+          loi_luc?: string | null
+          loi?: string | null
+        }
+        Update: {
+          viec?: string
+          ok_luc?: string | null
+          ok_so?: number | null
+          ok_ms?: number | null
+          loi_luc?: string | null
+          loi?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      job_ghi_nhan: {
+        Args: {
+          p_viec: string
+          p_ok: boolean
+          p_so: number | null
+          p_ms: number | null
+          p_loi: string | null
+        }
+        Returns: undefined
+      }
       // ── Lớp đăng nhập tự viết (railway/03_auth.sql) ──
       // Thêm tay, không sinh máy: chỉ service_role gọi được, mà công cụ sinh
       // kiểu thì chạy dưới quyền khác nên không nhìn thấy chúng.

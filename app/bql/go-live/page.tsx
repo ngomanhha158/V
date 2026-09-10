@@ -5,6 +5,8 @@ import { bankConfigKhu } from '@/lib/bank'
 import {
   Card, CardHead, Hop, LinkButton, PageHead, Pill, Stat, Trong, cx, soVN,
 } from '@/components/ui'
+import { TEN_JOB, XAU, soatJobNen, type DongJobChay } from '@/lib/job-nen'
+import { BangJobNen } from '@/components/job-nen'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,6 +77,17 @@ export default async function GoLive() {
   const d = rows[0]
   const bank = await bankConfigKhu(project.id)
 
+  // Job nền. Đọc cả bảng — nhiều nhất là một dòng cho mỗi job trong danh mục.
+  //
+  // Lỗi ở đây KHÔNG làm sập cả màn (phần còn lại của danh sách kiểm vẫn đúng),
+  // nhưng cũng KHÔNG được coi là bảng rỗng: một database chưa áp schema mới sẽ
+  // trả lỗi, mà "rỗng" lại có nghĩa là chưa job nào từng chạy. Nhập hai thứ đó
+  // làm một là màn hình báo cả chín job hỏng trong khi chúng đang chạy đều.
+  const { data: dongJob, error: loiJob } = await db.from('job_chay')
+    .select('viec, ok_luc, ok_so, ok_ms, loi_luc, loi')
+  const job = soatJobNen((dongJob ?? []) as DongJobChay[])
+  const jobXau = loiJob ? [] : job.filter((j) => XAU(j.trangThai))
+
   // Biến môi trường đọc ở SERVER. Không đưa giá trị nào ra màn hình — chỉ nói
   // "đã điền" hay "chưa": màn này BQL mở được, mà khóa thì không phải việc của họ.
   // Webhook ghi bằng client service_role, mà client đó tự ký JWT — nên thứ
@@ -118,13 +131,24 @@ export default async function GoLive() {
         : 'Chưa điền SMTP_URL. Cư dân bấm "Gửi mã" sẽ báo lỗi, và lối vào duy nhất '
           + 'còn lại là mật khẩu do ban quản lý đặt tay cho từng người.' },
 
-    { ten: 'Đã bật job nền', xong: coCron, batBuoc: true,
-      chiTiet: coCron
-        ? 'Khóa đã điền. Kiểm tiếp trên Railway: phải có đủ 5 Cron Service, danh sách '
-          + 'và lịch ở đầu file cron.sql. Màn này chỉ thấy được khóa, không thấy được lịch.'
-        : 'Chưa điền CRON_SECRET, nên chắc chắn chưa có job nền nào chạy: không nhắc nợ, '
+    // Trước đây mục này chỉ kiểm được BIẾN MÔI TRƯỜNG rồi bảo người đọc tự
+    // sang Railway đếm cho đủ — kèm một con số viết cứng từ thời hệ thống còn
+    // ít job hơn bây giờ. Số job tăng, dòng chữ đứng yên, nên nhìn vào là
+    // tưởng dư lịch trong khi đang thiếu; đó đúng là chuyện đã xảy ra. Giờ nó
+    // đọc bảng job_chay: không đoán theo cấu hình nữa mà nói theo việc job có
+    // thật sự chạy hay không, và mọi con số đều suy ra từ danh mục.
+    { ten: 'Job nền đang chạy', xong: coCron && !loiJob && jobXau.length === 0, batBuoc: true,
+      chiTiet: loiJob
+        ? `Chưa đọc được bảng job_chay (${loiJob.message}) nên màn này chưa kết luận `
+          + 'được gì về job nền — xem ô ngay dưới.'
+        : !coCron
+        ? 'Chưa điền CRON_SECRET, nên chắc chắn chưa có job nền nào chạy: không nhắc nợ, '
           + 'không leo thang yêu cầu quá hạn, không thu quyền hợp đồng đã hết hạn. '
-          + 'Không màn nào báo lỗi — chỉ là mọi thứ đứng yên.' },
+          + 'Không màn nào báo lỗi — chỉ là mọi thứ đứng yên.'
+        : jobXau.length === 0
+          ? `Đủ ${TEN_JOB.length} job, job nào cũng vừa chạy trong hạn của nó.`
+          : `${jobXau.length}/${TEN_JOB.length} job không chạy: `
+            + `${jobXau.map((j) => j.ten).join(', ')}. Bảng ngay dưới nói rõ từng cái.` },
 
     { ten: 'Đã cấu hình tài khoản nhận tiền', xong: !!bank, batBuoc: true,
       chiTiet: bank
@@ -201,6 +225,8 @@ export default async function GoLive() {
           {mucs.map((m) => <Hang key={m.ten} m={m} />)}
         </ul>
       </Card>
+
+      <BangJobNen job={job} loi={loiJob?.message ?? null} />
 
       <Card>
         <CardHead

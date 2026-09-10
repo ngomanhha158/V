@@ -35,7 +35,7 @@ function quet(thuMuc, ten, bo = true) {
   return ra
 }
 
-// ── 1. Tám job nền: doc ↔ code, KHỚP CẢ HAI CHIỀU ───────────────────────────
+// ── 1. Job nền: doc ↔ code, KHỚP CẢ HAI CHIỀU ───────────────────────────────
 // Thiếu chiều ngược lại thì thêm một job vào code mà quên ghi vào doc sẽ lọt:
 // người dựng hệ thống đặt đủ số lịch doc bảo, và job mới không bao giờ chạy.
 {
@@ -44,32 +44,43 @@ function quet(thuMuc, ten, bo = true) {
   // và báo "doc không nhắc job nào" — một bài kiểm sai theo kiểu khó truy nhất.
   const khoiJob = doc.match(/^[^\n]*job nền và giờ chạy[\s\S]*?(?=^## )/m)?.[0] ?? ''
   const trongDoc = [...khoiJob.matchAll(/^- `([a-z-]+)`/gm)].map((m) => m[1])
-  const nguon = readFileSync('app/api/cron/[viec]/route.ts', 'utf8')
-  // HAI bản đồ: job chạy bằng hàm SQL (VIEC) và job phải chạy trong Node
-  // (VIEC_NODE — web push đòi mã hoá mà Postgres không làm được). Sót bản đồ
-  // thứ hai thì thêm một job Node vào code sẽ không ai bắt phải ghi vào doc, và
-  // lịch cron cho nó không bao giờ được đặt.
-  const khoi = (ten) => nguon.match(new RegExp(`const ${ten} = \\{[\\s\\S]*?\\n\\} as const`))?.[0] ?? ''
-  const trongCode = [...(khoi('VIEC') + khoi('VIEC_NODE')).matchAll(/^  '([a-z-]+)':/gm)].map((m) => m[1])
+  // MỘT danh mục cho cả hệ thống — lib/job-nen.ts. Trước đây chỗ này đọc hai
+  // bản đồ rời trong route handler, và sót một bản đồ nghĩa là job Node không
+  // ai bắt phải ghi vào doc, nên lịch cron cho nó không bao giờ được đặt. Đúng
+  // chuyện đã xảy ra với day-thong-bao.
+  const nguon = readFileSync('lib/job-nen.ts', 'utf8')
+  const khoi = nguon.match(/export const JOB = \{[\s\S]*?\n\} as const/)?.[0] ?? ''
+  const trongCode = [...khoi.matchAll(/^  '([a-z-]+)': \{$/gm)].map((m) => m[1])
 
   const thieuTrongCode = trongDoc.filter((t) => !trongCode.includes(t))
   const thieuTrongDoc  = trongCode.filter((t) => !trongDoc.includes(t))
-  if (thieuTrongCode.length) {
+  if (trongCode.length === 0) {
+    xau('job nền doc ↔ code', 'không đọc được danh mục JOB từ lib/job-nen.ts '
+      + '— cả bài kiểm này rỗng, không kết luận được gì')
+  } else if (thieuTrongCode.length) {
     xau('job nền doc ↔ code', `doc bảo đặt lịch cho ${thieuTrongCode.join(', ')} `
-      + '— route handler không có, lịch đó gọi vào 404 và không có gì báo')
+      + '— danh mục không có, lịch đó gọi vào 404 và không có gì báo')
   } else if (thieuTrongDoc.length) {
     xau('job nền doc ↔ code', `code có ${thieuTrongDoc.join(', ')} mà doc không nhắc `
       + '— người dựng đặt đủ số lịch doc bảo, job này không bao giờ chạy')
   } else if (trongDoc.length === 0) {
     xau('job nền doc ↔ code', 'không đọc được danh sách job nào từ GO-LIVE.md')
   } else {
-    ok(`${trongDoc.length} job nền: tên trong GO-LIVE.md khớp bản đồ VIEC`)
+    ok(`${trongDoc.length} job nền: tên trong GO-LIVE.md khớp danh mục lib/job-nen.ts`)
   }
 
-  const chuSo = { 8: 'Tám', 7: 'Bảy', 9: 'Chín', 10: 'Mười' }[trongCode.length]
-  if (chuSo && !doc.includes(`${chuSo} job nền`)) {
+  // Bảng chữ số phải RỘNG hơn số job hiện có. Thiếu một mục thì `chuSo` là
+  // undefined và nhánh dưới đây từng lặng lẽ nhảy sang "OK" — một bài kiểm tự
+  // tắt khi hệ thống lớn thêm, đúng lúc nó cần thiết nhất.
+  const CHU = { 5: 'Năm', 6: 'Sáu', 7: 'Bảy', 8: 'Tám', 9: 'Chín', 10: 'Mười',
+                11: 'Mười một', 12: 'Mười hai' }
+  const chuSo = CHU[trongCode.length]
+  if (!chuSo) {
+    xau('số job nền viết bằng chữ',
+      `chưa có chữ số tiếng Việt cho ${trongCode.length} job — thêm vào bảng CHU trong file này`)
+  } else if (!doc.includes(`${chuSo} job nền`)) {
     xau('số job nền viết bằng chữ', `code có ${trongCode.length} job, doc không mở đầu bằng "${chuSo} job nền"`)
-  } else ok(`doc nói đúng số job nền bằng chữ (${trongCode.length})`)
+  } else ok(`doc nói đúng số job nền bằng chữ (${chuSo})`)
 }
 
 // ── 2. Con số gõ tay trong bảng "Đã sẵn sàng" ───────────────────────────────

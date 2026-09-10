@@ -444,3 +444,10 @@ grant execute on function duyet_xe_tiep(uuid, loai_xe)          to authenticated
 grant execute on function dat_han_muc_bai_xe(uuid, loai_xe, int, int, text) to authenticated;
 grant execute on function cho_do_cua_can(uuid)                  to authenticated;
 grant execute on function bai_xe_tong_quan(uuid)                to authenticated;
+
+-- Nhật ký job nền. Chỉ ĐỌC, và chỉ cho nhân sự BQL — màn go-live cần nó để trả
+-- lời "job nào chưa từng chạy". Không cấp quyền ghi cho ai: dòng duy nhất được
+-- phép ghi vào đây là chính lần chạy job, qua job_ghi_nhan bằng service_role.
+-- Cấp insert/update ở đây là mở đường cho một màn hình nào đó "đánh dấu đã
+-- chạy" bằng tay, tức là biến bảng bằng chứng thành bảng lời khai.
+grant select on job_chay to authenticated;

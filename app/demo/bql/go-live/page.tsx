@@ -1,7 +1,9 @@
 import {
   Card, CardHead, Hop, LinkButton, PageHead, Pill, Stat, Trong, cx, soVN,
 } from '@/components/ui'
-import { DU_AN, SAN_SANG } from '@/lib/demo/data'
+import { DU_AN, JOB_CHAY, SAN_SANG } from '@/lib/demo/data'
+import { TEN_JOB, XAU, soatJobNen, type DongJobChay } from '@/lib/job-nen'
+import { BangJobNen } from '@/components/job-nen'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,6 +63,9 @@ export default async function DemoGoLive() {
   const coThu = true
   const coCron = true
 
+  const job = soatJobNen(JOB_CHAY as DongJobChay[])
+  const jobXau = job.filter((j) => XAU(j.trangThai))
+
   const tyLe = d.so_can > 0 ? (d.so_can_co_chu / d.so_can) * 100 : 0
 
   const mucs: Muc[] = [
@@ -95,13 +100,15 @@ export default async function DemoGoLive() {
         : 'Chưa điền SMTP_URL. Cư dân bấm "Gửi mã" sẽ báo lỗi, và lối vào duy nhất '
           + 'còn lại là mật khẩu do ban quản lý đặt tay cho từng người.' },
 
-    { ten: 'Đã bật job nền', xong: coCron, batBuoc: true,
-      chiTiet: coCron
-        ? 'Khóa đã điền. Kiểm tiếp trên Railway: phải có đủ 5 Cron Service, danh sách '
-          + 'và lịch ở đầu file cron.sql. Màn này chỉ thấy được khóa, không thấy được lịch.'
-        : 'Chưa điền CRON_SECRET, nên chắc chắn chưa có job nền nào chạy: không nhắc nợ, '
+    { ten: 'Job nền đang chạy', xong: coCron && jobXau.length === 0, batBuoc: true,
+      chiTiet: !coCron
+        ? 'Chưa điền CRON_SECRET, nên chắc chắn chưa có job nền nào chạy: không nhắc nợ, '
           + 'không leo thang yêu cầu quá hạn, không thu quyền hợp đồng đã hết hạn. '
-          + 'Không màn nào báo lỗi — chỉ là mọi thứ đứng yên.' },
+          + 'Không màn nào báo lỗi — chỉ là mọi thứ đứng yên.'
+        : jobXau.length === 0
+          ? `Đủ ${TEN_JOB.length} job, job nào cũng vừa chạy trong hạn của nó.`
+          : `${jobXau.length}/${TEN_JOB.length} job không chạy: `
+            + `${jobXau.map((j) => j.ten).join(', ')}. Bảng ngay dưới nói rõ từng cái.` },
 
     { ten: 'Đã cấu hình tài khoản nhận tiền', xong: !!bank, batBuoc: true,
       chiTiet: bank
@@ -178,6 +185,8 @@ export default async function DemoGoLive() {
           {mucs.map((m) => <Hang key={m.ten} m={m} />)}
         </ul>
       </Card>
+
+      <BangJobNen job={job} />
 
       <Card>
         <CardHead
