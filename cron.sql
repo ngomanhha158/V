@@ -10,18 +10,27 @@
 -- đó" — và vì trên một Postgres CÓ pg_cron thì nó vẫn là cách gọn nhất. Hai
 -- bên phải khớp nhau; bảng đối chiếu:
 --
---   expire-memberships        -> /api/cron/thu-hoi-thanh-vien   5 17 * * *
---   escalate-overdue-tickets  -> /api/cron/leo-thang-ticket     */5 * * * *
---   remind-unpaid-invoices    -> /api/cron/nhac-no              0 1 * * *
---   mo-ky-bao-tri             -> /api/cron/mo-ky-bao-tri        0 0 * * *
---   don-ma-dang-nhap          -> /api/cron/don-ma-dang-nhap     0 20 * * *
---   don-so-ra-vao             -> /api/cron/don-so-ra-vao        30 19 * * *
---   nhac-kien-hang            -> /api/cron/nhac-kien-hang       0 11 * * *
+--   expire-memberships        -> /api/cron/thu-hoi-thanh-vien  5 17 * * *
+--   escalate-overdue-tickets  -> /api/cron/leo-thang-ticket    */5 * * * *
+--   remind-unpaid-invoices    -> /api/cron/nhac-no             0 1 * * *
+--   mo-ky-bao-tri             -> /api/cron/mo-ky-bao-tri       0 0 * * *
+--   don-ma-dang-nhap          -> /api/cron/don-ma-dang-nhap    0 20 * * *
+--   don-so-ra-vao             -> /api/cron/don-so-ra-vao       30 19 * * *
+--   nhac-kien-hang            -> /api/cron/nhac-kien-hang      0 11 * * *
 --   bao-cao-quy               -> /api/cron/bao-cao-quy         0 19 4 1,4,7,10 *
+--   (chỉ chạy được ở Node)    -> /api/cron/day-thong-bao       */15 * * * *
+--
+-- Dòng cuối không có bản pg_cron và sẽ không bao giờ có: Web Push đòi mã hoá
+-- ECDH và ký VAPID, Postgres không làm được. Nó vẫn NẰM TRONG BẢNG NÀY vì bảng
+-- này là danh sách "phải đặt lịch gì trên Railway", không phải danh sách hàm
+-- SQL — và bỏ nó ra khỏi đây đúng là cách nó đã bị quên suốt từ lúc dựng hệ
+-- thống, không có Cron Service nào, không màn nào báo.
 --
 -- Thêm job ở đây mà quên thêm lịch bên Railway thì nó KHÔNG chạy, và không có
 -- gì báo — đó là lý do bảng đối chiếu nằm ngay đầu file chứ không nằm trong
--- một trang tài liệu nào khác.
+-- một trang tài liệu nào khác. Từ nay còn hai lớp giữ nữa: lib/job-nen.ts là
+-- bản TypeScript của đúng bảng này (có test đối chiếu từng dòng, lệch là CI
+-- đỏ), và màn /bql/go-live hiện job nào chưa từng chạy.
 --
 -- BẪY MÚI GIỜ: pg_cron trên Supabase chạy theo cron.timezone, mặc định GMT.
 -- Kiểm tra trước khi sửa lịch:  show cron.timezone;

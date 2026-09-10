@@ -315,6 +315,35 @@ begin
   exception when unique_violation then null;
   end;
 
+  -- 14. Nhật ký job nền: nhân sự BQL đọc được, cư dân thì không.
+  --     Policy hỏi qua la_nhan_su() chứ không hỏi thẳng staff_assignments. Hỏi
+  --     thẳng thì RLS của bảng đó áp lên chính câu hỏi và policy trả 0 dòng cho
+  --     đúng người được phép xem — hỏng theo kiểu màn hình trắng, không báo lỗi.
+  --     Assert 14b là thứ bắt được kiểu hỏng đó.
+  insert into job_chay (viec, ok_luc, ok_so) values ('leo-thang-ticket', now(), 3);
+  execute 'alter table job_chay force row level security';
+  execute 'grant select on job_chay to vb_rls_test';
+  execute 'set local role vb_rls_test';
+
+  perform set_config('test.uid', u_owner::text, true);
+  select count(*) into n from job_chay;
+  if n <> 0 then raise exception 'FAIL 14: cu dan doc duoc nhat ky job nen'; end if;
+
+  perform set_config('test.uid', u_bql::text, true);
+  select count(*) into n from job_chay;
+  if n <> 1 then raise exception 'FAIL 14b: nhan su BQL khong doc duoc nhat ky job nen'; end if;
+
+  -- 14c. Không ai ghi được, kể cả BQL. Bảng này là bằng chứng job có chạy;
+  --      sửa tay được thì nó thành bảng lời khai, và màn go-live xanh vì có
+  --      người bấm nút chứ không vì job chạy.
+  begin
+    update job_chay set ok_luc = now() where viec = 'leo-thang-ticket';
+    raise exception 'FAIL 14c: BQL sua duoc nhat ky job nen';
+  exception when insufficient_privilege then null;
+  end;
+
+  execute 'reset role';
+
   raise notice 'ALL RLS TESTS PASSED';
 end $test$;
 
