@@ -3,6 +3,7 @@ import { createClient } from '@/lib/db/server'
 import { duAnBQL } from '@/lib/du-an'
 import { Card, CardHead, Hop, PageHead, Pill, Trong } from '@/components/ui'
 import { DanhSach, FormTaoTaiKhoan, type CanTrong, type NguoiDung } from './form'
+import { quyen } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,12 +12,13 @@ export default async function QuanLyNguoiDung() {
   const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
 
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) redirect('/')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) redirect('/')
   // Xem thì cả nhân sự đều xem được; TẠO thì chỉ trưởng BQL. Ẩn form đi cho
   // người không có quyền là để họ khỏi điền xong mới bị từ chối — chốt thật
   // vẫn nằm trong SQL, không phải ở đây.
-  const { data: laTruong } = await db.rpc('is_bql_manager', { p_project: project.id })
+  const laTruong = quyen(
+    await db.rpc('is_bql_manager', { p_project: project.id }), 'is_bql_manager')
 
   const [{ data: rows, error }, { data: units }, { data: memberships }] = await Promise.all([
     db.rpc('bql_danh_sach_nguoi_dung', { p_project: project.id }),

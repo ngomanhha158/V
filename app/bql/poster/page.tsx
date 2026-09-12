@@ -5,6 +5,7 @@ import { createClient } from '@/lib/db/server'
 import { duAnBQL } from '@/lib/du-an'
 import { Card, CardHead, Hop, PageHead, Trong } from '@/components/ui'
 import { PrintButton } from './print-button'
+import { quyen } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,8 +19,8 @@ export default async function Poster() {
   const db = await createClient()
   const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) redirect('/')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) redirect('/')
 
   const h = await headers()
   const host = h.get('host') ?? 'localhost:3000'

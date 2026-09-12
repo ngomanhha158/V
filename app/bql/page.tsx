@@ -4,6 +4,7 @@ import { createClient } from '@/lib/db/server'
 import { BuildingForm } from './building-form'
 import { Card, CardHead, Hop, PageHead, Stat, Trong } from '@/components/ui'
 import { IcToaNha } from '@/components/icons'
+import { xetQuyen } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,16 +45,21 @@ export default async function Bql() {
   }
 
   // Guard hiển thị. Chốt chặn thật là RLS.
-  const { data: isStaff, error: loiQuyen } = await db.rpc('is_staff', { p_project: project.id })
+  //
+  // Màn này KHÔNG ném như hai mươi mốt màn kia: nó là cửa vào, nên một cái hộp
+  // đọc được ngay tại chỗ tốt hơn một trang lỗi. Nhưng nó phán xét bằng CÙNG
+  // hàm xetQuyen(), để không có màn nào tự nghĩ ra luật riêng lần nữa.
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  const phanQuyet = xetQuyen(kqStaff)
   // Lỗi KHÁC "không phải nhân sự". Đá người dùng về `/` khi chỉ là truy vấn hỏng
   // thì một trưởng BQL thật bị bật ra khỏi màn của mình mà không có một chữ nào
   // giải thích, và họ bấm lại vòng vòng.
-  if (loiQuyen) {
+  if (phanQuyet === 'khong_hoi_duoc') {
     return (
       <div className="space-y-5">
         <PageHead title="Quản lý tòa nhà" sub={project.name} />
         <Hop tone="xau" title="Không kiểm được quyền của bạn">
-          {loiQuyen.message}
+          {kqStaff.error?.message}
           <br /><br />
           Bạn chưa bị từ chối — hệ thống chỉ chưa hỏi được. Thử tải lại; vẫn vậy
           thì báo người quản trị.
@@ -61,7 +67,7 @@ export default async function Bql() {
       </div>
     )
   }
-  if (!isStaff) redirect('/')
+  if (phanQuyet === 'chan') redirect('/')
 
   // Hai truy vấn thường thay vì aggregate embed units(count): embed đó phụ thuộc
   // db-aggregates của PostgREST, tắt là query trả lỗi và trang hiện "chưa có

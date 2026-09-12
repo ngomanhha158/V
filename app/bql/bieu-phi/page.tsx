@@ -4,6 +4,7 @@ import { createClient } from '@/lib/db/server'
 import { duAnBQL } from '@/lib/du-an'
 import { Card, CardHead, Hop, PageHead, Pill, Trong } from '@/components/ui'
 import { DanhSachPhi, FormThem, type BieuPhi } from './form'
+import { quyen } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,8 +12,8 @@ export default async function BieuPhiPage() {
   const db = await createClient()
   const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) redirect('/')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) redirect('/')
 
   const [{ data: rows, error }, { data: units }] = await Promise.all([
     db.from('fee_types')

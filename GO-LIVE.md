@@ -22,7 +22,7 @@ Không phải kế hoạch — là những gì đã kiểm và những gì còn 
 | Backup | GitHub Actions dump hằng ngày, gồm cả schema `auth` |
 | Lưu trữ ảnh | Volume của service `v`, phục vụ qua `/api/anh` — hỏi lại quyền từng lần xem |
 | Quyền `anon` | **Không có bảng nào** — request không JWT không đọc được gì |
-| Bộ test | 32 file SQL độc lập + cả ngăn xếp Railway + 400 test JS, xanh trên CI mỗi lần push |
+| Bộ test | 32 file SQL độc lập + cả ngăn xếp Railway + 413 test JS, xanh trên CI mỗi lần push |
 | Giao diện | 68 route thật (chưa kể bản demo), build sạch, sáng/tối |
 | Ban quản trị | Khu vực riêng `/bqt` — chỉ đọc, theo quý, giám sát BQL và quỹ bảo trì 2% |
 

@@ -156,7 +156,8 @@ test('khu vực BQT chốt quyền ở LAYOUT, không phải ở từng trang', 
   // màn thứ hai quên chốt là mở cửa lặng lẽ, và không có gì nhắc.
   const l = doc('app/bqt/layout.tsx')
   assert.match(l, /rpc\('is_bqt'/, 'layout /bqt không hỏi is_bqt')
-  assert.match(l, /if \(!laBqt\) redirect\('\/'\)/, 'layout /bqt hỏi quyền rồi không chặn')
+  assert.match(l, /if \(!quyen\(kqBqt, 'is_bqt'\)\) redirect\('\/'\)/,
+    'layout /bqt hỏi quyền rồi không chặn')
 })
 
 test('layout và trang BQT chọn CÙNG một khu', () => {

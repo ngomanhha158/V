@@ -6,6 +6,7 @@ import {
   cx, ngayVN, vnd, vndGon,
 } from '@/components/ui'
 import { IcDienThoai } from '@/components/icons'
+import { quyen } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,8 +33,8 @@ export default async function CongNo({
 
   const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) redirect('/')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) redirect('/')
 
   const { data: rows, error } = await db.rpc('bql_debt_report', { p_project: project.id })
 

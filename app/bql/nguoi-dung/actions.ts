@@ -5,6 +5,7 @@ import { duAnBQL } from '@/lib/du-an'
 import { createAdminClient } from '@/lib/db/admin'
 import { normalizeEmail, toE164VN } from '@/lib/phone'
 import { cauTaiKhoan, chuanHoaLienLac, loiDoiLienLac } from '@/lib/tai-khoan'
+import { quyen } from '@/lib/chot-quyen'
 
 export type NguoiDungState = { error?: string; ok?: string }
 
@@ -40,7 +41,8 @@ async function guard(): Promise<
   const project = await duAnBQL()
   if (!project) return { loi: 'Chưa có dự án nào trong hệ thống.' }
 
-  const { data: laTruong } = await db.rpc('is_bql_manager', { p_project: project.id })
+  const laTruong = quyen(
+    await db.rpc('is_bql_manager', { p_project: project.id }), 'is_bql_manager')
   if (!laTruong) return { loi: 'Chỉ trưởng ban quản lý mới quản lý được tài khoản.' }
   return { db, project: project.id }
 }

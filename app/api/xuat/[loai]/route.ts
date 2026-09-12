@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/db/server'
+import { laKhongHoiDuocQuyen, quyen } from '@/lib/chot-quyen'
 import { duAnBQL } from '@/lib/du-an'
 import { baoCao, docKy, tenTep } from '@/lib/xuat/bao-cao'
 import { dungWorkbook } from '@/lib/xuat/excel'
@@ -21,7 +22,20 @@ export const dynamic = 'force-dynamic'
 export async function GET(
   req: NextRequest, { params }: { params: Promise<{ loai: string }> },
 ) {
-  const { loai } = await params
+  try {
+    return await xuat(req, await params)
+  } catch (e) {
+    if (!laKhongHoiDuocQuyen(e)) throw e
+    // KHÔNG đáp 403. 403 nghĩa là "bạn không được phép xuất báo cáo này", và
+    // người quản lý nhận câu đó sẽ đi hỏi xin lại quyền họ vẫn đang có. Câu
+    // đúng là 503: máy chủ chưa trả lời được, thử lại sau.
+    console.error(e.message)
+    return loi(503, 'Chưa kiểm được quyền xuất báo cáo do sự cố phía máy chủ. '
+      + 'Thử lại sau ít phút; vẫn vậy thì báo người quản trị hệ thống.')
+  }
+}
+
+async function xuat(req: NextRequest, { loai }: { loai: string }) {
   const bc = baoCao(loai)
   if (!bc) return loi(404, `Không có báo cáo "${loai}".`)
 
@@ -44,8 +58,8 @@ export async function GET(
   const { data: toi } = await db
     .from('profiles').select('full_name, email, phone').eq('id', user.id).maybeSingle()
 
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) return loi(403, 'Chỉ ban quản lý mới xuất được báo cáo.')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) return loi(403, 'Chỉ ban quản lý mới xuất được báo cáo.')
 
   const ky = bc.theoKy ? docKy(req.nextUrl.searchParams.get('ky')) : null
   if (bc.theoKy && !ky) return loi(400, 'Kỳ không hợp lệ. Cần dạng YYYY-MM, ví dụ 2026-09.')

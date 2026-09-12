@@ -9,6 +9,7 @@ import { TEN_JOB, XAU, soatJobNen, type DongJobChay } from '@/lib/job-nen'
 import { laNoiBo } from '@/lib/kho-anh'
 import { docKhoAnh } from '@/lib/kho-anh-server'
 import { BangJobNen } from '@/components/job-nen'
+import { quyen } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,8 +61,8 @@ export default async function GoLive() {
   const db = await createClient()
   const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) redirect('/')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) redirect('/')
 
   const { data: rows, error } = await db.rpc('bql_san_sang_go_live', {
     p_project: project.id,

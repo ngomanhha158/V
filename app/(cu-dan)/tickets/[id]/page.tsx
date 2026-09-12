@@ -5,6 +5,7 @@ import { RatingForm } from './rating-form'
 import { Card, CardHead, Hop, PageHead, Pill, Trong, cx } from '@/components/ui'
 import { IcTrai } from '@/components/icons'
 import { Sao, TT, UU } from '../page'
+import { danhSach } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,8 +35,8 @@ export default async function TicketDetail({ params }: { params: Promise<{ id: s
 
   // BQL cũng thấy ticket này (policy ticket_resident_read có nhánh is_staff),
   // nhưng chấm điểm là việc của cư dân — không hiện form cho BQL.
-  const { data: myUnits } = await db.rpc('current_unit_ids')
-  const isMember = (myUnits ?? []).includes(ticket.unit_id)
+  const myUnits = danhSach<string>(await db.rpc('current_unit_ids'), 'current_unit_ids')
+  const isMember = myUnits.includes(ticket.unit_id)
 
   // ticket_events chỉ đọc được nếu đọc được chính ticket (policy ticket_event_read).
   const { data: events } = await db
