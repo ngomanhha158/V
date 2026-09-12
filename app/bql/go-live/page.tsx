@@ -6,6 +6,8 @@ import {
   Card, CardHead, Hop, LinkButton, PageHead, Pill, Stat, Trong, cx, soVN,
 } from '@/components/ui'
 import { TEN_JOB, XAU, soatJobNen, type DongJobChay } from '@/lib/job-nen'
+import { laNoiBo } from '@/lib/kho-anh'
+import { docKhoAnh } from '@/lib/kho-anh-server'
 import { BangJobNen } from '@/components/job-nen'
 
 export const dynamic = 'force-dynamic'
@@ -97,6 +99,12 @@ export default async function GoLive() {
   const coCron = !!process.env.CRON_SECRET
   const coWebhook = !!(process.env.SEPAY_WEBHOOK_APIKEY || process.env.CASSO_WEBHOOK_TOKEN)
 
+  // Hai mục dưới đây trước nằm ở thẻ "Việc còn lại nằm ngoài phần mềm" — tức
+  // màn hình tự nhận là không kiểm được rồi bảo người dựng sang Railway mà
+  // nhìn. Kiểm được cả hai, nên chúng chuyển lên danh sách kiểm.
+  const kho = docKhoAnh()
+  const noiBo = laNoiBo(process.env.POSTGREST_URL)
+
   const tyLe = d.so_can > 0 ? (d.so_can_co_chu / d.so_can) * 100 : 0
 
   const mucs: Muc[] = [
@@ -149,6 +157,29 @@ export default async function GoLive() {
           ? `Đủ ${TEN_JOB.length} job, job nào cũng vừa chạy trong hạn của nó.`
           : `${jobXau.length}/${TEN_JOB.length} job không chạy: `
             + `${jobXau.map((j) => j.ten).join(', ')}. Bảng ngay dưới nói rõ từng cái.` },
+
+    // Ảnh hỏng hóc là bằng chứng trong tranh chấp giữa cư dân và ban quản lý.
+    // Không có Volume thì app vẫn nhận ảnh bình thường rồi mất sạch ở lần
+    // deploy kế tiếp — lặng lẽ, và chỉ lộ ra lúc có người mở lại một yêu cầu
+    // cũ để đối chất.
+    { ten: 'Ảnh nằm trên Volume, không phải đĩa tạm',
+      xong: kho.tinh === 'co_volume', batBuoc: kho.chan,
+      chiTiet: kho.cau },
+
+    // KHÔNG trả lời được câu "PostgREST có tên miền công khai không" — muốn
+    // biết phải hỏi Railway. Chỉ trả lời câu hẹp hơn: app này đang đi đường
+    // nào. Nói đúng phạm vi, vì một mục xanh hứa nhiều hơn cái nó kiểm được là
+    // thứ tệ nhất trên một danh sách trước khi mở cửa cho cả tòa.
+    { ten: 'App gọi PostgREST qua địa chỉ nội bộ',
+      xong: noiBo === true, batBuoc: noiBo === false,
+      chiTiet: noiBo === true
+        ? 'POSTGREST_URL trỏ vào mạng nội bộ. Vẫn phải tự kiểm phần Networking của '
+          + 'service PostgREST: mục này không thấy được nó có tên miền công khai hay không.'
+        : noiBo === false
+          ? 'POSTGREST_URL đang trỏ ra một địa chỉ công khai. Tầng dữ liệu đi qua '
+            + 'internet, và chốt duy nhất còn lại là chữ ký JWT.'
+          : 'Chưa đọc được POSTGREST_URL (thiếu, hoặc thiếu http:// ở đầu) nên chưa '
+            + 'kết luận được gì về đường đi.' },
 
     { ten: 'Đã cấu hình tài khoản nhận tiền', xong: !!bank, batBuoc: true,
       chiTiet: bank
@@ -235,22 +266,15 @@ export default async function GoLive() {
         />
         <div className="space-y-3 p-4 text-[0.8125rem] leading-relaxed text-muted">
           <p>
-            <strong className="text-ink">Volume cho ảnh.</strong> Ảnh kèm theo yêu cầu nằm
-            trên đĩa của máy chủ này. Trên Railway phải gắn một Volume vào đúng đường dẫn{' '}
-            <code className="rounded bg-sunken px-1">/data/ticket-photos</code>. Không gắn thì
-            app vẫn chạy bình thường, nhận ảnh bình thường — rồi mất sạch ảnh ở lần deploy kế
-            tiếp, và chỉ lộ ra lúc có người mở lại một yêu cầu cũ để đối chất.
-          </p>
-          <p>
             <strong className="text-ink">Sao lưu database.</strong> Bật snapshot cho service
             Postgres trên Railway. Toàn bộ công nợ, hóa đơn và sổ kiểm toán nằm trong đó; không
             có bản sao thì một lần lỡ tay là mất hết, không ai khôi phục hộ được.
           </p>
           <p>
-            <strong className="text-ink">PostgREST không có tên miền công khai.</strong> Vào
-            service PostgREST kiểm lại phần Networking: chỉ được có địa chỉ nội bộ. Có tên miền
-            public nghĩa là tầng dữ liệu phơi thẳng ra internet, và chốt duy nhất còn lại là
-            chữ ký JWT.
+            <strong className="text-ink">Networking của PostgREST.</strong> Danh sách kiểm ở
+            trên chỉ thấy được app đang gọi PostgREST qua đường nào, không thấy được service
+            đó có tên miền công khai hay không. Vào phần Networking của nó kiểm bằng mắt: chỉ
+            được có địa chỉ nội bộ.
           </p>
           <p>
             <strong className="text-ink">Dán poster.</strong> In ở màn Poster QR, dán sảnh và
