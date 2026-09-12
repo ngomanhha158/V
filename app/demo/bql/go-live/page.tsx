@@ -110,6 +110,20 @@ export default async function DemoGoLive() {
           : `${jobXau.length}/${TEN_JOB.length} job không chạy: `
             + `${jobXau.map((j) => j.ten).join(', ')}. Bảng ngay dưới nói rõ từng cái.` },
 
+    // Bản demo cố ý bày ĐÚNG hai tình trạng đáng xem nhất: kho ảnh chưa gắn
+    // Volume (hỏng lặng lẽ, mất bằng chứng tranh chấp), và app gọi PostgREST
+    // qua địa chỉ nội bộ (đúng). Demo mà cả hai đều xanh thì không cho người
+    // xem thấy màn này để làm gì.
+    { ten: 'Ảnh nằm trên Volume, không phải đĩa tạm', xong: false, batBuoc: true,
+      chiTiet: 'Thư mục ảnh /data/ticket-photos đang nằm trên đĩa TẠM của container, '
+        + 'không phải Volume. App vẫn nhận ảnh bình thường — rồi mất sạch ở lần deploy '
+        + 'kế tiếp, lặng lẽ, và chỉ lộ ra lúc có người mở lại một yêu cầu cũ để đối '
+        + 'chất. Gắn Volume vào service `v` tại đúng đường dẫn này.' },
+
+    { ten: 'App gọi PostgREST qua địa chỉ nội bộ', xong: true, batBuoc: false,
+      chiTiet: 'POSTGREST_URL trỏ vào mạng nội bộ. Vẫn phải tự kiểm phần Networking của '
+        + 'service PostgREST: mục này không thấy được nó có tên miền công khai hay không.' },
+
     { ten: 'Đã cấu hình tài khoản nhận tiền', xong: !!bank, batBuoc: true,
       chiTiet: bank
         ? `BIN ${bank.bin} · số tài khoản kết thúc ${bank.accountNumber.slice(-4)}.`
@@ -195,22 +209,15 @@ export default async function DemoGoLive() {
         />
         <div className="space-y-3 p-4 text-[0.8125rem] leading-relaxed text-muted">
           <p>
-            <strong className="text-ink">Volume cho ảnh.</strong> Ảnh kèm theo yêu cầu nằm
-            trên đĩa của máy chủ này. Trên Railway phải gắn một Volume vào đúng đường dẫn{' '}
-            <code className="rounded bg-sunken px-1">/data/ticket-photos</code>. Không gắn thì
-            app vẫn chạy bình thường, nhận ảnh bình thường — rồi mất sạch ảnh ở lần deploy kế
-            tiếp, và chỉ lộ ra lúc có người mở lại một yêu cầu cũ để đối chất.
-          </p>
-          <p>
             <strong className="text-ink">Sao lưu database.</strong> Bật snapshot cho service
             Postgres trên Railway. Toàn bộ công nợ, hóa đơn và sổ kiểm toán nằm trong đó; không
             có bản sao thì một lần lỡ tay là mất hết, không ai khôi phục hộ được.
           </p>
           <p>
-            <strong className="text-ink">PostgREST không có tên miền công khai.</strong> Vào
-            service PostgREST kiểm lại phần Networking: chỉ được có địa chỉ nội bộ. Có tên miền
-            public nghĩa là tầng dữ liệu phơi thẳng ra internet, và chốt duy nhất còn lại là
-            chữ ký JWT.
+            <strong className="text-ink">Networking của PostgREST.</strong> Danh sách kiểm ở
+            trên chỉ thấy được app đang gọi PostgREST qua đường nào, không thấy được service
+            đó có tên miền công khai hay không. Vào phần Networking của nó kiểm bằng mắt: chỉ
+            được có địa chỉ nội bộ.
           </p>
           <p>
             <strong className="text-ink">Dán poster.</strong> In ở màn Poster QR, dán sảnh và

@@ -7,6 +7,7 @@ import { duAnBQL } from '@/lib/du-an'
 import { SoanThongBao } from './form'
 import { phatHanh, xoaThongBao } from './actions'
 import { Button, Card, CardHead, PageHead, Pill, Stat, Trong } from '@/components/ui'
+import { quyen } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,8 +22,8 @@ export default async function BqlBangTin() {
   const db = await createClient()
   const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) redirect('/')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) redirect('/')
 
   const [{ data: toaList }, { data: canList }, { data: docList }, { data: ds }] = await Promise.all([
     db.from('buildings').select('id, code, name').order('code'),

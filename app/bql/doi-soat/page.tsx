@@ -5,6 +5,7 @@ import {
   Bang, Card, CardHead, Chip, Hop, PageHead, Pill, Td, Th, Tr, Trong, ngayGioVN, vnd,
 } from '@/components/ui'
 import { HangDoi, type CanHo, type GiaoDich } from './hang-doi'
+import { quyen } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,8 +28,8 @@ export default async function DoiSoat({
   const db = await createClient()
   const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) redirect('/')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) redirect('/')
 
   const [{ data: rows, error }, { data: units }, { count: soChoXuLy }] = await Promise.all([
     db.rpc('bql_doi_soat', { p_project: project.id, p_trang_thai: tab }),

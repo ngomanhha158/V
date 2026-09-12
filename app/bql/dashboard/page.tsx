@@ -7,6 +7,7 @@ import {
 import { BangThang, ChuThichThu, CotThu, DuongSLA, type ThangKPI } from '@/components/chart'
 import { KY, khoangNgay, laKy, type KyKey } from '@/lib/ky'
 import type { Database } from '@/lib/db/database.types'
+import { quyen } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,8 +41,8 @@ export default async function Dashboard({
   const db = await createClient()
   const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) redirect('/')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) redirect('/')
 
   const [{ data: tongRows, error: loiTong }, { data: thangRows, error: loiThang }] =
     await Promise.all([

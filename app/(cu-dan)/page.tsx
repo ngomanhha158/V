@@ -3,6 +3,7 @@ import { createClient } from '@/lib/db/server'
 import { Card, CardHead, LinkButton, Pill, Trong } from '@/components/ui'
 import { vaiCan } from '@/lib/vai-tro'
 import { IcHoaDon, IcPhai, IcThe, IcThem, IcToaNha } from '@/components/icons'
+import { danhSach } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,8 +23,12 @@ export default async function Home() {
   // một khu lấy đại. Người vừa quản lý khu A vừa ở khu B mà khu B lên trước
   // thì is_staff(B) = false và link vào /bql biến mất — họ mất đường vào phần
   // mình phụ trách, không kèm một lời giải thích nào.
-  const { data: khuQuanLy } = await db.rpc('du_an_cua_toi')
-  const isStaff = (khuQuanLy ?? []).length > 0
+  //
+  // Nuốt lỗi ở đây thì một lần đọc hỏng cũng làm link /bql biến mất — cùng một
+  // màn hình với "bạn không quản lý khu nào", mà nguyên nhân thì khác hẳn.
+  const khuQuanLy = danhSach<{ vai_tro: string }>(
+    await db.rpc('du_an_cua_toi'), 'du_an_cua_toi')
+  const isStaff = khuQuanLy.length > 0
   // Ban quản trị có lối vào RIÊNG. Họ là bên giám sát đơn vị quản lý, nên đẩy
   // họ vào thanh điều hướng vận hành ba mươi mục của chính bên bị giám sát là
   // sai vai — và phần lớn mục ở đó họ bấm vào cũng chỉ nhận về lỗi quyền.
@@ -31,7 +36,7 @@ export default async function Home() {
   // vai_tro là vai CAO NHẤT ở khu đó, nên người vừa là trưởng BQL vừa là BQT
   // sẽ không thấy link này. Đúng với ý định: lối chính của họ là màn BQL, và
   // /bqt vẫn mở nếu họ gõ thẳng địa chỉ.
-  const laBQT = (khuQuanLy ?? []).some((k) => k.vai_tro === 'bqt')
+  const laBQT = khuQuanLy.some((k) => k.vai_tro === 'bqt')
 
   const active = memberships?.filter((m) => m.status === 'active') ?? []
   const pending = memberships?.filter((m) => m.status === 'pending') ?? []

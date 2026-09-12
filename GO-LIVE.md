@@ -22,7 +22,7 @@ Không phải kế hoạch — là những gì đã kiểm và những gì còn 
 | Backup | GitHub Actions dump hằng ngày, gồm cả schema `auth` |
 | Lưu trữ ảnh | Volume của service `v`, phục vụ qua `/api/anh` — hỏi lại quyền từng lần xem |
 | Quyền `anon` | **Không có bảng nào** — request không JWT không đọc được gì |
-| Bộ test | 32 file SQL độc lập + cả ngăn xếp Railway + 387 test JS, xanh trên CI mỗi lần push |
+| Bộ test | 32 file SQL độc lập + cả ngăn xếp Railway + 413 test JS, xanh trên CI mỗi lần push |
 | Giao diện | 68 route thật (chưa kể bản demo), build sạch, sáng/tối |
 | Ban quản trị | Khu vực riêng `/bqt` — chỉ đọc, theo quý, giám sát BQL và quỹ bảo trì 2% |
 
@@ -98,8 +98,18 @@ chuyện đó thay vì im lặng không có nút bật. `SMTP_URL` thiếu thì 
 Không gắn thì app vẫn nhận ảnh bình thường rồi mất sạch ở lần deploy kế tiếp —
 lặng lẽ, và chỉ lộ ra lúc có người mở lại một yêu cầu cũ để đối chất.
 
+Việc này **không còn phải tự nhớ**: màn `/bql/go-live` kiểm được và báo đỏ nếu
+thư mục ảnh đang nằm trên đĩa tạm. Cách kiểm là so chỉ số thiết bị của thư mục
+với thư mục gốc — volume đã gắn là một filesystem khác. Khác hẳn "thư mục có
+tồn tại không", vì thư mục thì luôn tồn tại: app tự tạo nó, kể cả trên đĩa tạm.
+
 **PostgREST không được có tên miền công khai.** Nó chỉ cần địa chỉ nội bộ. Mở
 ra internet là phơi thẳng tầng dữ liệu, và chốt duy nhất còn lại là chữ ký JWT.
+
+Màn go-live kiểm được **một nửa** câu này: app đang gọi PostgREST qua đường nào.
+Nửa còn lại — service đó có tên miền công khai hay không — phải hỏi Railway, và
+app không hỏi được. Mục trên màn hình nói rõ giới hạn đó thay vì để người đọc
+tưởng đã kiểm xong, và có test giữ cho nó không lặng lẽ hứa nhiều hơn.
 
 **Lưu ý về biến `NEXT_PUBLIC_`**: Next nhúng chúng vào bundle JavaScript lúc
 `next build`, không đọc lúc chạy. Nên đổi `NEXT_PUBLIC_VBUILDING_AUTH` từ

@@ -5,6 +5,7 @@ import { duAnBQL } from '@/lib/du-an'
 import {
   docNguoi, docThayDoi, TEN_BANG, TEN_THAO_TAC, tenBang,
 } from '@/lib/nhat-ky'
+import { quyen } from '@/lib/chot-quyen'
 import {
   Bang, Card, CardHead, Hop, ngayGioVN, PageHead, Pill, Stat, Td, Th, Tr, Trong,
 } from '@/components/ui'
@@ -34,8 +35,8 @@ export default async function NhatKy({
 
   const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào trong hệ thống" />
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) redirect('/')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) redirect('/')
 
   const soNgay = NGAY.includes(Number(sp.ngay)) ? Number(sp.ngay) : 30
   const bang = sp.bang && sp.bang in TEN_BANG ? sp.bang : ''

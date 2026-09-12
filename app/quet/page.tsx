@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/db/server'
 import { BqlShell } from '@/components/shell/bql-shell'
 import { Card, CardHead, Hop, PageHead } from '@/components/ui'
+import { danhSach } from '@/lib/chot-quyen'
 
 /**
  * Màn hướng dẫn quét, không phải màn quét.
@@ -22,8 +23,10 @@ export default async function Page() {
   // Như ở màn cư dân: hỏi "có phải nhân sự ở đâu đó không". Bảo vệ trực khu B
   // mà khu A lên trước thì màn quét thẻ đóng lại ngay giữa ca, và ở cửa thì
   // không có ai để hỏi vì sao.
-  const { data: khuQuanLy } = await db.rpc('du_an_cua_toi')
-  const dsKhu = (khuQuanLy ?? []) as { id: string; name: string }[]
+  // Và nuốt lỗi thì ra ĐÚNG màn hình đó vì một nguyên nhân khác: PostgREST
+  // hụt một nhịp là bảo vệ đọc được câu "tài khoản này không quét được".
+  const dsKhu = danhSach<{ id: string; name: string }>(
+    await db.rpc('du_an_cua_toi'), 'du_an_cua_toi')
   const laNhanSu = dsKhu.length > 0
   // Kể TÊN các khu quét được. Bảo vệ trực nhiều khu cần biết thẻ khu nào ra
   // kết quả đầy đủ — "dự án này" thì đúng khi có một khu và vô nghĩa khi có hai.
