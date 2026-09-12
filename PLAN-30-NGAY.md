@@ -5,6 +5,10 @@
 > Postgres + PostgREST + lớp đăng nhập tự viết, ảnh lưu trên Volume thay cho
 > Storage. Trạng thái hiện hành đọc ở `GO-LIVE.md` và `railway/GD1-runbook.sh`;
 > mọi dòng nhắc Supabase bên dưới là chuyện đã qua.
+>
+> **Ghi chú 12/09/2026.** Mọi mục trong file này đã làm xong, kể cả N25–N26
+> (khu vực Ban quản trị) vốn là mục cuối còn thiếu. Kế hoạch đang chạy là
+> `PLAN-THANG-2.md` — tháng đưa vào dùng thật. File này từ đây chỉ còn là hồ sơ.
 
 
 **N1 = Thứ Hai 31/08/2026 · Go-live N29 = 28/09 · Kết thúc N30 = 29/09**
