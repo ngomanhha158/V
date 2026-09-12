@@ -22,8 +22,9 @@ Không phải kế hoạch — là những gì đã kiểm và những gì còn 
 | Backup | GitHub Actions dump hằng ngày, gồm cả schema `auth` |
 | Lưu trữ ảnh | Volume của service `v`, phục vụ qua `/api/anh` — hỏi lại quyền từng lần xem |
 | Quyền `anon` | **Không có bảng nào** — request không JWT không đọc được gì |
-| Bộ test | 32 file SQL độc lập + cả ngăn xếp Railway + 354 test JS, xanh trên CI mỗi lần push |
-| Giao diện | 66 route thật (chưa kể bản demo), build sạch, sáng/tối |
+| Bộ test | 32 file SQL độc lập + cả ngăn xếp Railway + 377 test JS, xanh trên CI mỗi lần push |
+| Giao diện | 67 route thật (chưa kể bản demo), build sạch, sáng/tối |
+| Ban quản trị | Khu vực riêng `/bqt` — chỉ đọc, theo quý, giám sát BQL và quỹ bảo trì 2% |
 
 Chín job nền và giờ chạy (giờ VN). Bảng đối chiếu đầy đủ ở đầu `cron.sql`, bảng
 Cron Service ở bước B6 của `railway/GD1-runbook.sh`, và danh mục gốc mà cả hai

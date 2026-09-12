@@ -46,6 +46,22 @@ export async function duAnBQL(): Promise<{ id: string; name: string } | null> {
   return dang ? { id: dang.id, name: dang.name } : null
 }
 
+/**
+ * Khu mà màn Ban quản trị đang nói tới.
+ *
+ * Dùng CHUNG cho cả layout (chốt quyền) lẫn trang (đọc số). Hai chỗ tự chọn
+ * khu riêng là hai chỗ sẽ chọn khác nhau ở đúng những ca hiếm — và ca hiếm ở
+ * đây nghĩa là chốt quyền trên khu A rồi hiện số của khu B.
+ *
+ * Cookie chung với màn BQL nên đổi khu ở bên kia thì bên này theo. Cookie chưa
+ * trỏ vào đâu thì ưu tiên khu người này làm BQT: một người vừa là BQT ở khu A
+ * vừa là kỹ thuật ở khu B sẽ bị chặn oan nếu khu B tình cờ đứng trước.
+ */
+export async function khuBQT(): Promise<Khu | null> {
+  const { dang, ds } = await khuDangXem()
+  return dang ?? ds.find((k) => k.vai_tro === 'bqt') ?? ds[0] ?? null
+}
+
 export function tuyChonCookieKhu() {
   return {
     httpOnly: true,

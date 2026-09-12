@@ -36,7 +36,7 @@ export function QuySo({
 }) {
   const soDu = dong.at(-1)?.luy_ke ?? 0
   const dc = loiDoiChieu({
-    soSach: soDu,
+    dong,
     soNganHang: soDuNganHang ?? null,
     ngay: doiChieuNgay ?? null,
     homNay,
