@@ -125,6 +125,7 @@ export default async function Home() {
         <Link href="/tra-gop" className="font-medium text-muted hover:text-ink">Khoản chia đợt</Link>
         <Link href="/thi-cong" className="font-medium text-muted hover:text-ink">Chuyển nhà &amp; sửa chữa</Link>
         <Link href="/bao-cao" className="font-medium text-muted hover:text-ink">Báo cáo quý</Link>
+        <Link href="/ho-so" className="font-medium text-muted hover:text-ink">Tài khoản</Link>
         {laBQT && (
           <Link href="/bqt" className="font-medium text-brand hover:underline">
             Ban quản trị — giám sát →

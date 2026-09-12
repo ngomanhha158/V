@@ -23,6 +23,10 @@ declare
   b_sdt  text := '+84900000199';
   c_mail text := 'smoke.c@vbuilding.test';
   d_mail text := 'smoke.d@vbuilding.test';
+  -- Danh tính riêng cho nhóm K: mọi địa chỉ phía trên đã có chủ, và tạo trùng
+  -- thì bài test đỏ vì unique chứ không vì điều nó định chứng minh.
+  e_mail text := 'smoke.e@vbuilding.test';
+  e_sdt  text := '+84900000188';
   a_uid uuid; b_uid uuid; c_uid uuid; d_uid uuid; v_uid uuid;
   tt text; giay int; n int; i int;
 begin
@@ -230,6 +234,126 @@ begin
   if public.auth_huy_ma('khong-ai@vbuilding.test') then
     raise exception 'FAIL J7: huy duoc ma cua mot dia chi khong ton tai';
   end if;
+
+  -- ── K. Tự phục vụ: đổi mật khẩu và thông tin liên lạc ─────────────────────
+  -- Cả nhóm này chạy dưới một danh tính GIẢ LẬP: auth.uid() đọc app.user_id khi
+  -- không có JWT. Không đặt nó thì mọi hàm dưới đây trả 'chua_dang_nhap' và
+  -- bài test xanh mà không chứng minh gì — nên K1 chốt đúng điều đó trước.
+  perform set_config('app.user_id', '', true);
+  if public.auth_doi_mat_khau_cua_toi('x', 'matkhaumoi123') <> 'chua_dang_nhap' then
+    raise exception 'FAIL K1: doi duoc mat khau khi chua dang nhap';
+  end if;
+  if public.auth_doi_lien_lac_cua_toi('Ten', 'x@vbuilding.test', null) <> 'chua_dang_nhap' then
+    raise exception 'FAIL K1b: doi duoc lien lac khi chua dang nhap';
+  end if;
+
+  perform set_config('app.user_id', a_uid::text, true);
+
+  -- Mật khẩu mới quá ngắn thì từ chối, và mật khẩu CŨ phải còn nguyên hiệu lực.
+  -- Thiếu vế thứ hai thì một hàm ghi đè trước rồi mới kiểm cũng qua được bài này.
+  if public.auth_doi_mat_khau_cua_toi('matkhau-cu-123', 'ngan') <> 'qua_ngan' then
+    raise exception 'FAIL K2: nhan mat khau ngan hon muc toi thieu';
+  end if;
+  if public.auth_kiem_mat_khau(a_mail, 'matkhau-cu-123') is distinct from a_uid then
+    raise exception 'FAIL K2b: mat khau cu hong sau mot lan tu choi';
+  end if;
+
+  -- Sai mật khẩu cũ: từ chối, và cũng không được đổi gì.
+  if public.auth_doi_mat_khau_cua_toi('sai-be-bet', 'matkhaumoi-123') <> 'sai_mat_khau_cu' then
+    raise exception 'FAIL K3: doi duoc mat khau ma khong biet mat khau cu';
+  end if;
+  if public.auth_kiem_mat_khau(a_mail, 'matkhaumoi-123') is not null then
+    raise exception 'FAIL K3b: mat khau moi da co hieu luc du bi tu choi';
+  end if;
+
+  -- Đổi thật. Mã một lần đang treo phải chết theo: đổi mật khẩu vì nghi bị lộ
+  -- mà để lại một mã sống là để lại đúng cái cửa vừa định đóng.
+  select public.auth_gui_ma(a_mail, '111111') into tt;
+  if public.auth_doi_mat_khau_cua_toi('matkhau-cu-123', 'matkhaumoi-123') <> 'ok' then
+    raise exception 'FAIL K4: khong doi duoc mat khau du dua dung mat khau cu';
+  end if;
+  if public.auth_kiem_mat_khau(a_mail, 'matkhaumoi-123') is distinct from a_uid then
+    raise exception 'FAIL K4b: mat khau moi khong dung nhap duoc';
+  end if;
+  if public.auth_kiem_mat_khau(a_mail, 'matkhau-cu-123') is not null then
+    raise exception 'FAIL K4c: mat khau CU van dang nhap duoc sau khi doi';
+  end if;
+  select count(*) into n from auth.ma_dang_nhap
+   where user_id = a_uid and dung_luc is null and het_han_luc > now();
+  if n <> 0 then raise exception 'FAIL K4d: doi mat khau ma con % ma mot lan song', n; end if;
+
+  -- Người CHƯA TỪNG có mật khẩu đặt được lần đầu mà không cần mật khẩu cũ.
+  -- Đòi một thứ họ không có là khoá vĩnh viễn tính năng này với đúng nhóm cần
+  -- nó nhất — cư dân chỉ vào bằng mã một lần.
+  -- Dùng lại tài khoản C và gỡ mật khẩu của nó, thay vì tạo tài khoản mới:
+  -- mọi địa chỉ trong file này đã có chủ từ các phần trên.
+  update auth.users set mat_khau_hash = null where id = c_uid;
+  perform set_config('app.user_id', c_uid::text, true);
+  if public.auth_doi_mat_khau_cua_toi(null, 'matkhaudau-123') <> 'ok' then
+    raise exception 'FAIL K5: nguoi chua co mat khau khong tu dat duoc lan dau';
+  end if;
+  if public.auth_kiem_mat_khau(c_mail, 'matkhaudau-123') is distinct from c_uid then
+    raise exception 'FAIL K5b: mat khau dat lan dau khong dung nhap duoc';
+  end if;
+
+  -- ── Thông tin liên lạc ────────────────────────────────────────────────────
+  perform set_config('app.user_id', a_uid::text, true);
+
+  -- Xoá sạch cả email lẫn số điện thoại là tự khoá mình ra ngoài vĩnh viễn:
+  -- auth_tim() tìm người theo đúng hai cột đó. Phải chặn, và chặn mà KHÔNG đổi gì.
+  if public.auth_doi_lien_lac_cua_toi('Chi A smoke', '', '') <> 'thieu_lien_lac' then
+    raise exception 'FAIL K6: cho phep xoa het ca hai duong dang nhap';
+  end if;
+  if public.auth_tim(a_mail) is distinct from a_uid then
+    raise exception 'FAIL K6b: lan tu choi van kip xoa mat email';
+  end if;
+
+  -- Trùng địa chỉ của người khác thì từ chối, và nói rõ trùng cái nào.
+  if public.auth_doi_lien_lac_cua_toi('Chi A smoke', c_mail, null) <> 'trung_email' then
+    raise exception 'FAIL K7: cho phep lay email cua nguoi khac';
+  end if;
+
+  -- Đổi thật. Đây là assert đắt nhất của cả nhóm: phải ghi CẢ HAI bảng. Đăng
+  -- nhập đọc auth.users, màn hình đọc profiles — sửa một bên thì màn hình hiện
+  -- email mới trong khi đăng nhập vẫn ăn email cũ.
+  select public.auth_gui_ma(a_mail, '222222') into tt;
+  if public.auth_doi_lien_lac_cua_toi('Chi A doi ten', e_mail, e_sdt) <> 'ok' then
+    raise exception 'FAIL K8: khong doi duoc lien lac';
+  end if;
+  if public.auth_tim(e_mail) is distinct from a_uid then
+    raise exception 'FAIL K8b: auth.users chua nhan email moi — dang nhap van an email cu';
+  end if;
+  if public.auth_tim(a_mail) is not null then
+    raise exception 'FAIL K8c: email CU van dang nhap duoc';
+  end if;
+  select count(*) into n from public.profiles
+   where id = a_uid and email = e_mail and phone = e_sdt and full_name = 'Chi A doi ten';
+  if n <> 1 then raise exception 'FAIL K8d: profiles chua dong bo voi auth.users'; end if;
+  -- Mã gửi tới địa chỉ CŨ phải chết: từ giây này địa chỉ đó không còn là đường
+  -- vào tài khoản nữa.
+  select count(*) into n from auth.ma_dang_nhap
+   where user_id = a_uid and dung_luc is null and het_han_luc > now();
+  if n <> 0 then raise exception 'FAIL K8e: doi email ma con % ma mot lan song', n; end if;
+
+  -- Sổ kiểm toán phải có dấu vết: đổi email đăng nhập là việc phải truy được.
+  select count(*) into n from public.audit_log
+   where bang = 'auth.users' and ban_ghi = a_uid::text and thao_tac = 'UPDATE';
+  if n < 2 then raise exception 'FAIL K9: so kiem toan chi co % dong cho doi mat khau va doi email', n; end if;
+
+  -- ── Ban quản lý sửa hộ: phải chặn người không phải trưởng ban ──────────────
+  perform set_config('app.user_id', c_uid::text, true);
+  begin
+    perform public.auth_sua_lien_lac(
+      (select id from public.projects order by created_at limit 1),
+      a_uid, 'Ten khac', 'cuop@vbuilding.test', null);
+    raise exception 'FAIL K10: nguoi khong phai truong BQL sua duoc lien lac cua nguoi khac';
+  exception when insufficient_privilege then null;
+  end;
+  if public.auth_tim(e_mail) is distinct from a_uid then
+    raise exception 'FAIL K10b: lan bi chan van kip doi email';
+  end if;
+
+  perform set_config('app.user_id', '', true);
 
   raise notice 'SMOKE AUTH PASSED — mat khau, ma mot lan, chan do ma, quyen, don profiles va tra lai suat khi thu hong deu dung';
 end

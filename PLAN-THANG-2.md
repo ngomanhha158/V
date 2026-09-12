@@ -36,6 +36,13 @@ biểu đồ này còn là bằng chứng sự cố đó đã dứt điểm th�
 
 **Vậy: hệ thống đang chạy đúng, và chưa một cư dân nào mở nó ra.**
 
+Bổ sung 12/09: soát lại trước khi mở cho người thật thì thấy hai lỗ hổng chỉ
+cắn khi có người dùng, và đã vá — cư dân **tự đổi được mật khẩu và sửa được
+thông tin liên lạc của mình**, ban quản lý **sửa được liên lạc cho người trong
+khu**. Trước đó cả hai việc đều phải nhờ ban quản lý làm tay, nhân với số căn
+của cả khu trong đúng tuần dán poster. Đây là loại việc mục 1 gọi là "thiếu",
+không phải "thêm tính năng".
+
 ---
 
 ## 1. THÁNG 2 LÀM GÌ — VÀ KHÔNG LÀM GÌ
@@ -200,6 +207,35 @@ người xin, kể cả khi rảnh.
 | Marketplace nhà cung cấp | Có ≥3 tòa chạy thật. Ít cầu thì chợ không thành chợ |
 | AI dự báo hỏng hóc | Có ≥6 tháng lịch sử bảo trì **thật trong hệ thống**. Không đủ dữ liệu thì nó chỉ là bản demo biết nói |
 | Gamification | Sau khi tỷ lệ hộ hoạt động ổn định ≥3 tháng. Thưởng cho một hành vi chưa tồn tại là vô nghĩa |
+
+### 5bis. Ứng viên mới — chưa có bằng chứng, nên chưa có lịch
+
+Soát lại toàn bộ hai phía đầu tháng 9 thì phần lớn ý nghĩ "hình như còn thiếu"
+hoá ra **đã có**: nhập chỉ số điện–nước (nằm trong màn Hóa đơn), cư dân tự đăng
+ký xe (trong màn Căn hộ), bình luận bảng tin, thẻ cư dân, khách thăm, kiện hàng.
+Bảng dưới là phần thật sự còn trống.
+
+Chúng KHÔNG có trong lịch bốn tuần ở trên, và đó là chủ ý. Mục N23–N26 nói
+backlog tháng 3 phải đến từ cư dân chứ không từ trí tưởng tượng của chúng ta —
+nên mỗi dòng dưới đây là một GIẢ THUYẾT kèm điều kiện để biết nó đúng.
+
+**Cho ban quản lý**
+
+| Ứng viên | Chỗ trống hiện tại | Mở khi |
+|---|---|---|
+| **Sổ thu–chi vận hành** | Quỹ bảo trì có sổ đầy đủ: đảo bút toán, đối chiếu sao kê, ai ghi lúc nào. Phí quản lý thì chỉ có đường **THU** — không có chỗ nào ghi tiền chi ra. Ban quản trị mở `/bqt` sẽ thấy "tiền thực về" mà không thấy tiền đi đâu | Câu hỏi đó xuất hiện ở kỳ họp ban quản trị đầu tiên |
+| **Danh bạ nhà thầu + hồ sơ kiểm định** | `maintenance_plans.nha_thau` đang là text tự do, không phải bảng. Cờ `bat_buoc_phap_ly` có, nhưng không có chỗ lưu biên bản kiểm định PCCC hay thang máy — thứ thanh tra hỏi | Kỳ kiểm định pháp lý đầu tiên tới hạn |
+
+**Cho cư dân**
+
+| Ứng viên | Chỗ trống hiện tại | Mở khi |
+|---|---|---|
+| **Thanh toán trực tuyến** | Hiện là mã QR chuyển khoản, tiền về thì webhook gạch nợ | Tỷ lệ gạch nợ tự động **dưới 80% sau hai kỳ** — tức QR thật sự không đủ, chứ không phải mình đoán nó không đủ |
+| **Phản ánh ẩn danh** | Yêu cầu luôn gắn tên người gửi. Có loại việc cư dân không dám đứng tên: hàng xóm gây ồn, bảo vệ vòi vĩnh | Ban quản lý báo rằng có loại phản ánh chỉ đến qua kênh riêng tư, không qua app |
+| **Đặt lịch làm thủ tục** | Chưa có. Cư dân tới quầy là xếp hàng | Thời gian chờ ở quầy thành lời phàn nàn có thật, đo được |
+
+Mỗi cổng ở trên đều là một CON SỐ, không phải một cái tên tháng. Đó là cách duy
+nhất để bảng này không lặng lẽ biến tháng 2 thành tháng thêm tính năng.
 
 ---
 
