@@ -4,6 +4,7 @@ import { createClient } from '@/lib/db/server'
 import { duAnBQL } from '@/lib/du-an'
 import { createAdminClient } from '@/lib/db/admin'
 import { normalizeEmail, toE164VN } from '@/lib/phone'
+import { cauTaiKhoan, chuanHoaLienLac, loiDoiLienLac } from '@/lib/tai-khoan'
 
 export type NguoiDungState = { error?: string; ok?: string }
 
@@ -201,4 +202,50 @@ export async function ngungNhanSu(
   revalidatePath('/bql/nguoi-dung')
   revalidatePath('/bql/go-live')
   return { ok: `Đã thu hồi vai trò ${vaiTro} của ${hoTen || 'người này'}.` }
+}
+
+/**
+ * Sửa thông tin liên lạc của một người trong khu.
+ *
+ * Nửa còn lại của lỗ hổng mà màn hồ sơ cư dân vá: màn này tạo được tài khoản,
+ * đặt lại được mật khẩu, xoá được tài khoản — nhưng không sửa được một email
+ * gõ sai lúc nhập liệu. Cách duy nhất còn lại là xoá đi tạo lại, mà xoá thì
+ * vướng khoá ngoại ngay khi người đó đã được gán căn.
+ *
+ * Gọi bằng client CỦA NGƯỜI DÙNG, không phải admin: auth_sua_lien_lac tự chốt
+ * is_bql_manager và tự kiểm người đó có thuộc khu này không. Dùng service_role
+ * ở đây là bỏ qua đúng hai chốt vừa dựng.
+ */
+export async function suaLienLac(
+  _prev: NguoiDungState, formData: FormData,
+): Promise<NguoiDungState> {
+  const g = await guard()
+  if ('loi' in g) return { error: g.loi }
+  const { db, project } = g
+
+  const uid = String(formData.get('user_id') ?? '')
+  const hoTen = String(formData.get('ho_ten') ?? '')
+  const email = String(formData.get('email') ?? '')
+  const phone = String(formData.get('phone') ?? '')
+  if (!uid) return { error: 'Thiếu người cần sửa.' }
+
+  const loi = loiDoiLienLac(hoTen, email, phone)
+  if (loi) return { error: loi }
+  const { email: e, phone: p } = chuanHoaLienLac(email, phone)
+
+  const { data, error } = await db.rpc('auth_sua_lien_lac', {
+    p_project: project, p_uid: uid,
+    p_ho_ten: hoTen.trim(), p_email: e, p_phone: p,
+  })
+  if (error) return { error: `Không lưu được: ${error.message}` }
+  if (data !== 'ok') return { error: cauTaiKhoan(String(data)) }
+
+  revalidatePath('/bql/nguoi-dung')
+  // Nói ra hệ quả: đổi email là đổi ĐƯỜNG ĐĂNG NHẬP. Người trực ban không tự
+  // suy ra rằng cư dân kia từ giờ phải gõ địa chỉ mới, và nếu họ gõ địa chỉ cũ
+  // thì hệ thống cố ý trả lời y như lúc thành công.
+  return {
+    ok: `Đã sửa thông tin của ${hoTen || 'người dùng'}. Nhớ báo cho họ: từ giờ `
+      + 'đăng nhập bằng thông tin mới, địa chỉ cũ không còn dùng được.',
+  }
 }

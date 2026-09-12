@@ -165,6 +165,20 @@ const CANARY = [
     ap: 'auth_hooks.sql',
   },
   {
+    // Quyết định thiết kế dễ bị "dọn cho gọn" nhất của lớp tự phục vụ: đăng
+    // nhập đọc auth.users, màn hình đọc profiles, và không có trigger nào đồng
+    // bộ lúc UPDATE. Bỏ một trong hai câu update là màn hình hiện email mới
+    // trong khi đăng nhập vẫn ăn email cũ — hỏng theo kiểu người dùng tin rằng
+    // mình đã đổi xong.
+    ten: 'auth_doi_lien_lac_cua_toi chỉ ghi auth.users, quên đồng bộ profiles',
+    file: 'railway/04_smoke_auth.sql',
+    doi: (s) => s.replace(
+      `    update public.profiles
+       set email = v_email, phone = v_phone, full_name = v_ten
+     where id = v_uid;`, '    -- canary'),
+    ap: 'railway/03_auth.sql',
+  },
+  {
     ten: 'auth_huy_ma giết cả mã cũ người ta đang cầm',
     file: 'railway/04_smoke_auth.sql',
     doi: (s) => s.replace(

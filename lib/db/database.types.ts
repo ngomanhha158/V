@@ -1894,6 +1894,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      // Lớp tự phục vụ (railway/03_auth.sql). Khai tay như phần auth ở dưới:
+      // chúng đụng schema auth nên công cụ sinh kiểu không nhìn thấy.
+      auth_co_mat_khau: { Args: never; Returns: boolean }
+      auth_doi_mat_khau_cua_toi: {
+        Args: { p_cu: string | null; p_moi: string }
+        Returns: string
+      }
+      auth_doi_lien_lac_cua_toi: {
+        Args: { p_ho_ten: string; p_email: string | null; p_phone: string | null }
+        Returns: string
+      }
+      auth_sua_lien_lac: {
+        Args: {
+          p_project: string; p_uid: string; p_ho_ten: string
+          p_email: string | null; p_phone: string | null
+        }
+        Returns: string
+      }
       job_ghi_nhan: {
         Args: {
           p_viec: string

@@ -5,7 +5,7 @@ import {
   Button, Field, Hop, Input, Pill, Select, ngayVN,
 } from '@/components/ui'
 import {
-  datLaiMatKhau, ngungNhanSu, taoTaiKhoan, type NguoiDungState,
+  datLaiMatKhau, ngungNhanSu, suaLienLac, taoTaiKhoan, type NguoiDungState,
 } from './actions'
 import { TEN_VAI_TRO, tenVaiTro } from '@/lib/vai-tro'
 
@@ -127,6 +127,40 @@ function DoiMatKhau({ n }: { n: NguoiDung }) {
   )
 }
 
+/**
+ * Sửa thông tin liên lạc. Mở bằng nút chứ không hiện sẵn: email ở đây là ĐƯỜNG
+ * ĐĂNG NHẬP của người ta, không phải một ô ghi chú — để nó mở sẵn giữa danh
+ * sách là mời sửa nhầm trong lúc đang cuộn tìm người khác.
+ */
+function SuaLienLac({ n }: { n: NguoiDung }) {
+  const [s, act, dang] = useActionState(suaLienLac, dauTien)
+  const [mo, setMo] = useState(false)
+
+  if (!mo) return <Button type="button" onClick={() => setMo(true)}>Sửa liên lạc</Button>
+  return (
+    <form action={act} className="w-full max-w-sm space-y-3">
+      <input type="hidden" name="user_id" value={n.user_id} />
+      <Field label="Họ tên">
+        <Input name="ho_ten" defaultValue={n.ho_ten} required maxLength={120} />
+      </Field>
+      <Field label="Email" hint="Cũng là địa chỉ nhận mã đăng nhập">
+        <Input name="email" defaultValue={n.email ?? ''} inputMode="email" />
+      </Field>
+      <Field label="Số điện thoại">
+        <Input name="phone" defaultValue={n.phone ?? ''} inputMode="tel" className="num" />
+      </Field>
+      {s.error && <Hop tone="xau">{s.error}</Hop>}
+      {s.ok && <Hop tone="tot">{s.ok}</Hop>}
+      <div className="flex gap-2">
+        <Button dang="chinh" type="submit" disabled={dang}>
+          {dang ? 'Đang lưu…' : 'Lưu'}
+        </Button>
+        <Button type="button" onClick={() => setMo(false)}>Thôi</Button>
+      </div>
+    </form>
+  )
+}
+
 function ThuHoi({ n, vaiTro }: { n: NguoiDung; vaiTro: string }) {
   const [s, act, dang] = useActionState(ngungNhanSu, dauTien)
   return (
@@ -170,7 +204,10 @@ function Dong({ n }: { n: NguoiDung }) {
           <p className="mt-1.5 text-[0.75rem] text-faint">Tạo ngày {ngayVN(n.tao_luc)}</p>
         </div>
 
-        <DoiMatKhau n={n} />
+        <div className="flex flex-wrap items-start gap-2">
+          <SuaLienLac n={n} />
+          <DoiMatKhau n={n} />
+        </div>
       </div>
     </li>
   )

@@ -307,3 +307,270 @@ end
 $fn$;
 revoke execute on function public.auth_don_ma() from public, anon, authenticated;
 grant execute on function public.auth_don_ma() to service_role;
+
+-- ═════════ TỰ PHỤC VỤ: ĐỔI MẬT KHẨU VÀ THÔNG TIN LIÊN LẠC ═══════════════════
+--
+-- Vì sao cần: trước đây KHÔNG có đường nào để cư dân tự đặt mật khẩu hay sửa số
+-- điện thoại của mình. auth_dat_mat_khau nhận p_uid tuỳ ý nên bị thu hồi khỏi
+-- authenticated — đúng, vì cấp nó ra là ai cũng đổi mật khẩu của cả tòa. Nhưng
+-- hệ quả là mọi việc nhỏ nhất cũng phải nhờ ban quản lý, nhân với số căn của
+-- cả khu trong đúng tuần dán poster.
+--
+-- Cách chữa không phải là cấp lại quyền cũ mà là hàm MỚI không nhận uid: danh
+-- tính lấy từ auth.uid(), nên người gọi chỉ sửa được chính mình.
+--
+-- GHI CẢ HAI BẢNG, không chỉ một. Đăng nhập đọc auth.users.email (auth_tim);
+-- màn hình đọc profiles.email. Trigger on_auth_user_created chỉ chạy lúc
+-- INSERT nên không đồng bộ hộ lần sửa nào. Sửa mỗi profiles là màn hình hiện
+-- email mới trong khi đăng nhập vẫn ăn email cũ — một tính năng nửa vời tệ hơn
+-- là không có, vì nó làm người dùng tin rằng mình đã đổi xong.
+
+/**
+ * Dự án để ghi sổ kiểm toán cho một người.
+ *
+ * audit_log lọc bằng is_staff(project_id), mà is_staff(null) luôn false — nên
+ * một dòng sổ không có dự án là dòng không màn nào đọc được. Lấy dự án từ căn
+ * đang ở; không có căn thì lấy từ phân công nhân sự.
+ */
+create or replace function public.auth_du_an_cua(p_uid uuid)
+returns uuid language sql stable security definer set search_path = public as $fn$
+  select coalesce(
+    (select b.project_id
+       from unit_memberships m
+       join units u     on u.id = m.unit_id
+       join buildings b on b.id = u.building_id
+      where m.user_id = p_uid and m.status = 'active'
+        and (m.valid_to is null or m.valid_to >= current_date)
+      order by b.project_id limit 1),
+    (select s.project_id from staff_assignments s
+      where s.user_id = p_uid and s.is_active
+      order by s.project_id limit 1));
+$fn$;
+
+/** Độ dài tối thiểu của mật khẩu tự đặt. Ngắn hơn thì lớp đếm lượt dò ở tầng
+ *  database cũng không cứu nổi — 6 ký tự số là dò xong trong vài phút. */
+create or replace function public.auth_mat_khau_toi_thieu()
+returns int language sql immutable as $fn$ select 8 $fn$;
+
+/**
+ * Cư dân tự đổi mật khẩu của CHÍNH MÌNH.
+ *
+ * Trả về mã trạng thái, không phải boolean: "sai mật khẩu cũ" và "mật khẩu mới
+ * quá ngắn" là hai việc người dùng phải làm hai chuyện khác nhau để sửa, gộp
+ * thành false là bắt họ đoán.
+ *
+ * CHƯA CÓ MẬT KHẨU thì cho đặt lần đầu mà không đòi mật khẩu cũ. Phần lớn cư
+ * dân vào bằng mã một lần và chưa từng có mật khẩu; đòi một thứ họ không có là
+ * khoá vĩnh viễn tính năng này với đúng nhóm cần nó nhất. Phiên đăng nhập hiện
+ * tại đã là bằng chứng kiểm soát được hộp thư — bằng chứng ngang với một lần
+ * đặt lại mật khẩu qua email ở bất kỳ hệ thống nào khác.
+ */
+create or replace function public.auth_doi_mat_khau_cua_toi(p_cu text, p_moi text)
+returns text
+language plpgsql volatile security definer set search_path = auth, public as $fn$
+declare v_uid uuid := auth.uid(); v_hash text;
+begin
+  if v_uid is null then return 'chua_dang_nhap'; end if;
+  if length(coalesce(p_moi, '')) < public.auth_mat_khau_toi_thieu() then
+    return 'qua_ngan';
+  end if;
+
+  select u.mat_khau_hash into v_hash from auth.users u where u.id = v_uid;
+  -- Đã có mật khẩu thì phải biết mật khẩu cũ. Không có bước này thì một phiên
+  -- bị chiếm biến thành chiếm tài khoản vĩnh viễn, còn chủ tài khoản thì mất
+  -- luôn đường vào.
+  if v_hash is not null and v_hash <> crypt(coalesce(p_cu, ''), v_hash) then
+    return 'sai_mat_khau_cu';
+  end if;
+
+  update auth.users set mat_khau_hash = crypt(p_moi, gen_salt('bf', 10))
+   where id = v_uid;
+  -- Cùng lý do với auth_dat_mat_khau: đổi mật khẩu mà để lại một mã một lần
+  -- còn sống là để lại đúng cái cửa vừa định đóng.
+  update auth.ma_dang_nhap set dung_luc = now()
+   where user_id = v_uid and dung_luc is null;
+
+  -- KHÔNG BAO GIỜ chép mật khẩu sang sổ, kể cả bản băm. Sổ ghi LÀ CÓ ĐỔI.
+  insert into public.audit_log (actor_id, actor_role, bang, ban_ghi, thao_tac,
+                                project_id, truoc, sau)
+  values (v_uid, 'authenticated', 'auth.users', v_uid::text, 'UPDATE',
+          public.auth_du_an_cua(v_uid),
+          jsonb_build_object('mat_khau', v_hash is not null),
+          jsonb_build_object('mat_khau', true));
+  return 'ok';
+end
+$fn$;
+
+/**
+ * Cư dân tự sửa tên và thông tin liên lạc của CHÍNH MÌNH.
+ *
+ * KHÔNG ĐƯỢC XOÁ HẾT CẢ HAI. auth_tim() tìm người theo email hoặc số điện
+ * thoại; xoá sạch cả hai là tự khoá mình ra ngoài vĩnh viễn, và không màn nào
+ * ngăn được vì lúc đó họ đã không đăng nhập lại được để sửa.
+ */
+create or replace function public.auth_doi_lien_lac_cua_toi(
+  p_ho_ten text, p_email text, p_phone text)
+returns text
+language plpgsql volatile security definer set search_path = auth, public as $fn$
+declare
+  v_uid   uuid := auth.uid();
+  v_email text := lower(nullif(btrim(coalesce(p_email, '')), ''));
+  v_phone text := nullif(btrim(coalesce(p_phone, '')), '');
+  v_ten   text := nullif(btrim(coalesce(p_ho_ten, '')), '');
+  v_cu    record;
+begin
+  if v_uid is null then return 'chua_dang_nhap'; end if;
+  if v_email is null and v_phone is null then return 'thieu_lien_lac'; end if;
+  if v_ten is null then return 'thieu_ten'; end if;
+
+  select u.email, u.phone into v_cu from auth.users u where u.id = v_uid;
+
+  -- Kiểm trùng TRƯỚC để trả về đúng cái nào trùng. Vẫn bắt unique_violation ở
+  -- dưới cho trường hợp hai người đổi cùng lúc — kiểm trước không phải là khoá.
+  if v_email is not null and exists (
+       select 1 from auth.users u where u.email = v_email and u.id <> v_uid) then
+    return 'trung_email';
+  end if;
+  if v_phone is not null and exists (
+       select 1 from auth.users u where u.phone = v_phone and u.id <> v_uid) then
+    return 'trung_phone';
+  end if;
+
+  begin
+    update auth.users
+       set email = v_email, phone = v_phone,
+           raw_user_meta_data = raw_user_meta_data || jsonb_build_object('full_name', v_ten)
+     where id = v_uid;
+    update public.profiles
+       set email = v_email, phone = v_phone, full_name = v_ten
+     where id = v_uid;
+  exception
+    when unique_violation then return 'trung_lien_lac';
+  end;
+
+  -- Đổi danh tính thì mã một lần đang treo mất hiệu lực: mã đó gửi tới địa chỉ
+  -- CŨ, và từ giây này địa chỉ cũ không còn là đường vào tài khoản nữa.
+  if v_cu.email is distinct from v_email or v_cu.phone is distinct from v_phone then
+    update auth.ma_dang_nhap set dung_luc = now()
+     where user_id = v_uid and dung_luc is null;
+  end if;
+
+  insert into public.audit_log (actor_id, actor_role, bang, ban_ghi, thao_tac,
+                                project_id, truoc, sau)
+  values (v_uid, 'authenticated', 'auth.users', v_uid::text, 'UPDATE',
+          public.auth_du_an_cua(v_uid),
+          jsonb_build_object('email', v_cu.email, 'phone', v_cu.phone),
+          jsonb_build_object('email', v_email,   'phone', v_phone));
+  return 'ok';
+end
+$fn$;
+
+/**
+ * Ban quản lý sửa thông tin liên lạc của một người TRONG KHU CỦA MÌNH.
+ *
+ * Nửa còn lại của cùng một lỗ hổng: màn Người dùng tạo được tài khoản, đặt
+ * được mật khẩu, xoá được tài khoản — nhưng không sửa được một email gõ sai
+ * lúc nhập liệu. Cách duy nhất còn lại là xoá đi tạo lại, mà xoá thì vướng
+ * khoá ngoại nếu người đó đã được gán căn.
+ *
+ * Phạm vi khoá hai lớp: người gọi phải là trưởng ban quản lý CỦA KHU ĐÓ, và
+ * người bị sửa phải có liên hệ với chính khu đó — đúng mệnh đề mà
+ * bql_danh_sach_nguoi_dung dùng để không liệt kê cư dân khu khác.
+ */
+create or replace function public.auth_sua_lien_lac(
+  p_project uuid, p_uid uuid, p_ho_ten text, p_email text, p_phone text)
+returns text
+language plpgsql volatile security definer set search_path = auth, public as $fn$
+declare
+  v_email text := lower(nullif(btrim(coalesce(p_email, '')), ''));
+  v_phone text := nullif(btrim(coalesce(p_phone, '')), '');
+  v_ten   text := nullif(btrim(coalesce(p_ho_ten, '')), '');
+  v_cu    record;
+begin
+  if not public.is_bql_manager(p_project) then
+    raise exception 'Chi truong ban quan ly moi sua duoc thong tin lien lac'
+      using errcode = '42501';
+  end if;
+  if not exists (
+       select 1 from public.staff_assignments s
+        where s.user_id = p_uid and s.project_id = p_project and s.is_active
+       union all
+       select 1 from public.unit_memberships m
+        join public.units u     on u.id = m.unit_id
+        join public.buildings b on b.id = u.building_id
+       where m.user_id = p_uid and b.project_id = p_project and m.status = 'active')
+  then
+    raise exception 'Nguoi nay khong thuoc khu cua ban' using errcode = '42501';
+  end if;
+
+  if v_email is null and v_phone is null then return 'thieu_lien_lac'; end if;
+  if v_ten is null then return 'thieu_ten'; end if;
+
+  select u.email, u.phone into v_cu from auth.users u where u.id = p_uid;
+  if not found then return 'khong_co_nguoi'; end if;
+
+  if v_email is not null and exists (
+       select 1 from auth.users u where u.email = v_email and u.id <> p_uid) then
+    return 'trung_email';
+  end if;
+  if v_phone is not null and exists (
+       select 1 from auth.users u where u.phone = v_phone and u.id <> p_uid) then
+    return 'trung_phone';
+  end if;
+
+  begin
+    update auth.users
+       set email = v_email, phone = v_phone,
+           raw_user_meta_data = raw_user_meta_data || jsonb_build_object('full_name', v_ten)
+     where id = p_uid;
+    update public.profiles
+       set email = v_email, phone = v_phone, full_name = v_ten
+     where id = p_uid;
+  exception
+    when unique_violation then return 'trung_lien_lac';
+  end;
+
+  if v_cu.email is distinct from v_email or v_cu.phone is distinct from v_phone then
+    update auth.ma_dang_nhap set dung_luc = now()
+     where user_id = p_uid and dung_luc is null;
+  end if;
+
+  -- actor_id là NGƯỜI SỬA, ban_ghi là người BỊ SỬA. Đổi email đăng nhập của
+  -- người khác là việc phải truy được ra ai làm — nhật ký kiểm toán của khu có
+  -- màn hình đọc, nên dòng này nhìn thấy được chứ không nằm im trong bảng.
+  insert into public.audit_log (actor_id, actor_role, bang, ban_ghi, thao_tac,
+                                project_id, truoc, sau)
+  values (auth.uid(), 'bql_manager', 'auth.users', p_uid::text, 'UPDATE', p_project,
+          jsonb_build_object('email', v_cu.email, 'phone', v_cu.phone),
+          jsonb_build_object('email', v_email,   'phone', v_phone));
+  return 'ok';
+end
+$fn$;
+
+/**
+ * Tài khoản này đã đặt mật khẩu chưa.
+ *
+ * Màn hồ sơ cần biết để quyết định có hiện ô "mật khẩu hiện tại" hay không —
+ * hiện một ô bắt buộc mà người dùng không thể điền là cách chắc chắn nhất để
+ * họ bỏ cuộc. Không đọc thẳng auth.users từ app được: authenticated không có
+ * quyền select trên bảng đó, và giữ nguyên như vậy là đúng.
+ *
+ * Trả về boolean, KHÔNG trả về bản băm hay bất cứ mảnh nào của nó.
+ */
+create or replace function public.auth_co_mat_khau()
+returns boolean
+language sql stable security definer set search_path = auth, public as $fn$
+  select exists (
+    select 1 from auth.users u where u.id = auth.uid() and u.mat_khau_hash is not null);
+$fn$;
+
+-- Ba hàm trên KHÔNG nhận uid tuỳ ý (hai hàm đầu) hoặc tự chốt quyền bên trong
+-- (hàm thứ ba), nên cấp cho authenticated ở đây không mở thêm gì. Đây chính là
+-- điểm khác với auth_dat_mat_khau(uuid, text) ở trên — hàm đó nhận uid nên
+-- phải nằm sau service_role.
+grant execute on function public.auth_doi_mat_khau_cua_toi(text, text)        to authenticated;
+grant execute on function public.auth_doi_lien_lac_cua_toi(text, text, text)  to authenticated;
+grant execute on function public.auth_sua_lien_lac(uuid, uuid, text, text, text) to authenticated;
+grant execute on function public.auth_du_an_cua(uuid)            to authenticated, service_role;
+grant execute on function public.auth_mat_khau_toi_thieu()       to authenticated, service_role;
+grant execute on function public.auth_co_mat_khau()              to authenticated;
