@@ -13,17 +13,51 @@ import {
 } from '@/components/icons'
 
 export function BqlShell({
-  children, base = '', duAn, khu, dsKhu, chonKhu,
+  children, base = '', duAn, khu, dsKhu, chonKhu, vaiTro,
 }: {
   children: ReactNode; base?: string; duAn?: string
   khu?: Khu | null; dsKhu?: Khu[]; chonKhu?: (formData: FormData) => void
+  /** Vai trò ở khu đang xem. 'bqt' rút gọn thanh bên — xem ghi chú dưới. */
+  vaiTro?: string | null
 }) {
   // Bản demo không có phiên nào để thoát ra — xem ghi chú ở ResidentShell.
   const laThat = base === ''
   // Hộp chọn khu luôn hiện tên khu đang xem. Để dòng phụ dưới "VBuilding" nói
   // lại đúng cái tên đó là in hai lần cùng một chữ trong bốn chục pixel.
   const coHopChon = !!(khu && chonKhu && nenHienHopChon(dsKhu ?? []))
-  const nav = (
+  /**
+   * Ban quản trị thấy một thanh bên KHÁC HẲN.
+   *
+   * Họ vào đây qua bốn màn mà họ ký hoặc chốt — sổ quỹ, biểu quyết, báo cáo
+   * quý, bàn giao. Đưa họ luôn cả đối soát tiền về, kho vật tư và xếp ca là
+   * sai vai: đó là việc của bên mà họ có nhiệm vụ giám sát, và phần lớn mục
+   * bấm vào cũng chỉ nhận lại lỗi quyền từ database.
+   *
+   * Đây là RÚT GỌN ĐIỀU HƯỚNG, không phải chốt quyền. Chốt thật nằm ở các hàm
+   * SQL, mỗi hàm tự kiểm đầu vào — gõ thẳng địa chỉ vẫn không đọc được thứ
+   * không được phép.
+   */
+  const laBqt = vaiTro === 'bqt'
+  const navBqt = (
+    <>
+      <NhomNav nhan="Ban quản trị">
+        <NavDoc href={`${base}/bqt`} icon={<IcBieuDo />} chinhXac>Giám sát vận hành</NavDoc>
+        <NavDoc href={`${base}/bql/quy-bao-tri`} icon={<IcKet />}>Quỹ bảo trì 2%</NavDoc>
+        <NavDoc href={`${base}/bql/bieu-quyet`} icon={<IcBieuQuyet />}>Biểu quyết hội nghị</NavDoc>
+        <NavDoc href={`${base}/bql/bao-cao`} icon={<IcBaoCao />}>Báo cáo quý</NavDoc>
+        <NavDoc href={`${base}/bql/ban-giao`} icon={<IcBanGiao />}>Chốt sổ bàn giao</NavDoc>
+      </NhomNav>
+      <NhomNav nhan="Xem cho biết">
+        <NavDoc href={`${base}/bql/bang-tin`} icon={<IcLoa />}>Bảng tin</NavDoc>
+        <NavDoc href={`${base}/bql/so-tay`} icon={<IcSach />}>Sổ tay cư dân</NavDoc>
+        <NavDoc href={`${base}/bql/nhat-ky`} icon={<IcSo />}>Nhật ký kiểm toán</NavDoc>
+      </NhomNav>
+      <span className="contents lg:hidden">
+        <NavDoc href={base || '/'} icon={<IcNha />} chinhXac>Về màn cư dân</NavDoc>
+      </span>
+    </>
+  )
+  const navBql = (
     <>
       {/* NHÓM THEO TẦN SUẤT ĐỤNG TỚI, không theo chủ đề.
           Chủ đề nghe hợp lý khi vẽ sơ đồ, nhưng người trực ban không mở thanh
@@ -97,6 +131,7 @@ export function BqlShell({
       </span>
     </>
   )
+  const nav = laBqt ? navBqt : navBql
 
   return (
     <div className="min-h-dvh bg-canvas lg:flex">

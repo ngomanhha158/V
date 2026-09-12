@@ -5,7 +5,7 @@ import { chonKhu } from './chon-khu'
 export default async function BqlLayout({ children }: { children: React.ReactNode }) {
   const { dang, ds } = await khuDangXem()
   return (
-    <BqlShell duAn={dang?.name} khu={dang} dsKhu={ds} chonKhu={chonKhu}>
+    <BqlShell duAn={dang?.name} khu={dang} dsKhu={ds} chonKhu={chonKhu} vaiTro={dang?.vai_tro}>
       {children}
     </BqlShell>
   )

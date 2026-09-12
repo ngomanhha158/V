@@ -24,6 +24,14 @@ export default async function Home() {
   // mình phụ trách, không kèm một lời giải thích nào.
   const { data: khuQuanLy } = await db.rpc('du_an_cua_toi')
   const isStaff = (khuQuanLy ?? []).length > 0
+  // Ban quản trị có lối vào RIÊNG. Họ là bên giám sát đơn vị quản lý, nên đẩy
+  // họ vào thanh điều hướng vận hành ba mươi mục của chính bên bị giám sát là
+  // sai vai — và phần lớn mục ở đó họ bấm vào cũng chỉ nhận về lỗi quyền.
+  //
+  // vai_tro là vai CAO NHẤT ở khu đó, nên người vừa là trưởng BQL vừa là BQT
+  // sẽ không thấy link này. Đúng với ý định: lối chính của họ là màn BQL, và
+  // /bqt vẫn mở nếu họ gõ thẳng địa chỉ.
+  const laBQT = (khuQuanLy ?? []).some((k) => k.vai_tro === 'bqt')
 
   const active = memberships?.filter((m) => m.status === 'active') ?? []
   const pending = memberships?.filter((m) => m.status === 'pending') ?? []
@@ -117,7 +125,12 @@ export default async function Home() {
         <Link href="/tra-gop" className="font-medium text-muted hover:text-ink">Khoản chia đợt</Link>
         <Link href="/thi-cong" className="font-medium text-muted hover:text-ink">Chuyển nhà &amp; sửa chữa</Link>
         <Link href="/bao-cao" className="font-medium text-muted hover:text-ink">Báo cáo quý</Link>
-        {isStaff && (
+        {laBQT && (
+          <Link href="/bqt" className="font-medium text-brand hover:underline">
+            Ban quản trị — giám sát →
+          </Link>
+        )}
+        {isStaff && !laBQT && (
           <Link href="/bql" className="font-medium text-brand hover:underline">
             Quản lý tòa nhà (BQL) →
           </Link>

@@ -32,13 +32,39 @@ const NGAY = 86_400_000
 /** Quá hạn này mà chưa đối chiếu lại thì con số của ngân hàng đã cũ. */
 export const HAN_DOI_CHIEU = 45
 
+/** Một dòng sổ quỹ, đúng phần mà phép đối chiếu cần. */
+export type DongLuyKe = { ngay: string; luy_ke: number }
+
+/**
+ * Số dư sổ TẠI MỘT NGÀY, không phải số dư hôm nay.
+ *
+ * Sổ đã có sẵn cột luỹ kế nên chỉ việc lấy dòng cuối cùng có ngày không vượt
+ * mốc. Sổ được trả về theo thứ tự tăng dần (quy_so_ke_toan order by ngay,
+ * ghi_luc, id) và hàm này không giả định gì thêm ngoài thứ tự đó.
+ */
+export function soDuTaiNgay(dong: DongLuyKe[], ngay: string): number {
+  let duoc = 0
+  for (const d of dong) {
+    if (d.ngay > ngay) break
+    duoc = d.luy_ke
+  }
+  return duoc
+}
+
 /**
  * Sổ tự nói sổ đúng thì không chứng minh gì cả. Con số duy nhất chứng minh quỹ
  * còn nguyên là con số ngân hàng báo — nên trạng thái đối chiếu là thứ hiện to
  * nhất trên màn, không phải số dư.
+ *
+ * NHẬN CẢ SỔ, KHÔNG NHẬN MỘT SỐ DƯ. `soNganHang` là ẢNH CHỤP tại `ngay`, nên
+ * thứ phải đem ra so là số dư sổ TẠI CHÍNH NGÀY ĐÓ. Bản trước nhận `soSach:
+ * number` và chỗ gọi truyền vào số dư HÔM NAY — nghĩa là mỗi khoản thu chi
+ * phát sinh sau ngày đối chiếu lại hiện ra thành một khoản lệch không có thật,
+ * và màn hình hét "SỔ VÀ NGÂN HÀNG KHÔNG KHỚP" mỗi ngày cho tới lần đối chiếu
+ * sau. Đưa cả sổ vào đây để chỗ gọi không còn chọn nhầm con số được nữa.
  */
 export function loiDoiChieu(a: {
-  soSach: number
+  dong: DongLuyKe[]
   soNganHang: number | null
   ngay: string | null
   homNay?: Date
@@ -53,7 +79,7 @@ export function loiDoiChieu(a: {
     }
   }
 
-  const lech = a.soSach - a.soNganHang
+  const lech = soDuTaiNgay(a.dong, a.ngay) - a.soNganHang
   const tuoi = Math.floor(
     ((a.homNay ?? new Date()).getTime() - new Date(a.ngay + 'T00:00:00Z').getTime()) / NGAY,
   )
