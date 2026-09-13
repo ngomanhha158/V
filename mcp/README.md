@@ -13,6 +13,7 @@ Anh: căn P1-10.01 báo vòi bếp rò, mở yêu cầu giúp tôi, mức bình 
 | Đọc | Ghi |
 |---|---|
 | `danh_sach_khu` · `tong_quan` · `cong_no` | `tao_yeu_cau` |
+| `bao_cao_bqt` | |
 | `ton_kho` · `kien_dang_giu` · `so_ra_vao` | `nhan_kien_hang` · `giao_kien_hang` |
 | `tim_yeu_cau` | |
 

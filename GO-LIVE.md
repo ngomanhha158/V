@@ -17,12 +17,12 @@ Không phải kế hoạch — là những gì đã kiểm và những gì còn 
 | Hạng mục | Trạng thái |
 |---|---|
 | Database | Postgres trên Railway, vùng **Singapore**, cùng vùng với app |
-| Schema + RLS | `schema.sql` + `auth_hooks.sql`, chạy lại được từ đầu bất cứ lúc nào |
+| Schema + RLS | `schema.sql` + `auth_hooks.sql`, chạy lại được từ đầu bất cứ lúc nào — `npm run verify` áp lại lần hai lên chính database vừa dựng, nên câu này là một bài test chứ không phải một lời hứa |
 | Đăng nhập | Tự dựng (`railway/03_auth.sql`): mật khẩu bcrypt + mã một lần, đếm lượt dò ở tầng DB |
 | Backup | GitHub Actions dump hằng ngày, gồm cả schema `auth` |
 | Lưu trữ ảnh | Volume của service `v`, phục vụ qua `/api/anh` — hỏi lại quyền từng lần xem |
 | Quyền `anon` | **Không có bảng nào** — request không JWT không đọc được gì |
-| Bộ test | 32 file SQL độc lập + cả ngăn xếp Railway + 422 test JS, xanh trên CI mỗi lần push |
+| Bộ test | 32 file SQL độc lập + cả ngăn xếp Railway + 428 test JS, xanh trên CI mỗi lần push |
 | Giao diện | 68 route thật (chưa kể bản demo), build sạch, sáng/tối |
 | Ban quản trị | Khu vực riêng `/bqt` — chỉ đọc, theo quý, giám sát BQL và quỹ bảo trì 2% |
 

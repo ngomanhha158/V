@@ -2,23 +2,11 @@ import Link from 'next/link'
 import type { ComponentProps, ReactNode } from 'react'
 // Định dạng ngày/số nằm ở lib/ngay.ts: nó thuần tuý nên test bằng node:test
 // được, mà vẫn xuất lại từ đây để mọi màn đang import khỏi phải sửa.
-export { ngayGioVN, ngayVN, soVN } from '@/lib/ngay'
+export { ngayGioVN, ngayVN, soVN, vnd, vndGon } from '@/lib/ngay'
 
 // Nhận cả number vì `cond && 'lop'` với cond là số sẽ ra số, không phải false.
 export const cx = (...v: (string | number | false | null | undefined)[]) =>
   v.filter((x): x is string => typeof x === 'string' && x.length > 0).join(' ')
-
-/** Tiền VND. Luôn dùng hàm này — đừng nơi thì 2.983.500đ, nơi thì 2983500 VND. */
-export const vnd = (n: number) => n.toLocaleString('vi-VN') + 'đ'
-
-/** Số tiền rút gọn cho ô thống kê: 33.1 tr, 1.2 tỷ. Bảng thì vẫn dùng số đầy đủ. */
-export function vndGon(n: number) {
-  const a = Math.abs(n)
-  if (a >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1).replace('.', ',') + ' tỷ'
-  if (a >= 1_000_000) return (n / 1_000_000).toFixed(1).replace('.', ',') + ' tr'
-  if (a >= 1_000) return Math.round(n / 1_000) + ' N'
-  return String(n)
-}
 
 // ─────────────────────────── Bề mặt ───────────────────────────
 

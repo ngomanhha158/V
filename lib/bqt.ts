@@ -12,6 +12,7 @@
  */
 
 import { homNayVN } from './ky.ts'
+import { ngayVN, vnd } from './ngay.ts'
 // soDuTaiNgay sống ở lib/quy.ts cùng phần còn lại của nghiệp vụ quỹ. Chép lại
 // một bản thứ hai ở đây là dựng đúng cái chỗ lệch mà cả thay đổi này đi bịt.
 import { soDuTaiNgay, type DongLuyKe } from './quy.ts'
@@ -164,4 +165,66 @@ export const TOI_THIEU_DANH_GIA = 10
 
 export function duMauDanhGia(soLuot: number): boolean {
   return soLuot >= TOI_THIEU_DANH_GIA
+}
+
+/**
+ * Việc phải đưa ra kỳ họp Ban quản trị.
+ *
+ * Ban quản trị họp mỗi quý một lần, và thứ họ cần biết trước tiên là "kỳ này
+ * có gì phải chất vấn", không phải "kỳ này số bao nhiêu". Danh sách này gom
+ * câu hỏi lên đầu thay vì bắt người đọc tự nhặt ra từ mười hai ô số.
+ *
+ * Ở ĐÂY chứ không nằm trong màn /bqt, vì cùng danh sách đó còn phải đi vào bộ
+ * slide trình trước kỳ họp (qua MCP). Hai bản chép tay thì sớm muộn cũng lệch,
+ * và lệch ở đây nghĩa là tờ slide chiếu trong phòng họp nói khác màn hình mà
+ * ban quản trị mở ra để đối chiếu ngay lúc đó.
+ *
+ * Trả về CẢ mã lẫn câu: màn hình và slide cần đúng một câu, còn bên nào muốn
+ * tự xếp thứ tự hay tô màu theo loại thì có `loai` mà dùng.
+ */
+export type LoaiViecKyHop =
+  | 'quy_chua_doi_chieu' | 'quy_lech' | 'quy_cu'
+  | 'sla_vung_mu' | 'cong_no_qua_han'
+
+export type ViecKyHop = { loai: LoaiViecKyHop; cau: string }
+
+export function viecKyHop(a: {
+  quy: KetQuaSoatQuy
+  /** Ngày ghi trên bản đối chiếu — null khi chưa từng đối chiếu. */
+  doiChieuNgay: string | null
+  mu: VungMu
+  sla: SoTicket
+  congNoQuaHan: number
+  soCanNo: number
+}): ViecKyHop[] {
+  const ds: ViecKyHop[] = []
+
+  if (a.quy.tinh === 'chua_doi_chieu') {
+    ds.push({ loai: 'quy_chua_doi_chieu',
+      cau: 'Quỹ bảo trì chưa từng được đối chiếu với sao kê ngân hàng.' })
+  } else if (a.quy.tinh === 'lech') {
+    // Lệch đọc theo TRỊ TUYỆT ĐỐI kèm ngày đối chiếu: con số này chỉ có nghĩa
+    // tại đúng ngày đó, và bỏ ngày đi là mời người nghe đem nó so với số dư
+    // hôm nay — đúng cái bẫy mà soatQuy() sinh ra để dẹp.
+    ds.push({ loai: 'quy_lech',
+      cau: `Sổ quỹ và sao kê lệch ${vnd(Math.abs(a.quy.lech ?? 0))} tại ngày đối chiếu `
+        + `${a.doiChieuNgay ? ngayVN(a.doiChieuNgay) : '(không rõ)'}.` })
+  } else if (a.quy.tinh === 'cu') {
+    ds.push({ loai: 'quy_cu',
+      cau: `Quỹ bảo trì đối chiếu lần cuối cách đây ${a.quy.soNgayCach} ngày.` })
+  }
+
+  if (a.mu.dangNgai) {
+    ds.push({ loai: 'sla_vung_mu',
+      cau: `${Math.round(a.mu.tyLe * 100)}% yêu cầu trong kỳ nằm ngoài phép đo SLA `
+        + `(${a.sla.ticket_tu_choi} bị từ chối, ${a.sla.ticket_khong_co_sla} thuộc danh mục `
+        + 'chưa khai SLA).' })
+  }
+
+  if (a.congNoQuaHan > 0) {
+    ds.push({ loai: 'cong_no_qua_han',
+      cau: `${vnd(a.congNoQuaHan)} công nợ đã quá hạn, ở ${a.soCanNo} căn.` })
+  }
+
+  return ds
 }

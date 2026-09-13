@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import {
   HAN_DOI_CHIEU_NGAY, NGUONG_VUNG_MU, TOI_THIEU_DANH_GIA,
-  duMauDanhGia, quyChua, quyHomNay, quyTruoc, soatQuy, vungMuSla,
+  duMauDanhGia, quyChua, quyHomNay, quyTruoc, soatQuy, viecKyHop, vungMuSla,
+  type KetQuaSoatQuy, type SoTicket, type VungMu,
 } from './bqt.ts'
 import { soDuTaiNgay } from './quy.ts'
 
@@ -188,4 +189,83 @@ test('màn cư dân có lối vào riêng cho BQT', () => {
   const p = doc('app/(cu-dan)/page.tsx')
   assert.match(p, /vai_tro === 'bqt'/)
   assert.match(p, /href="\/bqt"/)
+})
+
+// ── Việc đưa ra kỳ họp: một danh sách, hai bề mặt ───────────────────────────
+
+const quyKhop: KetQuaSoatQuy = {
+  tinh: 'khop', soDuSo: 100, soDuLucDoiChieu: 100, lech: 0, soNgayCach: 3,
+}
+const muSach: VungMu = { soNgoai: 0, tyLe: 0, dangNgai: false }
+const slaSach: SoTicket = {
+  tong_ticket: 20, ticket_tu_choi: 0, ticket_khong_co_sla: 0,
+  ticket_co_ket_luan: 20, ty_le_dung_sla: 0.95,
+}
+const nen = {
+  quy: quyKhop, doiChieuNgay: '2026-09-01', mu: muSach, sla: slaSach,
+  congNoQuaHan: 0, soCanNo: 0,
+}
+
+test('khu sạch thì kỳ họp không có việc nào phải chất vấn', () => {
+  assert.deepEqual(viecKyHop(nen), [])
+})
+
+test('quỹ chưa từng đối chiếu là việc đầu tiên phải nói', () => {
+  const v = viecKyHop({ ...nen,
+    quy: { tinh: 'chua_doi_chieu', soDuSo: 0, soDuLucDoiChieu: null, lech: null, soNgayCach: null },
+    doiChieuNgay: null })
+  assert.equal(v.length, 1)
+  assert.equal(v[0].loai, 'quy_chua_doi_chieu')
+})
+
+test('quỹ lệch thì câu nói ra KÈM ngày đối chiếu', () => {
+  // Con số lệch chỉ có nghĩa tại đúng ngày đó. Bỏ ngày đi là mời người nghe
+  // đem nó so với số dư hôm nay — đúng cái bẫy soatQuy() sinh ra để dẹp, và
+  // trong phòng họp thì không ai dừng lại để hỏi "lệch tính tới lúc nào".
+  const v = viecKyHop({ ...nen,
+    quy: { tinh: 'lech', soDuSo: 900, soDuLucDoiChieu: 1000, lech: -250000, soNgayCach: 5 },
+    doiChieuNgay: '2026-08-31' })
+  assert.equal(v[0].loai, 'quy_lech')
+  assert.match(v[0].cau, /250\.000đ/, 'không đọc ra tiền, hoặc không lấy trị tuyệt đối')
+  assert.match(v[0].cau, /31\/08\/2026|31\/8\/2026/, 'thiếu ngày đối chiếu')
+})
+
+test('vùng mù SLA nói ra CẢ HAI cách làm đẹp tỷ lệ', () => {
+  // Từ chối bớt yêu cầu, và để danh mục không khai SLA. Chỉ nói tổng thì ban
+  // quản trị không biết phải hỏi ai câu gì.
+  const sla: SoTicket = {
+    tong_ticket: 20, ticket_tu_choi: 4, ticket_khong_co_sla: 3,
+    ticket_co_ket_luan: 13, ty_le_dung_sla: 0.95,
+  }
+  const v = viecKyHop({ ...nen, sla, mu: vungMuSla(sla) })
+  assert.equal(v.length, 1)
+  assert.equal(v[0].loai, 'sla_vung_mu')
+  assert.match(v[0].cau, /4 bị từ chối/)
+  assert.match(v[0].cau, /3 thuộc danh mục/)
+})
+
+test('ba việc cùng lúc thì ra đủ ba, quỹ đứng trước', () => {
+  const sla: SoTicket = {
+    tong_ticket: 20, ticket_tu_choi: 6, ticket_khong_co_sla: 0,
+    ticket_co_ket_luan: 14, ty_le_dung_sla: 0.9,
+  }
+  const v = viecKyHop({ ...nen,
+    quy: { tinh: 'cu', soDuSo: 1, soDuLucDoiChieu: 1, lech: 0, soNgayCach: 90 },
+    sla, mu: vungMuSla(sla), congNoQuaHan: 12_000_000, soCanNo: 7 })
+  assert.deepEqual(v.map((x) => x.loai), ['quy_cu', 'sla_vung_mu', 'cong_no_qua_han'])
+  assert.match(v[2].cau, /12\.000\.000đ/)
+  assert.match(v[2].cau, /7 căn/)
+})
+
+test('màn /bqt và công cụ MCP dùng CHUNG viecKyHop, không ai chép lại', () => {
+  // Tờ slide chiếu trong phòng họp mà nói khác màn hình ban quản trị mở ra đối
+  // chiếu ngay lúc đó là chuyện không gỡ được bằng lời giải thích nào.
+  for (const f of ['app/bqt/page.tsx', 'mcp/cong-cu.ts']) {
+    assert.match(doc(f), /viecKyHop\(/, `${f} không dùng viecKyHop()`)
+  }
+  // Và không chỗ nào dựng lại câu đó bằng tay.
+  for (const f of ['app/bqt/page.tsx', 'mcp/cong-cu.ts']) {
+    assert.ok(!doc(f).includes('chưa từng được đối chiếu với sao kê'),
+      `${f} chép lại câu của viecKyHop() thay vì gọi nó`)
+  }
 })

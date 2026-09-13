@@ -234,7 +234,38 @@ nên mỗi dòng dưới đây là một GIẢ THUYẾT kèm điều kiện đ�
 | **Phản ánh ẩn danh** | Yêu cầu luôn gắn tên người gửi. Có loại việc cư dân không dám đứng tên: hàng xóm gây ồn, bảo vệ vòi vĩnh | Ban quản lý báo rằng có loại phản ánh chỉ đến qua kênh riêng tư, không qua app |
 | **Đặt lịch làm thủ tục** | Chưa có. Cư dân tới quầy là xếp hàng | Thời gian chờ ở quầy thành lời phàn nàn có thật, đo được |
 
-Mỗi cổng ở trên đều là một CON SỐ, không phải một cái tên tháng. Đó là cách duy
+### 5ter. Nhóm B — việc chạy bằng trợ lý, không nằm trong app
+
+Nhóm này khác hẳn 5bis. 5bis là màn hình phải dựng trong VBuilding. Nhóm B là
+việc mà **Claude làm bên ngoài app**, đọc dữ liệu qua MCP server ở `mcp/` rồi
+xuất ra Gamma, Canva, Gmail, Google Drive. App không gọi được những chỗ đó, và
+cũng không nên: một bộ slide mỗi quý một lần không đáng có một màn hình riêng.
+
+Nên việc của repo này chỉ là **mở đúng dữ liệu ra qua MCP**, rồi đứng sang bên.
+
+| Việc | Ai làm | Repo phải có gì | Tình trạng |
+|---|---|---|---|
+| **Slide báo cáo kỳ họp Ban quản trị** (Gamma / Canva) | Claude | `vbuilding_bao_cao_bqt` — số liệu kỳ + danh sách việc phải chất vấn, **cùng câu chữ** với màn `/bqt` | ✅ có |
+| **Thư nhắc nợ soạn sẵn vào Nháp Gmail** — kế toán chỉ bấm gửi | Claude | `vbuilding_cong_no` phải trả **email** chủ hộ, không chỉ điện thoại | ✅ có |
+| **Lưu báo cáo vào Google Drive** | Claude | không cần gì thêm — xuất Excel đã có ở `/bql/xuat` | ✅ có |
+| **Hóa đơn / phiếu thu xem trước dạng HTML** | app | `/phieu-thu/[id]` đã có kèm nút in. Hóa đơn thì chưa có bản xem trước riêng | ◻︎ còn thiếu nửa |
+| **Thanh toán trực tuyến qua SePay** | app | Webhook đối soát đã có; thiếu là *link thanh toán*, không phải đường tiền về | ◻︎ **đã có cổng ở 5bis** — mở khi tỷ lệ gạch nợ tự động dưới 80% sau hai kỳ |
+| **Bảng rà soát** | chưa rõ | Cần một câu định nghĩa: rà soát *cái gì*, ai đọc, và quyết định gì sau khi đọc | ❓ chưa đủ để làm |
+| **Design canvas** | chưa rõ | Nếu là bản vẽ giao diện trước khi code thì không cần nằm trong repo | ❓ chưa đủ để làm |
+| **AI agent** | chưa rõ | MCP server ở `mcp/` CHÍNH LÀ chỗ này. Nếu ý là thứ khác thì cần một câu tả việc nó làm thay người | ❓ chưa đủ để làm |
+
+**Một điều phải nói thẳng.** Ba dòng ❓ ở trên chưa làm được không phải vì khó,
+mà vì chưa có ai để hỏi "cái này giải quyết việc gì". §3 vẫn đúng: **chưa một
+người thật nào đăng nhập**. Slide cho kỳ họp Ban quản trị đầu tiên là thứ nên
+dựng khi đã biết kỳ họp đó bàn gì — còn hai công cụ MCP ở trên thì làm trước
+được, vì chúng chỉ mở dữ liệu sẵn có ra, không đoán trước nhu cầu của ai.
+
+**Ranh giới giữ ở đâu.** `vbuilding_cong_no` giờ trả về email và điện thoại chủ
+hộ. RLS vẫn chặn y hệt trên web: người gọi chỉ thấy khu mình quản lý, và cũng
+đúng những gì họ tự mở web ra xem được. MCP không có `service_role`, không có
+cửa sau — và vẫn **không một công cụ nào đụng tiền**.
+
+Mỗi cổng ở 5bis đều là một CON SỐ, không phải một cái tên tháng. Đó là cách duy
 nhất để bảng này không lặng lẽ biến tháng 2 thành tháng thêm tính năng.
 
 ---

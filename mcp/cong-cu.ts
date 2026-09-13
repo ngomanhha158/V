@@ -8,6 +8,9 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import type { Client } from '../lib/db/postgrest.ts'
+import {
+  duMauDanhGia, quyHomNay, soatQuy, viecKyHop, vungMuSla, type Ky,
+} from '../lib/bqt.ts'
 
 type Khu = { id: string; name: string }
 type Cong = {
@@ -92,10 +95,73 @@ export function dangKyCongCu(server: McpServer, c: Cong) {
     return { khu: k.name, so_lieu: data }
   }))
 
+  server.registerTool('vbuilding_bao_cao_bqt', {
+    title: 'Báo cáo kỳ họp Ban quản trị',
+    description: 'Số liệu giám sát một kỳ + DANH SÁCH VIỆC phải đưa ra kỳ họp Ban quản trị. '
+      + 'Dùng khi soạn báo cáo hoặc bộ slide trình trước kỳ họp. Trả về đúng những câu mà '
+      + 'màn /bqt hiện, nên slide và màn hình không nói khác nhau.',
+    inputSchema: {
+      khu: KHU,
+      tu: z.string().optional().describe('Ngày bắt đầu kỳ, dạng YYYY-MM-DD. Bỏ trống = quý này.'),
+      den: z.string().optional().describe('Ngày kết thúc kỳ, dạng YYYY-MM-DD.'),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ khu, tu, den }) => chay(async () => {
+    const { db, khu: k } = await mo(khu)
+    const ky: Ky = tu && den ? { tu, den, nhan: `${tu} – ${den}` } : quyHomNay()
+
+    const [tong, so, quy] = await Promise.all([
+      db.rpc('bql_dashboard', { p_project: k.id, p_tu: ky.tu, p_den: ky.den }),
+      db.rpc('quy_so_ke_toan', { p_project: k.id }),
+      db.from('quy_bao_tri')
+        .select('ngan_hang, so_tai_khoan, so_du_ngan_hang, doi_chieu_ngay')
+        .eq('project_id', k.id).maybeSingle(),
+    ])
+    // Không nuốt lỗi thành số 0: một báo cáo toàn số 0 vì truy vấn hỏng trông
+    // y hệt một khu vận hành sạch sẽ, mà đây là tờ giấy đem ra trước kỳ họp.
+    if (tong.error) loiDb('bql_dashboard', tong.error)
+    if (so.error) loiDb('quy_so_ke_toan', so.error)
+    if (quy.error) loiDb('quy_bao_tri', quy.error)
+    const t = tong.data?.[0]
+    if (!t) throw new Error(`Khu ${k.name} chưa có số liệu cho kỳ ${ky.nhan}.`)
+
+    const sq = soatQuy(so.data ?? [], quy.data?.so_du_ngan_hang ?? null,
+      quy.data?.doi_chieu_ngay ?? null)
+    const mu = vungMuSla(t)
+    return {
+      khu: k.name,
+      ky: { tu: ky.tu, den: ky.den, nhan: ky.nhan },
+      // Việc phải chất vấn ĐỨNG TRƯỚC số liệu, cùng thứ tự màn /bqt dùng: ban
+      // quản trị họp mỗi quý một lần, và thứ họ cần trước tiên là câu hỏi.
+      viec_ky_hop: viecKyHop({
+        quy: sq,
+        doiChieuNgay: quy.data?.doi_chieu_ngay ?? null,
+        mu,
+        sla: t,
+        congNoQuaHan: t.cong_no_qua_han,
+        soCanNo: t.so_can_no,
+      }),
+      quy_bao_tri: {
+        tinh: sq.tinh, so_du_so: sq.soDuSo, so_du_luc_doi_chieu: sq.soDuLucDoiChieu,
+        lech: sq.lech, so_ngay_cach: sq.soNgayCach,
+        ngan_hang: quy.data?.ngan_hang ?? null, doi_chieu_ngay: quy.data?.doi_chieu_ngay ?? null,
+      },
+      sla: {
+        ty_le_dung_han: t.ty_le_dung_sla,
+        // Tỷ lệ đúng hạn KHÔNG đứng một mình: 95% trên ba phần tư số việc thì
+        // không phải 95%, và đó là con số dễ đem lên slide nhất.
+        ngoai_phep_do: mu.soNgoai, ty_le_ngoai: mu.tyLe, dang_ngai: mu.dangNgai,
+      },
+      danh_gia: { so_luot: t.so_luot_danh_gia, du_mau: duMauDanhGia(t.so_luot_danh_gia) },
+      so_lieu: t,
+    }
+  }))
+
   server.registerTool('vbuilding_cong_no', {
     title: 'Công nợ theo căn',
-    description: 'Danh sách căn hộ còn nợ phí: mã căn, số tiền còn phải trả, số tiền quá hạn, '
-      + 'số kỳ chưa đóng. Dùng để trả lời "ai chưa đóng tiền", "nợ bao nhiêu".',
+    description: 'Danh sách căn hộ còn nợ phí: mã căn, số tiền còn phải trả, số ngày quá hạn, '
+      + 'số kỳ chưa đóng, kèm tên và liên lạc của chủ hộ (email + điện thoại). '
+      + 'Dùng để trả lời "ai chưa đóng tiền", và để soạn thư nhắc nợ cho từng căn.',
     inputSchema: { khu: KHU },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async ({ khu }) => chay(async () => {
