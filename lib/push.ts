@@ -1,5 +1,6 @@
 import webpush from 'web-push'
 import { createAdminClient } from '@/lib/db/admin'
+import { lechDanhDau, soatGhiSo } from '@/lib/push-so-sach'
 
 /**
  * Thông báo đẩy (Web Push) — kênh thay cho Zalo ZNS đang hoãn (§3bis của
@@ -68,6 +69,7 @@ export type KetQuaDay = {
   danhDau: number      // số thông báo được đánh dấu đã đẩy
   goMayChet: number    // endpoint bị nhà cung cấp từ chối, đã gỡ
   loiKhac: number      // lỗi tạm — KHÔNG đánh dấu, để lần sau thử lại
+  canhBao: string[]    // chuyện đáng biết nhưng chưa đáng làm job đỏ
 }
 
 /**
@@ -87,7 +89,7 @@ export async function dayThongBao(): Promise<KetQuaDay> {
   if (error) throw new Error(`Không đọc được hàng đợi thông báo: ${error.message}`)
 
   const ds = (data ?? []) as DongCanDay[]
-  const kq: KetQuaDay = { gui: 0, danhDau: 0, goMayChet: 0, loiKhac: 0 }
+  const kq: KetQuaDay = { gui: 0, danhDau: 0, goMayChet: 0, loiKhac: 0, canhBao: [] }
   if (ds.length === 0) return kq
 
   const xong = new Set<number>()     // thông báo có ít nhất một máy nhận được
@@ -116,15 +118,38 @@ export async function dayThongBao(): Promise<KetQuaDay> {
     }
   }))
 
-  if (chet.size > 0) {
-    await db.rpc('push_go_endpoint_chet', { p_endpoints: [...chet] })
-  }
-  if (song.size > 0) {
-    await db.rpc('push_ghi_nhan_day', { p_endpoints: [...song] })
-  }
-  if (xong.size > 0) {
-    const { data: n } = await db.rpc('thong_bao_da_day', { p_ids: [...xong] })
-    kq.danhDau = Number(n ?? 0)
-  }
+  // GHI SỔ. Đẩy xong rồi mà ghi sổ hỏng thì job vẫn "ok" — và hậu quả nặng hơn
+  // nhiều so với việc đẩy hỏng. Xem lib/push-so-sach.ts: mỗi bước ở đây mang
+  // theo hậu quả của chính nó, và chỉ bước nào người dùng THẤY mới làm job đỏ.
+  const rChet = chet.size > 0
+    ? await db.rpc('push_go_endpoint_chet', { p_endpoints: [...chet] })
+    : null
+  const rSong = song.size > 0
+    ? await db.rpc('push_ghi_nhan_day', { p_endpoints: [...song] })
+    : null
+  const rXong = xong.size > 0
+    ? await db.rpc('thong_bao_da_day', { p_ids: [...xong] })
+    : null
+  if (rXong && !rXong.error) kq.danhDau = Number(rXong.data ?? 0)
+
+  const sach = soatGhiSo([
+    { ten: 'thong_bao_da_day', loi: rXong?.error, chan: true,
+      hauQua: `${xong.size} thông báo đã đẩy đi nhưng vẫn nằm trong hàng đợi, nên `
+        + 'lần chạy sau đẩy lại đúng chúng — và lặp lại tới 96 lần trong 24 giờ, '
+        + 'trên điện thoại của từng người' },
+    { ten: 'push_go_endpoint_chet', loi: rChet?.error, chan: true,
+      hauQua: `${chet.size} endpoint đã chết vẫn nằm lại, nên mỗi lần chạy lại đẩy `
+        + 'vào đó và tỷ lệ lỗi phình lên che mất lỗi thật' },
+    { ten: 'push_ghi_nhan_day', loi: rSong?.error, chan: false,
+      hauQua: 'màn của cư dân không phân biệt được "chưa có thông báo nào" với '
+        + '"đăng ký rồi mà chưa bao giờ nhận được gì"' },
+  ])
+  const lech = rXong && !rXong.error ? lechDanhDau(kq.gui, kq.danhDau) : null
+  kq.canhBao = lech ? [...sach.canhBao, lech] : sach.canhBao
+  for (const c of kq.canhBao) console.error('day-thong-bao:', c)
+  // Ném, KHÔNG trả về lặng lẽ: route cron biến lỗi này thành 500 + một dòng đỏ
+  // trong job_chay, và đó là hai chỗ duy nhất người ta nhìn thấy được.
+  if (sach.nem) throw new Error(sach.nem)
+
   return kq
 }
