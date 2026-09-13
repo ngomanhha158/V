@@ -26,7 +26,7 @@ export function ResidentShell({
   const laThat = base === ''
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
-      <header className="sticky top-0 z-30 border-b border-line bg-surface/85 backdrop-blur-md">
+      <header className="no-print sticky top-0 z-30 border-b border-line bg-surface/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-2xl items-center gap-3 px-4">
           <Link href={base || '/'} className="flex min-w-0 items-center gap-2.5">
             <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand text-[0.8125rem] font-bold text-on-brand">
@@ -70,7 +70,7 @@ export function ResidentShell({
         {children}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/90 backdrop-blur-md sm:hidden">
+      <nav className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/90 backdrop-blur-md sm:hidden">
         {/* pb an toàn cho vạch home của iPhone. */}
         <div className="mx-auto flex max-w-2xl pb-[env(safe-area-inset-bottom)]">
           {/* Duyệt thành viên KHÔNG nằm ở đây: phần lớn cư dân không bao giờ duyệt

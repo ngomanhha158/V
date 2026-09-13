@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync } from 'node:fs'
+import { docNguon as doc, tepNguon, trongChuThich } from './soat-nguon.ts'
 import {
   KhongHoiDuocQuyen, cauKhongHoiDuoc, danhSach, laKhongHoiDuocQuyen, quyen, xetQuyen,
 } from './chot-quyen.ts'
@@ -83,33 +83,6 @@ test('danhSach() KHÔNG biến một lần đọc hỏng thành "bạn không �
 
 const HAM_QUYEN = ['is_staff', 'is_bqt', 'is_bql_manager', 'du_an_cua_toi',
   'current_unit_ids', 'khu_toi_o']
-
-function tepNguon(...goc: string[]): string[] {
-  const ra: string[] = []
-  for (const g of goc) {
-    const d = new URL(`../${g}/`, import.meta.url)
-    for (const m of readdirSync(d, { recursive: true, encoding: 'utf8' })) {
-      if (m.endsWith('.ts') || m.endsWith('.tsx')) ra.push(`${g}/${m}`)
-    }
-  }
-  return ra
-}
-
-const doc = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
-
-/**
- * Dòng chứa vị trí `i` có phải là chú thích không.
- *
- * Cần, vì docblock của chot-quyen.ts trích DẪN nguyên kiểu viết sai để giải
- * thích nó — và luật quét theo chuỗi thì không phân biệt được lời dạy với lỗi.
- * Nới luật cho khỏi kêu thì mất luôn luật; loại chú thích ra thì giữ được cả
- * hai. (Cùng một cái bẫy đã gặp lúc soát cron: regex bắt đúng chú thích của
- * chính mình.)
- */
-function trongChuThich(src: string, i: number): boolean {
-  const dau = src.lastIndexOf('\n', i) + 1
-  return /^\s*(\/\/|\*|\/\*)/.test(src.slice(dau, i + 1))
-}
 
 test('không chỗ nào gọi hàm quyền rồi bỏ error đi', () => {
   // Đây là test QUAN TRỌNG NHẤT của file. Các test trên chứng minh hàm mới

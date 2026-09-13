@@ -135,7 +135,7 @@ export function BqlShell({
 
   return (
     <div className="min-h-dvh bg-canvas lg:flex">
-      <aside className="border-b border-line bg-surface lg:sticky lg:top-0 lg:flex lg:h-dvh lg:w-64 lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0">
+      <aside className="no-print border-b border-line bg-surface lg:sticky lg:top-0 lg:flex lg:h-dvh lg:w-64 lg:shrink-0 lg:flex-col lg:border-r lg:border-b-0">
         <div className="flex h-14 items-center gap-2.5 px-4 lg:border-b lg:border-line">
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand text-[0.8125rem] font-bold text-on-brand">
             VB

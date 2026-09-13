@@ -4,8 +4,10 @@ import QRCode from 'qrcode'
 import { createClient } from '@/lib/db/server'
 import { buildVietQr, paymentRef } from '@/lib/vietqr'
 import { bankConfigKhu } from '@/lib/bank'
-import { Card, CardHead, Hop, PageHead, Pill, cx, ngayVN, vnd } from '@/components/ui'
+import { Card, CardHead, Hop, Pill, cx, ngayVN, vnd } from '@/components/ui'
 import { IcTrai } from '@/components/icons'
+import { HoaDonGiay } from '@/components/hoa-don-giay'
+import { NutIn } from '@/components/nut-in'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +17,8 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
 
   const { data: inv } = await db
     .from('invoices')
-    .select('id, project_id, period, total_amount, paid_amount, status, due_date, units(code)')
+    .select(`id, project_id, period, total_amount, paid_amount, status, due_date,
+             units(code), projects(name)`)
     .eq('id', id)
     .maybeSingle()
   if (!inv) notFound()
@@ -70,72 +73,50 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
 
   return (
     <div className="space-y-5">
-      <Link
-        href="/invoices"
-        className="inline-flex items-center gap-1 text-[0.8125rem] font-medium text-muted hover:text-ink"
-      >
-        <IcTrai width={16} height={16} /> Hóa đơn
-      </Link>
-
-      <PageHead
-        title={`Kỳ ${String(inv.period).slice(5, 7)}/${String(inv.period).slice(0, 4)}`}
-        sub={`${inv.units?.code} · hạn thanh toán ${ngayVN(String(inv.due_date))}`}
-        actions={
+      <div className="no-print flex items-center justify-between gap-3">
+        <Link
+          href="/invoices"
+          className="inline-flex items-center gap-1 text-[0.8125rem] font-medium text-muted hover:text-ink"
+        >
+          <IcTrai width={16} height={16} /> Hóa đơn
+        </Link>
+        <div className="flex items-center gap-2">
+          {/* Nhãn trạng thái ở lại MÀN HÌNH, không ra giấy: trên giấy thì dòng
+              "Còn phải trả" và ngày quá hạn đã nói đủ, còn một con dấu "CHƯA
+              THANH TOÁN" in kèm sẽ thành sai ngay hôm sau nếu người ta vừa trả. */}
           <Pill tone={conLai <= 0 ? 'tot' : tre ? 'xau' : 'canh'}>
             {conLai <= 0 ? 'Đã thanh toán' : tre ? 'Quá hạn' : 'Chưa thanh toán'}
           </Pill>
-        }
+          <NutIn />
+        </div>
+      </div>
+
+      {/* Chứng từ. Đây là thứ DUY NHẤT ra giấy — mọi thẻ khác trên màn này đều
+          mang no-print, vì danh sách phiếu thu và mấy hộp nhắc việc là thứ để
+          bấm vào chứ không phải thứ để cầm. */}
+      <HoaDonGiay
+        tenKhu={inv.projects?.name ?? null}
+        maCan={inv.units?.code ?? null}
+        ky={String(inv.period)}
+        hanTra={String(inv.due_date)}
+        dong={(lines ?? []).map((l) => ({
+          id: l.id, description: l.description,
+          quantity: Number(l.quantity), unit_price: l.unit_price, amount: l.amount,
+        }))}
+        tong={inv.total_amount}
+        daTra={inv.paid_amount}
+        qr={qrDataUrl}
+        noiDung={noiDung}
       />
 
-      <Card>
-        <CardHead title="Chi tiết các khoản" />
-        <div className="px-4">
-          <table className="w-full text-sm">
-            <tbody>
-              {lines?.map((l) => (
-                <tr key={l.id} className="border-b border-line last:border-0">
-                  <td className="py-3 pr-3">
-                    <div className="font-medium text-ink">{l.description}</div>
-                    {Number(l.quantity) !== 1 && (
-                      <div className="num mt-0.5 text-[0.75rem] text-faint">
-                        {Number(l.quantity).toLocaleString('vi-VN')} × {vnd(l.unit_price)}
-                      </div>
-                    )}
-                  </td>
-                  <td className="num py-3 text-right font-medium text-ink">{vnd(l.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="space-y-1 border-t border-line bg-raised px-4 py-3">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted">Tổng cộng</span>
-            <span className="num font-medium text-ink">{vnd(inv.total_amount)}</span>
-          </div>
-          {inv.paid_amount > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-muted">Đã thanh toán</span>
-              <span className="num font-medium text-ok">− {vnd(inv.paid_amount)}</span>
-            </div>
-          )}
-          <div className="flex items-baseline justify-between border-t border-line pt-2 text-sm">
-            <span className="font-semibold text-ink">Còn phải trả</span>
-            <span className={cx('num text-lg font-semibold', conLai > 0 ? 'text-ink' : 'text-ok')}>
-              {vnd(Math.max(conLai, 0))}
-            </span>
-          </div>
-        </div>
-      </Card>
-
       {conLai <= 0 && (
-        <Hop tone="tot" title="Hóa đơn đã thanh toán đủ">
+        <Hop className="no-print" tone="tot" title="Hóa đơn đã thanh toán đủ">
           Không còn khoản nào phải trả cho kỳ này.
         </Hop>
       )}
 
       {(phieu ?? []).length > 0 && (
-        <Card>
+        <Card className="no-print">
           <CardHead
             title="Phiếu thu"
             sub="Chứng từ cho từng lần tiền về — mở ra để in hoặc lưu PDF"
@@ -165,54 +146,20 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
       )}
 
       {conLai <= 0 && (phieu ?? []).length === 0 && (
-        <Hop tone="canh" title="Đã trả đủ nhưng chưa có phiếu thu">
+        <Hop className="no-print" tone="canh" title="Đã trả đủ nhưng chưa có phiếu thu">
           Khoản tiền được ghi nhận trước khi hệ thống bắt đầu cấp số chứng từ,
           hoặc BQL gạch tay ở nơi khác. Cần biên nhận thì báo BQL cấp bù.
         </Hop>
       )}
 
       {conLai > 0 && !bank && (
-        <Hop tone="canh" title="Chưa cấu hình tài khoản nhận tiền">
+        <Hop className="no-print" tone="canh" title="Chưa cấu hình tài khoản nhận tiền">
           Vì thế chưa có mã QR. Liên hệ BQL để lấy thông tin chuyển khoản.
         </Hop>
       )}
 
-      {qrError && <Hop tone="xau" title="Không tạo được mã QR">{qrError}</Hop>}
-
-      {qrDataUrl && (
-        <Card>
-          <CardHead title="Quét mã để thanh toán" sub="VietQR — mở app ngân hàng và quét" />
-          <div className="space-y-4 p-4">
-            {/* Nền trắng cố định quanh mã: máy quét cần tương phản tối-trên-sáng,
-                để mã lọt vào nền tối là điện thoại không đọc ra. */}
-            <div className="flex justify-center">
-              <div className="rounded-xl border border-line bg-white p-4">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={qrDataUrl} alt="Mã VietQR" className="size-52" />
-              </div>
-            </div>
-
-            <dl className="rounded-ctl border border-line bg-raised px-3.5 py-1 text-sm">
-              <div className="flex items-baseline justify-between gap-4 border-b border-line py-2.5">
-                <dt className="text-muted">Số tiền</dt>
-                <dd className="num font-semibold text-ink">{vnd(conLai)}</dd>
-              </div>
-              <div className="flex items-baseline justify-between gap-4 py-2.5">
-                <dt className="shrink-0 text-muted">Nội dung</dt>
-                <dd className="min-w-0 text-right">
-                  <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-[0.8125rem] text-ink">
-                    {noiDung}
-                  </code>
-                </dd>
-              </div>
-            </dl>
-
-            <p className="text-[0.75rem] leading-relaxed text-faint">
-              Giữ nguyên nội dung chuyển khoản — hệ thống dựa vào đó để gạch nợ
-              tự động. Sửa đi thì phải chờ BQL đối chiếu tay.
-            </p>
-          </div>
-        </Card>
+      {qrError && (
+        <Hop className="no-print" tone="xau" title="Không tạo được mã QR">{qrError}</Hop>
       )}
     </div>
   )
