@@ -23,7 +23,7 @@ export function BqtShell({
   const laThat = base === ''
   return (
     <div className="flex min-h-dvh flex-col bg-canvas">
-      <header className="sticky top-0 z-30 border-b border-line bg-surface/85 backdrop-blur-md">
+      <header className="no-print sticky top-0 z-30 border-b border-line bg-surface/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-4xl items-center gap-3 px-4">
           <Link href={`${base}/bqt`} className="flex min-w-0 items-center gap-2.5">
             <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand text-[0.8125rem] font-bold text-on-brand">

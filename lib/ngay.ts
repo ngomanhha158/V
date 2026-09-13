@@ -32,3 +32,15 @@ export const ngayVN = (iso: string) => {
   const [y, m, d] = iso.slice(0, 10).split('-')
   return d && m && y ? `${d}/${m}/${y}` : iso
 }
+
+/** Tiền VND. Luôn dùng hàm này — đừng nơi thì 2.983.500đ, nơi thì 2983500 VND. */
+export const vnd = (n: number) => n.toLocaleString('vi-VN') + 'đ'
+
+/** Số tiền rút gọn cho ô thống kê: 33.1 tr, 1.2 tỷ. Bảng thì vẫn dùng số đầy đủ. */
+export function vndGon(n: number) {
+  const a = Math.abs(n)
+  if (a >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1).replace('.', ',') + ' tỷ'
+  if (a >= 1_000_000) return (n / 1_000_000).toFixed(1).replace('.', ',') + ' tr'
+  if (a >= 1_000) return Math.round(n / 1_000) + ' N'
+  return String(n)
+}

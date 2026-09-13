@@ -8,6 +8,7 @@ import {
   Button, Card, CardHead, Chip, Hop, PageHead, Pill, Select, Stat, Trong, cx, ngayVN,
 } from '@/components/ui'
 import { IcNguoi } from '@/components/icons'
+import { quyen } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,8 +36,8 @@ export default async function BqlTickets({
 
   const project = await duAnBQL()
   if (!project) return <main><p>Chưa có dự án nào.</p></main>
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) redirect('/')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) redirect('/')
 
   let q = db
     .from('tickets')

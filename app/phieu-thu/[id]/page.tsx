@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
 import { Hop, cx, ngayGioVN, vnd } from '@/components/ui'
 import { hinhThuc, loiHuy, tongDong, type LoaiDong } from '@/lib/phieu-thu'
-import { NutIn } from './nut-in'
+import { NutIn } from '@/components/nut-in'
 
 /**
  * Tờ phiếu thu — thứ cư dân cầm được sau khi chuyển khoản.

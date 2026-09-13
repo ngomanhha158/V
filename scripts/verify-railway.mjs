@@ -206,9 +206,50 @@ const CANARY = [
   },
 ]
 
+/**
+ * Ba file mà GO-LIVE.md bảo người dựng "chạy lại được từ đầu bất cứ lúc nào",
+ * và runbook bảo chạy lại sau mỗi lần sửa quyền — áp LẦN HAI lên chính
+ * database vừa dựng xong.
+ *
+ * Mỗi bài kiểm đều bắt đầu bằng một database RỖNG, nên `create ...` trần luôn
+ * trót lọt ở đây trong khi đỏ ngay trên production. Đó chính là chuyện đã suýt
+ * xảy ra: tám câu `create type` trần ở đầu schema.sql làm lời hứa trong tài
+ * liệu thành sai ngay dòng thứ chín, và người phát hiện ra sẽ là người đang dán
+ * file lên production — lúc đỏ thì một phần đã chạy rồi.
+ *
+ * Bài này KHÔNG bắt được ca "file mới gặp hàm cũ còn sống ngoài production"
+ * (đổi kiểu trả về của một `returns table`). Nó áp cùng một file hai lượt, nên
+ * chỉ trả lời được câu hẹp hơn: file này có áp được lên một hệ đã có nó không.
+ */
+async function apLaiDuoc() {
+  const LAP = ['schema.sql', 'auth_hooks.sql', 'railway/03_auth.sql']
+  const db = new PGlite({ extensions: { pgcrypto } })
+  try {
+    for (const f of FILES) await db.exec(readFileSync(join(ROOT, f), 'utf8'))
+    let ok = true
+    for (const f of LAP) {
+      try {
+        await db.exec(readFileSync(join(ROOT, f), 'utf8'))
+        console.log(`OK    ${f} áp lại được lên database đã có sẵn`)
+      } catch (e) {
+        console.error(`HỎNG  ${f} KHÔNG áp lại được\n      ${e.message}`)
+        ok = false
+      }
+    }
+    return ok
+  } finally {
+    await db.close()
+  }
+}
+
 console.log('── Ngăn xếp Railway')
 const do1 = await dungNgan()
 let ok = do1 === null
+
+if (ok) {
+  console.log('\n── Áp lại lần hai (tài liệu hứa "chạy lại được bất cứ lúc nào")')
+  ok = await apLaiDuoc()
+}
 
 if (ok) {
   console.log('\n── Job nền (danh mục lib/job-nen.ts ↔ catalog thật)')

@@ -2778,6 +2778,7 @@ export type Database = {
           building_code: string
           con_no: number
           dien_thoai: string | null
+          email: string | null
           han_cu_nhat: string
           so_hoa_don: number
           so_ngay_qua_han: number

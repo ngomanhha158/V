@@ -3,6 +3,7 @@ import { createClient } from '@/lib/db/server'
 import { duAnBQL } from '@/lib/du-an'
 import { ImportForm } from './import-form'
 import { PageHead, Trong } from '@/components/ui'
+import { quyen } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,8 +16,8 @@ export default async function ImportUnits() {
 
   // Guard này chỉ để không hiện màn hình vô nghĩa cho cư dân. Chốt chặn thật là
   // RLS: policy unit_staff_write chặn insert dù có gọi thẳng API.
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) redirect('/')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) redirect('/')
 
   const { data: buildings } = await db.from('buildings').select('code').order('code')
 

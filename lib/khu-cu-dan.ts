@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/db/server'
+import { danhSach } from '@/lib/chot-quyen'
 
 /**
  * Các khu cư dân đang ở.
@@ -12,6 +13,8 @@ export type KhuO = { id: string; name: string }
 
 export async function khuToiO(): Promise<KhuO[]> {
   const db = await createClient()
-  const { data } = await db.rpc('khu_toi_o')
-  return (data ?? []) as KhuO[]
+  // `data ?? []` ở đây từng có nghĩa: một lần đọc hỏng hiện ra thành "bạn
+  // không ở khu nào". Cư dân đọc câu đó sẽ hiểu là căn hộ của họ đã bị gỡ khỏi
+  // hệ thống — và gọi ngay cho ban quản lý.
+  return danhSach<KhuO>(await db.rpc('khu_toi_o'), 'khu_toi_o')
 }

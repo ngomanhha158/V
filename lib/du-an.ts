@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/db/server'
+import { KhongHoiDuocQuyen } from '@/lib/chot-quyen'
 import { khuDaChon, type Khu } from '@/lib/khu'
 
 /**
@@ -40,9 +41,26 @@ export async function khuDangXem(): Promise<{ dang: Khu | null; ds: Khu[]; loi: 
   return { dang: khuDaChon(ds, luu), ds, loi: error?.message ?? null }
 }
 
-/** Chỉ cần id — dạng gọn cho phần lớn màn hình. */
+/**
+ * Chỉ cần id — dạng gọn cho phần lớn màn hình.
+ *
+ * NÉM khi không đọc được, thay vì trả null. `null` ở đây có đúng MỘT nghĩa:
+ * người này không quản lý khu nào. Hơn tám mươi chỗ gọi hàm này đều viết
+ *
+ *     if (!project) return <Trong title="Chưa có dự án nào" />
+ *
+ * nên mỗi lần database không với tới được là hơn tám mươi màn hình cùng nói
+ * một câu sai về TƯ CÁCH của người đang đứng trước chúng. Đúng cái bệnh mà
+ * docblock của khuDangXem() ở trên đã mô tả — rồi hàm này vứt `loi` đi và dựng
+ * lại y nguyên.
+ *
+ * Ném thì vỏ bắt lỗi app/error.tsx hiện "sự cố phía máy chủ" kèm mã tra được
+ * trong log. Đó là câu đúng, và nó đúng ở cả tám mươi chỗ mà không chỗ nào
+ * phải nhớ viết thêm gì.
+ */
 export async function duAnBQL(): Promise<{ id: string; name: string } | null> {
-  const { dang } = await khuDangXem()
+  const { dang, loi } = await khuDangXem()
+  if (loi) throw new KhongHoiDuocQuyen('du_an_cua_toi', loi)
   return dang ? { id: dang.id, name: dang.name } : null
 }
 
@@ -58,7 +76,11 @@ export async function duAnBQL(): Promise<{ id: string; name: string } | null> {
  * vừa là kỹ thuật ở khu B sẽ bị chặn oan nếu khu B tình cờ đứng trước.
  */
 export async function khuBQT(): Promise<Khu | null> {
-  const { dang, ds } = await khuDangXem()
+  const { dang, ds, loi } = await khuDangXem()
+  // Layout /bqt đá về trang chủ khi hàm này trả null. Một lần đọc hỏng mà trả
+  // null thì thành viên ban quản trị bị đẩy ra khỏi khu vực của chính họ,
+  // không kèm một chữ nào — trông y hệt như vừa bị thu quyền.
+  if (loi) throw new KhongHoiDuocQuyen('du_an_cua_toi', loi)
   return dang ?? ds.find((k) => k.vai_tro === 'bqt') ?? ds[0] ?? null
 }
 

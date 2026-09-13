@@ -3,6 +3,7 @@ import { createClient } from '@/lib/db/server'
 import { duAnBQL } from '@/lib/du-an'
 import { Card, CardHead, Hop, PageHead, Pill, Trong } from '@/components/ui'
 import { HangCho, type YeuCau } from './hang-cho'
+import { quyen } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,8 +11,8 @@ export default async function DuyetChuHo() {
   const db = await createClient()
   const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) redirect('/')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) redirect('/')
 
   const { data: rows, error } = await db.rpc('bql_cho_duyet_chu_ho', {
     p_project: project.id,

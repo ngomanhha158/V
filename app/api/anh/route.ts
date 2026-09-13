@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/db/server'
 import { ANH_TOI_DA, duongMoi, KIEU_CHO_PHEP, thuMuc } from '@/lib/anh'
+import { danhSach, laKhongHoiDuocQuyen } from '@/lib/chot-quyen'
 
 /**
  * Nhận ảnh hỏng hóc. Thay `db.storage.upload()`.
@@ -29,8 +30,20 @@ export async function POST(request: NextRequest) {
   // valid_from/valid_to và status. Tự viết lại điều kiện ở đây là mở ra khả
   // năng hai chỗ lệch nhau, và lệch nghĩa là người đã hết hợp đồng thuê vẫn
   // gắn được ảnh vào căn cũ.
-  const { data: cuaToi } = await db.rpc('current_unit_ids')
-  if (!(cuaToi ?? []).includes(unit)) {
+  //
+  // Nuốt lỗi thì câu trả về là "Căn hộ này không phải của bạn" — một lời buộc
+  // tội, cho một lần database hụt nhịp. Hỏi không được thì đáp 503.
+  let cuaToi: string[]
+  try {
+    cuaToi = danhSach<string>(await db.rpc('current_unit_ids'), 'current_unit_ids')
+  } catch (e) {
+    if (!laKhongHoiDuocQuyen(e)) throw e
+    console.error(e.message)
+    return NextResponse.json(
+      { loi: 'Chưa kiểm được căn hộ của bạn do sự cố máy chủ. Thử lại sau ít phút.' },
+      { status: 503 })
+  }
+  if (!cuaToi.includes(unit)) {
     return NextResponse.json({ loi: 'Căn hộ này không phải của bạn.' }, { status: 403 })
   }
 

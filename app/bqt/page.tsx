@@ -4,7 +4,7 @@ import {
   Card, CardHead, Chip, Hop, NhanNhom, PageHead, Stat, Trong, ngayVN, soVN, vnd, vndGon,
 } from '@/components/ui'
 import {
-  duMauDanhGia, quyChua, quyHomNay, quyTruoc, soatQuy, vungMuSla, type Ky,
+  duMauDanhGia, quyChua, quyHomNay, quyTruoc, soatQuy, viecKyHop, vungMuSla, type Ky,
 } from '@/lib/bqt'
 import type { Database } from '@/lib/db/database.types'
 
@@ -64,25 +64,18 @@ export default async function GiamSat({
   const duMau = duMauDanhGia(t.so_luot_danh_gia)
   const tyLeThu = t.phai_thu_ky > 0 ? Math.round((t.da_thu_ky / t.phai_thu_ky) * 100) : null
 
-  // Việc phải đưa ra kỳ họp. Gom lên đầu chứ không để người đọc tự nhặt từ
-  // mười hai ô số: ban quản trị họp mỗi quý một lần, và thứ họ cần biết trước
-  // tiên là "kỳ này có gì phải chất vấn", không phải "kỳ này số bao nhiêu".
-  const cham: string[] = []
-  if (sq.tinh === 'chua_doi_chieu') {
-    cham.push('Quỹ bảo trì chưa từng được đối chiếu với sao kê ngân hàng.')
-  } else if (sq.tinh === 'lech') {
-    cham.push(`Sổ quỹ và sao kê lệch ${vnd(Math.abs(sq.lech!))} tại ngày đối chiếu `
-      + `${ngayVN(quy!.doi_chieu_ngay!)}.`)
-  } else if (sq.tinh === 'cu') {
-    cham.push(`Quỹ bảo trì đối chiếu lần cuối cách đây ${sq.soNgayCach} ngày.`)
-  }
-  if (mu.dangNgai) {
-    cham.push(`${Math.round(mu.tyLe * 100)}% yêu cầu trong kỳ nằm ngoài phép đo SLA `
-      + `(${t.ticket_tu_choi} bị từ chối, ${t.ticket_khong_co_sla} thuộc danh mục chưa khai SLA).`)
-  }
-  if (t.cong_no_qua_han > 0) {
-    cham.push(`${vnd(t.cong_no_qua_han)} công nợ đã quá hạn, ở ${t.so_can_no} căn.`)
-  }
+  // Việc phải đưa ra kỳ họp. Danh sách dựng ở lib/bqt.ts chứ không ở đây, vì
+  // đúng danh sách đó còn phải đi vào bộ slide trình trước kỳ họp — và tờ slide
+  // chiếu trong phòng họp mà nói khác màn hình ban quản trị mở ra đối chiếu
+  // ngay lúc đó là chuyện không gỡ được bằng lời giải thích nào.
+  const cham = viecKyHop({
+    quy: sq,
+    doiChieuNgay: quy?.doi_chieu_ngay ?? null,
+    mu,
+    sla: t,
+    congNoQuaHan: t.cong_no_qua_han,
+    soCanNo: t.so_can_no,
+  }).map((v) => v.cau)
 
   return (
     <div className="space-y-5">

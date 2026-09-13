@@ -3,6 +3,7 @@ import { createClient } from '@/lib/db/server'
 import { duAnBQL } from '@/lib/du-an'
 import { InvoiceActions, ReadingsForm } from './forms'
 import { NhapChiSo } from './nhap-chi-so'
+import { quyen } from '@/lib/chot-quyen'
 import {
   Bang, Button, Card, CardHead, Input, PageHead, Pill, Stat, Td, Th, Tr, Trong, vnd,
 } from '@/components/ui'
@@ -25,8 +26,8 @@ export default async function Billing({
 
   const project = await duAnBQL()
   if (!project) return <Trong title="Chưa có dự án nào" />
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) redirect('/')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) redirect('/')
 
   // Kỳ mặc định = tháng này. Dạng YYYY-MM cho input type=month.
   const now = new Date()

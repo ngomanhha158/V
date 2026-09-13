@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/db/server'
 import { khuBQT } from '@/lib/du-an'
 import { BqtShell } from '@/components/shell/bqt-shell'
+import { quyen } from '@/lib/chot-quyen'
 
 /**
  * Cổng vào khu vực Ban quản trị.
@@ -20,8 +21,8 @@ export default async function BqtLayout({ children }: { children: React.ReactNod
   if (!khu) redirect('/')
 
   const db = await createClient()
-  const { data: laBqt } = await db.rpc('is_bqt', { p_project: khu.id })
-  if (!laBqt) redirect('/')
+  const kqBqt = await db.rpc('is_bqt', { p_project: khu.id })
+  if (!quyen(kqBqt, 'is_bqt')) redirect('/')
 
   return <BqtShell khu={khu.name}>{children}</BqtShell>
 }

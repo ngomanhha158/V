@@ -6,17 +6,38 @@
 
 
 -- ─────────────────────────────── ENUMS ───────────────────────────────
-create type unit_role       as enum ('owner','authorized','tenant','family');
-create type member_status   as enum ('pending','active','revoked','expired');
-create type staff_role      as enum ('bql_manager','bql_staff','technician','security','bqt');
-create type unit_kind       as enum ('apartment','shophouse','office','penthouse');
-create type unit_state      as enum ('vacant','owner_occupied','rented');
-create type ticket_status   as enum ('new','assigned','in_progress','resolved','closed','rejected');
-create type ticket_priority as enum ('low','normal','high','urgent');
-create type invoice_status  as enum ('draft','issued','partial','paid','void');
+--
+-- Bọc trong khối bắt lỗi vì Postgres KHÔNG có `create type if not exists`.
+-- GO-LIVE.md hứa "chạy lại được từ đầu bất cứ lúc nào", và tám câu `create
+-- type` trần ở đây làm lời hứa đó thành sai ngay dòng thứ chín: áp lên một
+-- database đã có sẵn là đỏ lập tức. Người phát hiện ra sẽ là người đang dán
+-- file này lên production lúc nửa đêm, và đỏ giữa chừng nghĩa là một phần đã
+-- chạy — trạng thái khó gỡ hơn cả hai đầu.
+--
+-- Mỗi type một khối con riêng: exception trong plpgsql huỷ cả khối chứa nó,
+-- nên gộp tám câu vào một khối là type thứ hai trở đi không bao giờ được tạo.
+do $enums$
+begin
+  begin create type unit_role       as enum ('owner','authorized','tenant','family');
+  exception when duplicate_object then null; end;
+  begin create type member_status   as enum ('pending','active','revoked','expired');
+  exception when duplicate_object then null; end;
+  begin create type staff_role      as enum ('bql_manager','bql_staff','technician','security','bqt');
+  exception when duplicate_object then null; end;
+  begin create type unit_kind       as enum ('apartment','shophouse','office','penthouse');
+  exception when duplicate_object then null; end;
+  begin create type unit_state      as enum ('vacant','owner_occupied','rented');
+  exception when duplicate_object then null; end;
+  begin create type ticket_status   as enum ('new','assigned','in_progress','resolved','closed','rejected');
+  exception when duplicate_object then null; end;
+  begin create type ticket_priority as enum ('low','normal','high','urgent');
+  exception when duplicate_object then null; end;
+  begin create type invoice_status  as enum ('draft','issued','partial','paid','void');
+  exception when duplicate_object then null; end;
+end $enums$;
 
 -- ──────────────────────── 1. SPATIAL HIERARCHY ───────────────────────
-create table projects (
+create table if not exists projects (
   id          uuid primary key default gen_random_uuid(),
   name        text not null,
   address     text,
@@ -24,7 +45,7 @@ create table projects (
   created_at  timestamptz not null default now()
 );
 
-create table buildings (
+create table if not exists buildings (
   id          uuid primary key default gen_random_uuid(),
   project_id  uuid not null references projects(id) on delete cascade,
   code        text not null,              -- 'P3', 'L81'
@@ -36,7 +57,7 @@ create table buildings (
 -- ponytail: Tầng = cột floor_no trên units, KHÔNG tách bảng floors.
 -- Đủ để lọc "gửi thông báo cắt nước toàn tầng 12 tòa P3". Tách bảng khi tầng
 -- có thuộc tính riêng thật (đồng hồ tổng, chủ mặt bằng, hợp đồng thuê nguyên tầng).
-create table units (
+create table if not exists units (
   id           uuid primary key default gen_random_uuid(),
   building_id  uuid not null references buildings(id) on delete cascade,
   code         text not null,             -- 'P3-12.05'
@@ -47,11 +68,11 @@ create table units (
   created_at   timestamptz not null default now(),
   unique (building_id, code)
 );
-create index on units (building_id, floor_no);
+create index if not exists units_building_id_floor_no_idx on units (building_id, floor_no);
 
 -- ────────────────── 2. USERS / RESIDENT MATRIX ───────────────────────
 -- profiles.id = auth.users.id
-create table profiles (
+create table if not exists profiles (
   id          uuid primary key,
   full_name   text not null,
   phone       text unique,               -- định danh chính ở VN
@@ -63,7 +84,7 @@ create table profiles (
 
 -- JUNCTION TABLE — 1 user nhiều vai trò ở nhiều căn hộ.
 -- valid_to = ngày hết hợp đồng thuê / hết ủy quyền -> tự thu hồi quyền.
-create table unit_memberships (
+create table if not exists unit_memberships (
   id           uuid primary key default gen_random_uuid(),
   unit_id      uuid not null references units(id) on delete cascade,
   user_id      uuid not null references profiles(id) on delete cascade,
@@ -78,13 +99,13 @@ create table unit_memberships (
   constraint valid_range check (valid_to is null or valid_to >= valid_from)
 );
 -- Mỗi căn chỉ 1 chủ hộ đang hoạt động
-create unique index one_active_owner on unit_memberships (unit_id)
+create unique index if not exists one_active_owner on unit_memberships (unit_id)
   where role = 'owner' and status = 'active';
-create index on unit_memberships (user_id, status);
-create index on unit_memberships (valid_to) where status = 'active';
+create index if not exists unit_memberships_user_id_status_idx on unit_memberships (user_id, status);
+create index if not exists unit_memberships_valid_to_idx on unit_memberships (valid_to) where status = 'active';
 
 -- Nhân sự BQL/BQT — phạm vi project hoặc riêng 1 tòa
-create table staff_assignments (
+create table if not exists staff_assignments (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references profiles(id) on delete cascade,
   project_id  uuid not null references projects(id) on delete cascade,
@@ -95,20 +116,20 @@ create table staff_assignments (
 );
 
 -- Tài sản gắn căn hộ (đối chiếu đỗ xe sai / chó thả rông)
-create table unit_vehicles (
+create table if not exists unit_vehicles (
   id uuid primary key default gen_random_uuid(),
   unit_id uuid not null references units(id) on delete cascade,
   plate text not null, vehicle_type text, card_no text,
   unique (unit_id, plate)
 );
-create table unit_pets (
+create table if not exists unit_pets (
   id uuid primary key default gen_random_uuid(),
   unit_id uuid not null references units(id) on delete cascade,
   name text, species text, photo_url text, vaccinated_until date
 );
 
 -- ─────────────────────── 3. TICKETING & SLA ──────────────────────────
-create table sla_policies (
+create table if not exists sla_policies (
   id            uuid primary key default gen_random_uuid(),
   project_id    uuid not null references projects(id) on delete cascade,
   category      text not null,            -- 'water_outage','elevator','plumbing'
@@ -119,7 +140,7 @@ create table sla_policies (
   unique (project_id, category, priority)
 );
 
-create table tickets (
+create table if not exists tickets (
   id            uuid primary key default gen_random_uuid(),
   unit_id       uuid not null references units(id),
   building_id   uuid not null references buildings(id),
@@ -141,12 +162,12 @@ create table tickets (
   rating_note   text,
   created_at    timestamptz not null default now()
 );
-create index on tickets (project_id, status, sla_resolve_due);
-create index on tickets (unit_id, created_at desc);
-create index on tickets (assignee_id) where status in ('assigned','in_progress');
+create index if not exists tickets_project_id_status_sla_resolve_due_idx on tickets (project_id, status, sla_resolve_due);
+create index if not exists tickets_unit_id_created_at_idx on tickets (unit_id, created_at desc);
+create index if not exists tickets_assignee_id_idx on tickets (assignee_id) where status in ('assigned','in_progress');
 
 -- Audit trail bất biến -> nguồn dữ liệu duy nhất cho KPI dashboard của BQT
-create table ticket_events (
+create table if not exists ticket_events (
   id         bigserial primary key,
   ticket_id  uuid not null references tickets(id) on delete cascade,
   actor_id   uuid references profiles(id),
@@ -154,10 +175,10 @@ create table ticket_events (
   from_value text, to_value text, note text,
   created_at timestamptz not null default now()
 );
-create index on ticket_events (ticket_id, created_at);
+create index if not exists ticket_events_ticket_id_created_at_idx on ticket_events (ticket_id, created_at);
 
 -- ────────────────────── 4. BILLING & PAYMENTS ────────────────────────
-create table fee_types (
+create table if not exists fee_types (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references projects(id) on delete cascade,
   code text not null, name text not null,
@@ -166,7 +187,7 @@ create table fee_types (
   unique (project_id, code)
 );
 
-create table invoices (
+create table if not exists invoices (
   id           uuid primary key default gen_random_uuid(),
   unit_id      uuid not null references units(id),
   project_id   uuid not null references projects(id),
@@ -180,9 +201,9 @@ create table invoices (
   created_at   timestamptz not null default now(),
   unique (unit_id, period)
 );
-create index on invoices (project_id, status, due_date);
+create index if not exists invoices_project_id_status_due_date_idx on invoices (project_id, status, due_date);
 
-create table invoice_lines (
+create table if not exists invoice_lines (
   id          uuid primary key default gen_random_uuid(),
   invoice_id  uuid not null references invoices(id) on delete cascade,
   fee_type_id uuid references fee_types(id),
@@ -193,7 +214,7 @@ create table invoice_lines (
 );
 
 -- Chỉ số điện/nước theo kỳ. consumption = curr_index - prev_index.
-create table meter_readings (
+create table if not exists meter_readings (
   id          uuid primary key default gen_random_uuid(),
   unit_id     uuid not null references units(id) on delete cascade,
   fee_type_id uuid not null references fee_types(id) on delete cascade,
@@ -214,7 +235,7 @@ create table meter_readings (
 -- Mọi giao dịch tiền vào đều nằm ở đây, kể cả cái không khớp được căn nào.
 -- Chỉ lưu cái khớp được thì tiền của người ghi sai nội dung biến mất khỏi hệ
 -- thống, mà đó lại đúng là loại giao dịch cần người nhìn nhất.
-create table bank_transactions (
+create table if not exists bank_transactions (
   id             uuid primary key default gen_random_uuid(),
   project_id     uuid not null references projects(id) on delete cascade,
   provider       text not null,              -- 'sepay' | 'casso'
@@ -238,9 +259,9 @@ create table bank_transactions (
   -- tức nhiều dòng payments cùng một bank_ref.
   unique (provider, provider_ref)
 );
-create index on bank_transactions (project_id, trang_thai, paid_at desc);
+create index if not exists bank_transactions_project_id_trang_thai_paid_at_idx on bank_transactions (project_id, trang_thai, paid_at desc);
 
-create table payments (
+create table if not exists payments (
   id          uuid primary key default gen_random_uuid(),
   invoice_id  uuid references invoices(id),
   unit_id     uuid not null references units(id),
@@ -254,13 +275,13 @@ create table payments (
   paid_at     timestamptz not null default now(),
   matched_by  text not null default 'auto'  -- 'auto' | 'manual'
 );
-create index on payments (bank_ref);
-create index on payments (bank_txn_id);
+create index if not exists payments_bank_ref_idx on payments (bank_ref);
+create index if not exists payments_bank_txn_id_idx on payments (bank_txn_id);
 
 -- ─────────────── 5. THÔNG BÁO & CẨM NANG SỐ ──────────────────────────
 -- ponytail: target bằng cột nullable thay vì bảng announcement_targets.
 -- null = áp dụng toàn bộ cấp cha. Đủ cho "toàn tầng 12 tòa P3".
-create table documents (                    -- cẩm nang / nội quy số
+create table if not exists documents (                    -- cẩm nang / nội quy số
   id         uuid primary key default gen_random_uuid(),
   project_id uuid not null references projects(id) on delete cascade,
   section    text not null,                -- 'Thú cưng', 'Rác thải', 'Sửa chữa'
@@ -269,9 +290,9 @@ create table documents (                    -- cẩm nang / nội quy số
   version    int not null default 1,
   search_tsv tsvector generated always as (to_tsvector('simple', title || ' ' || body)) stored
 );
-create index on documents using gin (search_tsv);
+create index if not exists documents_search_tsv_idx on documents using gin (search_tsv);
 
-create table announcements (
+create table if not exists announcements (
   id            uuid primary key default gen_random_uuid(),
   project_id    uuid not null references projects(id) on delete cascade,
   building_id   uuid references buildings(id),
@@ -286,7 +307,7 @@ create table announcements (
   created_at    timestamptz not null default now()
 );
 
-create table notifications (
+create table if not exists notifications (
   id          bigserial primary key,
   user_id     uuid not null references profiles(id) on delete cascade,
   kind        text not null,               -- 'ticket','invoice','announcement','approval'
@@ -296,7 +317,7 @@ create table notifications (
   sent_zns_at timestamptz,
   created_at  timestamptz not null default now()
 );
-create index on notifications (user_id, read_at, created_at desc);
+create index if not exists notifications_user_id_read_at_created_at_idx on notifications (user_id, read_at, created_at desc);
 
 -- ─────────────────── 6. RLS: quyền ở DB, không ở app ─────────────────
 create or replace function current_unit_ids()
@@ -329,10 +350,18 @@ alter table tickets          enable row level security;
 alter table invoices         enable row level security;
 alter table unit_memberships enable row level security;
 
+-- Mỗi policy có một câu `drop ... if exists` đi trước, vì Postgres không có
+-- `create policy if not exists`. Drop-rồi-tạo là chiều AN TOÀN: policy là
+-- permissive, OR với nhau, nên thiếu tạm một cái thì quyền HẸP lại chứ không
+-- rộng ra. Ngược lại — bỏ qua khi đã tồn tại — là giữ nguyên bản cũ và lặng
+-- lẽ bỏ mất đúng lần sửa quyền mình vừa viết.
+drop policy if exists ticket_resident_read on tickets;
 create policy ticket_resident_read on tickets for select
   using (unit_id in (select current_unit_ids()) or is_staff(project_id));
+drop policy if exists ticket_resident_insert on tickets;
 create policy ticket_resident_insert on tickets for insert
   with check (unit_id in (select current_unit_ids()) and reporter_id = auth.uid());
+drop policy if exists ticket_staff_write on tickets;
 create policy ticket_staff_write on tickets for update
   using (is_staff(project_id));
 
@@ -341,6 +370,7 @@ create policy ticket_staff_write on tickets for update
 -- thấy diễn biến ticket đó. KHÔNG cấp quyền ghi cho ai — audit trail chỉ được
 -- viết bởi trigger ticket_log_change (SECURITY DEFINER).
 alter table ticket_events enable row level security;
+drop policy if exists ticket_event_read on ticket_events;
 create policy ticket_event_read on ticket_events for select
   using (exists (select 1 from tickets t where t.id = ticket_events.ticket_id));
 
@@ -363,9 +393,11 @@ returns boolean language sql stable security definer set search_path = public as
                     and (m.role in ('owner','authorized','tenant') or m.can_view_finance));
 $fn$;
 
+drop policy if exists invoice_read on invoices;
 create policy invoice_read on invoices for select
   using (is_staff(project_id) or xem_duoc_tien_cua_can(unit_id));
 
+drop policy if exists membership_read on unit_memberships;
 create policy membership_read on unit_memberships for select
   using (user_id = auth.uid() or unit_id in (select current_unit_ids()));
 
@@ -373,12 +405,15 @@ create policy membership_read on unit_memberships for select
 -- ghi được bảng này là tự phong BQL, vượt luôn RLS của tickets/invoices. Bản
 -- ghi đầu tiên tạo bằng quyền postgres (bootstrap_bql.sql).
 alter table staff_assignments enable row level security;
+drop policy if exists staff_read on staff_assignments;
 create policy staff_read on staff_assignments for select
   using (user_id = auth.uid() or is_staff(project_id));
 
 -- ── Biểu phí: cư dân đọc (để đối chiếu hóa đơn), chỉ BQL sửa ──
 alter table fee_types enable row level security;
+drop policy if exists fee_type_read on fee_types;
 create policy fee_type_read on fee_types for select using (true);
+drop policy if exists fee_type_staff_write on fee_types;
 create policy fee_type_staff_write on fee_types for all
   using (is_staff(project_id)) with check (is_staff(project_id));
 
@@ -386,8 +421,10 @@ create policy fee_type_staff_write on fee_types for all
 --    sai), chỉ BQL ghi. Ghi hàng loạt vài trăm dòng nên đi qua RLS chứ không
 --    bọc RPC — mỗi căn một lời gọi thì nhập xong một tòa mất cả buổi.
 alter table meter_readings enable row level security;
+drop policy if exists reading_read on meter_readings;
 create policy reading_read on meter_readings for select
   using (unit_id in (select current_unit_ids()) or is_staff(unit_project(unit_id)));
+drop policy if exists reading_staff_write on meter_readings;
 create policy reading_staff_write on meter_readings for all
   using (is_staff(unit_project(unit_id)))
   with check (is_staff(unit_project(unit_id)));
@@ -395,6 +432,7 @@ create policy reading_staff_write on meter_readings for all
 -- Thông báo là dữ liệu riêng từng người. Có grant select mà không có RLS thì
 -- cư dân nào đăng nhập cũng đọc được thông báo của toàn khu.
 alter table notifications enable row level security;
+drop policy if exists notification_own_read on notifications;
 create policy notification_own_read on notifications for select
   using (user_id = auth.uid());
 
@@ -402,6 +440,7 @@ create policy notification_own_read on notifications for select
 -- invoice_read lọc lại, nên ai thấy hóa đơn nào mới thấy chi tiết hóa đơn đó.
 -- Thiếu RLS ở đây = đọc thẳng invoice_lines là vòng qua được RLS của invoices.
 alter table invoice_lines enable row level security;
+drop policy if exists invoice_line_read on invoice_lines;
 create policy invoice_line_read on invoice_lines for select
   using (exists (select 1 from invoices i where i.id = invoice_lines.invoice_id));
 
@@ -417,10 +456,12 @@ $fn$;
 
 -- Tự xin gia nhập: chỉ được tạo bản ghi 'pending' cho chính mình.
 -- Không tự đặt 'active' được -> phải qua chủ hộ duyệt.
+drop policy if exists membership_self_request on unit_memberships;
 create policy membership_self_request on unit_memberships for insert
   with check (user_id = auth.uid() and status = 'pending');
 
 -- Chủ hộ / người được ủy quyền duyệt hoặc thu hồi thành viên căn hộ mình quản lý.
+drop policy if exists membership_manager_write on unit_memberships;
 create policy membership_manager_write on unit_memberships for update
   using (is_unit_manager(unit_id));
 
@@ -459,18 +500,23 @@ returns boolean language sql stable security definer set search_path = public as
 $fn$;
 
 alter table profiles enable row level security;
+drop policy if exists profile_read on profiles;
 create policy profile_read on profiles for select using (can_see_profile(id));
 
 -- ── Cây tài sản: ai đăng nhập cũng ĐỌC được (cư dân phải chọn căn để xin gia
 --    nhập), nhưng chỉ BQL mới GHI. Bật RLS ở đây còn để tránh cảnh: sau này cấp
 --    thêm quyền ghi cho authenticated là cả khu sửa được danh sách căn hộ.
 alter table buildings enable row level security;
+drop policy if exists building_read on buildings;
 create policy building_read on buildings for select using (true);
+drop policy if exists building_staff_write on buildings;
 create policy building_staff_write on buildings for all
   using (is_staff(project_id)) with check (is_staff(project_id));
 
 alter table units enable row level security;
+drop policy if exists unit_read on units;
 create policy unit_read on units for select using (true);
+drop policy if exists unit_staff_write on units;
 create policy unit_staff_write on units for all
   using (is_staff(building_project(building_id)))
   with check (is_staff(building_project(building_id)));
@@ -486,6 +532,7 @@ create policy unit_staff_write on units for all
 -- soát chạy bằng service_role (có BYPASSRLS) — đường tiền vào không đi qua
 -- trình duyệt của ai cả.
 alter table payments enable row level security;
+drop policy if exists payment_staff_read on payments;
 create policy payment_staff_read on payments for select
   using (is_staff(unit_project(unit_id)));
 
@@ -494,6 +541,7 @@ create policy payment_staff_read on payments for select
 -- tra được hàng xóm chuyển tiền cho ai. Không có policy ghi cho bất kỳ ai —
 -- mọi đường ghi đều đi qua hàm definer ở dưới.
 alter table bank_transactions enable row level security;
+drop policy if exists bank_txn_staff_read on bank_transactions;
 create policy bank_txn_staff_read on bank_transactions for select
   using (is_staff(project_id));
 
@@ -507,17 +555,23 @@ create policy bank_txn_staff_read on bank_transactions for select
 -- sửa được nội quy và biểu SLA mà không có gì chặn. Bật RLS khóa cửa đó lại
 -- trước, đúng như đã làm với buildings/units.
 alter table projects enable row level security;
+drop policy if exists project_read on projects;
 create policy project_read on projects for select using (true);
+drop policy if exists project_staff_write on projects;
 create policy project_staff_write on projects for all
   using (is_staff(id)) with check (is_staff(id));
 
 alter table sla_policies enable row level security;
+drop policy if exists sla_read on sla_policies;
 create policy sla_read on sla_policies for select using (true);
+drop policy if exists sla_staff_write on sla_policies;
 create policy sla_staff_write on sla_policies for all
   using (is_staff(project_id)) with check (is_staff(project_id));
 
 alter table documents enable row level security;
+drop policy if exists document_read on documents;
 create policy document_read on documents for select using (true);
+drop policy if exists document_staff_write on documents;
 create policy document_staff_write on documents for all
   using (is_staff(project_id)) with check (is_staff(project_id));
 
@@ -552,6 +606,7 @@ language sql stable security definer set search_path = public as $fn$
 $fn$;
 
 alter table announcements enable row level security;
+drop policy if exists announcement_read on announcements;
 create policy announcement_read on announcements for select
   using (
     is_staff(project_id)
@@ -565,20 +620,25 @@ create policy announcement_read on announcements for select
 -- Chưa cấp quyền ghi bảng cho authenticated (xem auth_hooks.sql) nên policy này
 -- hiện chưa dùng tới. Để sẵn cho đúng: lúc có màn soạn thông báo thì chỉ cần
 -- thêm grant, không phải nghĩ lại chuyện ai được ghi.
+drop policy if exists announcement_staff_write on announcements;
 create policy announcement_staff_write on announcements for all
   using (is_staff(project_id)) with check (is_staff(project_id));
 
 -- ── Xe và thú cưng: chủ hộ / người được ủy quyền tự quản lý căn mình.
 --    BQL đọc được để đối chiếu đỗ xe sai, chó thả rông — nhưng không sửa hộ.
 alter table unit_vehicles enable row level security;
+drop policy if exists vehicle_resident_read on unit_vehicles;
 create policy vehicle_resident_read on unit_vehicles for select
   using (unit_id in (select current_unit_ids()) or is_staff(unit_project(unit_id)));
+drop policy if exists vehicle_manager_write on unit_vehicles;
 create policy vehicle_manager_write on unit_vehicles for all
   using (is_unit_manager(unit_id)) with check (is_unit_manager(unit_id));
 
 alter table unit_pets enable row level security;
+drop policy if exists pet_resident_read on unit_pets;
 create policy pet_resident_read on unit_pets for select
   using (unit_id in (select current_unit_ids()) or is_staff(unit_project(unit_id)));
+drop policy if exists pet_manager_write on unit_pets;
 create policy pet_manager_write on unit_pets for all
   using (is_unit_manager(unit_id)) with check (is_unit_manager(unit_id));
 
@@ -617,7 +677,7 @@ begin
   return new;
 end $fn$;
 
-create trigger trg_ticket_fill before insert on tickets
+create or replace trigger trg_ticket_fill before insert on tickets
   for each row execute function ticket_fill_defaults();
 
 -- API tạo ticket cho app. Vì sao cần hàm này thay vì insert thẳng:
@@ -663,7 +723,7 @@ begin
   return new;
 end $fn$;
 
-create trigger trg_ticket_log after insert or update on tickets
+create or replace trigger trg_ticket_log after insert or update on tickets
   for each row execute function ticket_log_change();
 
 -- Mốc thời gian đo SLA: đóng dấu lần đầu, không ghi đè khi đổi trạng thái tiếp.
@@ -679,7 +739,7 @@ begin
   return new;
 end $fn$;
 
-create trigger trg_ticket_stamp before update on tickets
+create or replace trigger trg_ticket_stamp before update on tickets
   for each row execute function ticket_stamp_times();
 
 -- N13 — cư dân chấm điểm sau khi việc xong.
@@ -890,6 +950,12 @@ end $fn$;
 -- bắt buộc phải có tên + số điện thoại người liên hệ. Đổi lại, hàm tự kiểm
 -- is_staff và khóa cứng vào p_project — definer mà quên hai thứ đó là dựng sẵn
 -- một API dump công nợ toàn hệ thống.
+-- Đổi kiểu trả về của một hàm đã tồn tại thì Postgres TỪ CHỐI `create or
+-- replace` ("cannot change return type of existing function"). Bài áp-lại-lần-
+-- hai ở verify-schema không bắt được ca này: nó áp CÙNG một file hai lượt, còn
+-- đây là file MỚI gặp hàm CŨ đang chạy ngoài production. Thêm cột vào một
+-- `returns table` thì phải kèm câu drop, không có cách nào khác.
+drop function if exists bql_debt_report(uuid);
 create or replace function bql_debt_report(p_project uuid)
 returns table (
   unit_id         uuid,
@@ -900,7 +966,11 @@ returns table (
   han_cu_nhat     date,
   so_ngay_qua_han int,     -- âm = chưa tới hạn, còn ngần đó ngày
   ten_lien_he     text,
-  dien_thoai      text
+  dien_thoai      text,
+  -- Email đứng CẠNH điện thoại, không thay nó. Nhắc nợ qua thư thì cần email;
+  -- gọi điện thì cần số. Trả về một thứ là buộc người đi đòi nợ phải mở thêm
+  -- một màn nữa để lấy nốt thứ kia, mà lúc đó họ đang cầm danh sách 40 căn.
+  email           text
 )
 language plpgsql stable security definer set search_path = public as $fn$
 begin
@@ -915,14 +985,14 @@ begin
            min(i.due_date),
            -- Tuổi nợ tính theo hóa đơn CŨ NHẤT còn thiếu, không phải mới nhất.
            (current_date - min(i.due_date))::int,
-           o.full_name, o.phone
+           o.full_name, o.phone, o.email
       from invoices i
       join units u     on u.id = i.unit_id
       join buildings b on b.id = u.building_id
       -- left join: căn chưa có chủ hộ hoạt động vẫn phải hiện ra. Nợ không tự
       -- mất đi vì thiếu người đứng tên.
       left join lateral (
-        select p.full_name, p.phone
+        select p.full_name, p.phone, p.email
           from unit_memberships m
           join profiles p on p.id = m.user_id
          where m.unit_id = u.id and m.role = 'owner' and m.status = 'active'
@@ -932,7 +1002,7 @@ begin
      where i.project_id = p_project
        and i.status in ('issued','partial')
        and i.total_amount > i.paid_amount
-     group by u.id, u.code, b.code, o.full_name, o.phone
+     group by u.id, u.code, b.code, o.full_name, o.phone, o.email
      order by sum(i.total_amount - i.paid_amount) desc, u.code;
 end $fn$;
 
@@ -1799,7 +1869,7 @@ end $fn$;
 -- app tự log thì sớm muộn có nhánh quên log, mà một sổ kiểm toán thủng lỗ chỗ
 -- còn tệ hơn không có sổ, vì nó tạo cảm giác an toàn giả.
 
-create table audit_log (
+create table if not exists audit_log (
   id          bigserial primary key,
   at          timestamptz not null default now(),
   -- Ai. null = không có phiên đăng nhập (cron, webhook, service_role, SQL editor).
@@ -1819,9 +1889,9 @@ create table audit_log (
   truoc       jsonb not null default '{}'::jsonb,
   sau         jsonb not null default '{}'::jsonb
 );
-create index on audit_log (project_id, at desc);
-create index on audit_log (bang, ban_ghi, at desc);
-create index on audit_log (actor_id, at desc);
+create index if not exists audit_log_project_id_at_idx on audit_log (project_id, at desc);
+create index if not exists audit_log_bang_ban_ghi_at_idx on audit_log (bang, ban_ghi, at desc);
+create index if not exists audit_log_actor_id_at_idx on audit_log (actor_id, at desc);
 
 -- Cột không bao giờ chép nội dung sang sổ. raw_payload giữ nguyên gói tin ngân
 -- hàng (có tên người chuyển), id_number là số CCCD, qr_payload dựng lại được
@@ -1901,23 +1971,23 @@ end $fn$;
 -- Chín bảng đáng ghi sổ: tiền, quyền, và những con số đẻ ra tiền. KHÔNG ghi
 -- notifications (rác), ticket_events (đã là sổ), meter_readings (đổi mỗi kỳ,
 -- và số cuối đã nằm trong hóa đơn).
-create trigger trg_audit_units after insert or update or delete on units
+create or replace trigger trg_audit_units after insert or update or delete on units
   for each row execute function ghi_nhat_ky('building_id');
-create trigger trg_audit_memberships after insert or update or delete on unit_memberships
+create or replace trigger trg_audit_memberships after insert or update or delete on unit_memberships
   for each row execute function ghi_nhat_ky('unit_id');
-create trigger trg_audit_staff after insert or update or delete on staff_assignments
+create or replace trigger trg_audit_staff after insert or update or delete on staff_assignments
   for each row execute function ghi_nhat_ky('project_id');
-create trigger trg_audit_fee_types after insert or update or delete on fee_types
+create or replace trigger trg_audit_fee_types after insert or update or delete on fee_types
   for each row execute function ghi_nhat_ky('project_id');
-create trigger trg_audit_sla after insert or update or delete on sla_policies
+create or replace trigger trg_audit_sla after insert or update or delete on sla_policies
   for each row execute function ghi_nhat_ky('project_id');
-create trigger trg_audit_invoices after insert or update or delete on invoices
+create or replace trigger trg_audit_invoices after insert or update or delete on invoices
   for each row execute function ghi_nhat_ky('project_id');
-create trigger trg_audit_invoice_lines after insert or update or delete on invoice_lines
+create or replace trigger trg_audit_invoice_lines after insert or update or delete on invoice_lines
   for each row execute function ghi_nhat_ky('invoice_id');
-create trigger trg_audit_payments after insert or update or delete on payments
+create or replace trigger trg_audit_payments after insert or update or delete on payments
   for each row execute function ghi_nhat_ky('unit_id');
-create trigger trg_audit_bank_txn after insert or update or delete on bank_transactions
+create or replace trigger trg_audit_bank_txn after insert or update or delete on bank_transactions
   for each row execute function ghi_nhat_ky('project_id');
 
 -- RLS: chỉ BQL của đúng dự án đọc được. Không có policy ghi nào cả — trigger
@@ -1927,6 +1997,7 @@ create trigger trg_audit_bank_txn after insert or update or delete on bank_trans
 -- cả lên chủ bảng, mà trigger definer chính là chạy dưới quyền chủ bảng — bật
 -- lên là trigger tự chặn chính nó và MỌI lệnh ghi vào chín bảng kia đều hỏng.
 alter table audit_log enable row level security;
+drop policy if exists audit_staff_read on audit_log;
 create policy audit_staff_read on audit_log for select using (is_staff(project_id));
 
 -- ═════════════════════ 11. BẢO TRÌ ĐỊNH KỲ ═════════════════════
@@ -1941,7 +2012,7 @@ create policy audit_staff_read on audit_log for select using (is_staff(project_i
 -- việc: có người nhận, có trạng thái, hiện trên màn kỹ thuật. Sạch hơn là bẻ
 -- cong bảng ticket cho vừa.
 
-create table maintenance_plans (
+create table if not exists maintenance_plans (
   id            uuid primary key default gen_random_uuid(),
   project_id    uuid not null references projects(id) on delete cascade,
   building_id   uuid references buildings(id) on delete cascade,   -- null = cả khu
@@ -1958,12 +2029,12 @@ create table maintenance_plans (
   is_active     boolean not null default true,
   created_at    timestamptz not null default now()
 );
-create index on maintenance_plans (project_id, is_active, han_ke_tiep);
+create index if not exists maintenance_plans_project_id_is_active_han_ke_tiep_idx on maintenance_plans (project_id, is_active, han_ke_tiep);
 
 -- Mỗi hạn là một dòng. unique (plan_id, han) là chốt chống trùng: cron chạy
 -- lại (retry, hoặc hai bản sao cùng chạy) không đẻ ra hai lần bảo trì cho cùng
 -- một hạn. Cùng kiểu chốt như unique (unit_id, period) bên hóa đơn.
-create table maintenance_runs (
+create table if not exists maintenance_runs (
   id          uuid primary key default gen_random_uuid(),
   plan_id     uuid not null references maintenance_plans(id) on delete cascade,
   han         date not null,
@@ -1973,16 +2044,18 @@ create table maintenance_runs (
   ket_qua     text,
   unique (plan_id, han)
 );
-create index on maintenance_runs (plan_id, han desc);
-create index on maintenance_runs (lam_luc) where lam_luc is null;
+create index if not exists maintenance_runs_plan_id_han_idx on maintenance_runs (plan_id, han desc);
+create index if not exists maintenance_runs_lam_luc_idx on maintenance_runs (lam_luc) where lam_luc is null;
 
 alter table maintenance_plans enable row level security;
 alter table maintenance_plans force row level security;
+drop policy if exists mp_staff on maintenance_plans;
 create policy mp_staff on maintenance_plans for all
   using (is_staff(project_id)) with check (is_staff(project_id));
 
 alter table maintenance_runs enable row level security;
 alter table maintenance_runs force row level security;
+drop policy if exists mr_staff on maintenance_runs;
 create policy mr_staff on maintenance_runs for all
   using (is_staff((select p.project_id from maintenance_plans p where p.id = plan_id)))
   with check (is_staff((select p.project_id from maintenance_plans p where p.id = plan_id)));
@@ -2054,7 +2127,7 @@ end $fn$;
 -- Thông báo đang là một chiều. Ý kiến cư dân vẫn nằm ở nhóm Zalo mà BQL không
 -- đọc hết được — và không lưu lại được để đối chiếu về sau.
 
-create table announcement_comments (
+create table if not exists announcement_comments (
   id              bigserial primary key,
   announcement_id uuid not null references announcements(id) on delete cascade,
   author_id       uuid not null references profiles(id) on delete cascade,
@@ -2069,9 +2142,9 @@ create table announcement_comments (
   an_ly_do        text,
   created_at      timestamptz not null default now()
 );
-create index on announcement_comments (announcement_id, created_at);
+create index if not exists announcement_comments_announcement_id_created_at_idx on announcement_comments (announcement_id, created_at);
 
-create table announcement_polls (
+create table if not exists announcement_polls (
   -- unique: một thông báo một cuộc thăm dò. Hai cuộc trên cùng một thông báo là
   -- người đọc không biết đang bỏ phiếu cho cái nào.
   announcement_id uuid primary key references announcements(id) on delete cascade,
@@ -2096,7 +2169,7 @@ create table announcement_polls (
  * cư là chuyện khác — có trọng số theo diện tích, có biên bản — và là một tính
  * năng riêng.
  */
-create table announcement_votes (
+create table if not exists announcement_votes (
   poll_id   uuid not null references announcement_polls(announcement_id) on delete cascade,
   unit_id   uuid not null references units(id) on delete cascade,
   user_id   uuid not null references profiles(id) on delete cascade,
@@ -2104,7 +2177,7 @@ create table announcement_votes (
   bo_luc    timestamptz not null default now(),
   primary key (poll_id, unit_id)
 );
-create index on announcement_votes (poll_id, chon);
+create index if not exists announcement_votes_poll_id_chon_idx on announcement_votes (poll_id, chon);
 
 alter table announcement_comments enable row level security;
 alter table announcement_polls    enable row level security;
@@ -2118,9 +2191,11 @@ alter table announcement_votes    enable row level security;
  * Bình luận đã ẩn: chỉ BQL còn thấy nội dung. Cư dân thấy dòng trống chỗ (màn
  * hiện "đã ẩn") chứ không thấy bình luận biến mất không dấu vết.
  */
+drop policy if exists ac_read on announcement_comments;
 create policy ac_read on announcement_comments for select using (
   announcement_id in (select id from announcements)
 );
+drop policy if exists ac_viet on announcement_comments;
 create policy ac_viet on announcement_comments for insert with check (
   author_id = auth.uid()
   and announcement_id in (select id from announcements)
@@ -2128,15 +2203,18 @@ create policy ac_viet on announcement_comments for insert with check (
 );
 -- Sửa/ẩn: BQL của dự án chứa thông báo đó. Cư dân KHÔNG sửa được lời mình đã
 -- nói — sửa sau khi người khác đã trả lời là bẻ cong cả mạch hội thoại.
+drop policy if exists ac_bql on announcement_comments;
 create policy ac_bql on announcement_comments for update using (
   is_staff((select a.project_id from announcements a where a.id = announcement_id))
 ) with check (
   is_staff((select a.project_id from announcements a where a.id = announcement_id))
 );
 
+drop policy if exists ap_read on announcement_polls;
 create policy ap_read on announcement_polls for select using (
   announcement_id in (select id from announcements)
 );
+drop policy if exists ap_bql on announcement_polls;
 create policy ap_bql on announcement_polls for all using (
   is_staff((select a.project_id from announcements a where a.id = announcement_id))
 ) with check (
@@ -2146,9 +2224,11 @@ create policy ap_bql on announcement_polls for all using (
 -- Phiếu: đọc được thì đếm được. Cuộc thăm dò KÍN che kết quả ở tầng hàm
 -- ket_qua_tham_do() chứ không ở tầng RLS — che bằng RLS thì chính người bỏ
 -- phiếu cũng không đọc lại được phiếu của mình.
+drop policy if exists av_read on announcement_votes;
 create policy av_read on announcement_votes for select using (
   poll_id in (select announcement_id from announcement_polls)
 );
+drop policy if exists av_bo on announcement_votes;
 create policy av_bo on announcement_votes for all using (
   unit_id in (select current_unit_ids())
 ) with check (
@@ -2353,8 +2433,10 @@ update unit_vehicles set loai = case
 alter table bai_xe enable row level security;
 -- Cư dân ĐỌC được hạn mức của tòa: không thấy con số thì "còn 3 chỗ" chỉ là
 -- lời nói miệng, và hàng chờ mất hết sức thuyết phục.
+drop policy if exists bai_xe_read on bai_xe;
 create policy bai_xe_read on bai_xe for select
   using (building_project(building_id) is not null);
+drop policy if exists bai_xe_staff on bai_xe;
 create policy bai_xe_staff on bai_xe for all
   using (is_staff(building_project(building_id)))
   with check (is_staff(building_project(building_id)));
@@ -2853,8 +2935,10 @@ $fn$;
 -- cửa sau vào cùng dữ liệu đó.
 alter table phieu_thu      enable row level security;
 alter table phieu_thu_dong enable row level security;
+drop policy if exists phieu_thu_read on phieu_thu;
 create policy phieu_thu_read on phieu_thu for select
   using (is_staff(project_id) or xem_duoc_tien_cua_can(unit_id));
+drop policy if exists phieu_thu_dong_read on phieu_thu_dong;
 create policy phieu_thu_dong_read on phieu_thu_dong for select
   using (exists (select 1 from phieu_thu p where p.id = phieu_thu_dong.phieu_id));
 
@@ -2864,7 +2948,7 @@ create policy phieu_thu_dong_read on phieu_thu_dong for select
 -- Không có policy INSERT/UPDATE/DELETE nào cho bất kỳ role nào: sổ chứng từ chỉ
 -- được viết bởi hàm definer.
 
-create trigger trg_audit_phieu_thu after insert or update or delete on phieu_thu
+create or replace trigger trg_audit_phieu_thu after insert or update or delete on phieu_thu
   for each row execute function ghi_nhat_ky('project_id');
 
 -- ═════════════════════ 16. QUỸ BẢO TRÌ 2% ═════════════════════
@@ -3087,16 +3171,18 @@ end $fn$;
 -- che nó đi thì còn lại một cuốn sổ chỉ người giữ tiền đọc được.
 alter table quy_bao_tri            enable row level security;
 alter table quy_bao_tri_giao_dich  enable row level security;
+drop policy if exists quy_read on quy_bao_tri;
 create policy quy_read on quy_bao_tri for select
   using (is_staff(project_id) or o_trong_du_an(project_id));
+drop policy if exists quy_gd_read on quy_bao_tri_giao_dich;
 create policy quy_gd_read on quy_bao_tri_giao_dich for select
   using (is_staff(project_id) or o_trong_du_an(project_id));
 -- Không policy ghi cho role nào: vào sổ quỹ chỉ qua quy_ghi / quy_dao / và
 -- quy_dat_doi_chieu, tất cả đều definer và đều kiểm quyền ở đầu hàm.
 
-create trigger trg_audit_quy after insert or update or delete on quy_bao_tri_giao_dich
+create or replace trigger trg_audit_quy after insert or update or delete on quy_bao_tri_giao_dich
   for each row execute function ghi_nhat_ky('project_id');
-create trigger trg_audit_quy_tk after insert or update or delete on quy_bao_tri
+create or replace trigger trg_audit_quy_tk after insert or update or delete on quy_bao_tri
   for each row execute function ghi_nhat_ky('project_id');
 
 -- ═════════════════════ 17. KHÁCH THĂM & SỔ RA VÀO ═════════════════════
@@ -3392,11 +3478,12 @@ alter table khach_tham enable row level security;
 -- Cư dân đọc lượt khách của CĂN MÌNH (kể cả người nhà: mời khách không phải
 -- chuyện tiền nong, nên can_view_finance không dính dáng gì ở đây). Nhân sự đọc
 -- cả dự án — đó chính là cuốn sổ ra vào.
+drop policy if exists khach_read on khach_tham;
 create policy khach_read on khach_tham for select
   using (is_staff(project_id) or unit_id in (select current_unit_ids()));
 -- Không policy ghi: mời / thu hồi / quét đều đi qua hàm definer.
 
-create trigger trg_audit_khach after insert or update or delete on khach_tham
+create or replace trigger trg_audit_khach after insert or update or delete on khach_tham
   for each row execute function ghi_nhat_ky('project_id');
 
 -- ═════════════════════ 18. ĐẶT TIỆN ÍCH THEO KHUNG GIỜ ═════════════════════
@@ -3639,22 +3726,27 @@ $fn$;
 alter table tien_ich       enable row level security;
 alter table tien_ich_suat  enable row level security;
 alter table dat_tien_ich   enable row level security;
+drop policy if exists tien_ich_read on tien_ich;
 create policy tien_ich_read on tien_ich for select
   using (is_staff(project_id) or o_trong_du_an(project_id));
+drop policy if exists tien_ich_staff_write on tien_ich;
 create policy tien_ich_staff_write on tien_ich for all
   using (is_staff(project_id)) with check (is_staff(project_id));
+drop policy if exists suat_read on tien_ich_suat;
 create policy suat_read on tien_ich_suat for select
   using (exists (select 1 from tien_ich t where t.id = tien_ich_suat.tien_ich_id));
+drop policy if exists suat_staff_write on tien_ich_suat;
 create policy suat_staff_write on tien_ich_suat for all
   using (is_staff((select project_id from tien_ich where id = tien_ich_id)))
   with check (is_staff((select project_id from tien_ich where id = tien_ich_id)));
 -- Cư dân đọc lượt đặt của CĂN MÌNH. Lịch chung đi qua lich_tien_ich(), nơi mã
 -- căn của người khác bị cắt đi — đọc thẳng bảng thì thấy hết ai đặt giờ nào,
 -- mà đó là một bảng lịch sinh hoạt của hàng xóm.
+drop policy if exists dat_read on dat_tien_ich;
 create policy dat_read on dat_tien_ich for select
   using (is_staff(project_id) or unit_id in (select current_unit_ids()));
 
-create trigger trg_audit_dat_tien_ich after insert or update or delete on dat_tien_ich
+create or replace trigger trg_audit_dat_tien_ich after insert or update or delete on dat_tien_ich
   for each row execute function ghi_nhat_ky('project_id');
 
 -- ═════════════════════ 19. NHẬN HÀNG HỘ ═════════════════════
@@ -3910,12 +4002,13 @@ end $fn$;
 alter table kien_hang enable row level security;
 -- Cư dân đọc kiện của CĂN MÌNH, kể cả người nhà: nhận hàng hộ không phải chuyện
 -- tiền nong nên can_view_finance không dính dáng gì ở đây.
+drop policy if exists kien_read on kien_hang;
 create policy kien_read on kien_hang for select
   using (is_staff(project_id) or unit_id in (select current_unit_ids()));
 -- Không policy ghi: nhận / trao / hủy đều đi qua hàm definer, và cả ba đều kiểm
 -- is_staff ở đầu hàm.
 
-create trigger trg_audit_kien after insert or update or delete on kien_hang
+create or replace trigger trg_audit_kien after insert or update or delete on kien_hang
   for each row execute function ghi_nhat_ky('project_id');
 
 -- ═════════════════════ 20. CHỐT SỔ BÀN GIAO ═════════════════════
@@ -4141,14 +4234,16 @@ $fn$;
 -- CHI TIẾT TỪNG CĂN thì không: đó là công nợ của hàng xóm.
 alter table chot_ban_giao     enable row level security;
 alter table chot_ban_giao_can enable row level security;
+drop policy if exists chot_read on chot_ban_giao;
 create policy chot_read on chot_ban_giao for select
   using (is_staff(project_id) or o_trong_du_an(project_id));
+drop policy if exists chot_can_read on chot_ban_giao_can;
 create policy chot_can_read on chot_ban_giao_can for select
   using (exists (select 1 from chot_ban_giao c
                   where c.id = chot_ban_giao_can.chot_id and is_staff(c.project_id))
          or unit_id in (select current_unit_ids()));
 
-create trigger trg_audit_chot after insert or update or delete on chot_ban_giao
+create or replace trigger trg_audit_chot after insert or update or delete on chot_ban_giao
   for each row execute function ghi_nhat_ky('project_id');
 
 -- ═════════════════════ 21. BIỂU QUYẾT HỘI NGHỊ NHÀ CHUNG CƯ ═════════════════
@@ -4473,19 +4568,22 @@ alter table bieu_quyet_can   enable row level security;
 alter table phieu_bieu_quyet enable row level security;
 -- Cuộc biểu quyết và kết quả: cả khu đọc được. Kết quả mà chỉ ban tổ chức nhìn
 -- thấy thì đúng là thứ hội nghị nhà chung cư hay bị nghi ngờ nhất.
+drop policy if exists bq_read on bieu_quyet;
 create policy bq_read on bieu_quyet for select
   using (is_staff(project_id) or o_trong_du_an(project_id));
+drop policy if exists bq_can_read on bieu_quyet_can;
 create policy bq_can_read on bieu_quyet_can for select
   using (exists (select 1 from bieu_quyet b where b.id = bieu_quyet_can.bieu_quyet_id));
 -- PHIẾU thì không: hàng xóm bỏ phiếu gì không phải việc của nhau. BQT/BQL thấy
 -- hết vì họ là ban kiểm phiếu; mỗi căn thấy phiếu của chính mình.
+drop policy if exists phieu_bq_read on phieu_bieu_quyet;
 create policy phieu_bq_read on phieu_bieu_quyet for select
   using (unit_id in (select current_unit_ids())
          or is_staff((select project_id from bieu_quyet where id = bieu_quyet_id)));
 
-create trigger trg_audit_bieu_quyet after insert or update or delete on bieu_quyet
+create or replace trigger trg_audit_bieu_quyet after insert or update or delete on bieu_quyet
   for each row execute function ghi_nhat_ky('project_id');
-create trigger trg_audit_phieu_bq after insert or update or delete on phieu_bieu_quyet
+create or replace trigger trg_audit_phieu_bq after insert or update or delete on phieu_bieu_quyet
   for each row execute function ghi_nhat_ky('unit_id');
 
 -- ═════════════════ 22. THU THEO ĐỢT CHO KHOẢN LỚN ═══════════════════════════
@@ -4818,19 +4916,22 @@ alter table ke_hoach_thu_dot enable row level security;
 alter table dot_thu_can      enable row level security;
 -- Khoản chi chung của cả tòa: ai ở trong khu cũng đọc được kế hoạch và lịch.
 -- Giấu đi thì con số trên hóa đơn của họ không có chỗ nào tra ngược lại.
+drop policy if exists kht_read on ke_hoach_thu;
 create policy kht_read on ke_hoach_thu for select
   using (is_staff(project_id) or o_trong_du_an(project_id));
+drop policy if exists kht_dot_read on ke_hoach_thu_dot;
 create policy kht_dot_read on ke_hoach_thu_dot for select
   using (exists (select 1 from ke_hoach_thu k where k.id = ke_hoach_thu_dot.ke_hoach_id));
 -- Số tiền của TỪNG CĂN thì theo đúng luật xem tiền của căn đó — cùng vị từ với
 -- hóa đơn và phiếu thu, không viết lại lần thứ ba.
+drop policy if exists dtc_read on dot_thu_can;
 create policy dtc_read on dot_thu_can for select
   using (xem_duoc_tien_cua_can(unit_id)
          or is_staff((select k.project_id from ke_hoach_thu k
                         join ke_hoach_thu_dot d on d.ke_hoach_id = k.id
                        where d.id = dot_thu_can.dot_id)));
 
-create trigger trg_audit_ke_hoach_thu after insert or update or delete on ke_hoach_thu
+create or replace trigger trg_audit_ke_hoach_thu after insert or update or delete on ke_hoach_thu
   for each row execute function ghi_nhat_ky('project_id');
 
 -- ═════════════════ 23. CA TRỰC VÀ BIÊN BẢN BÀN GIAO CA ══════════════════════
@@ -5135,17 +5236,21 @@ alter table ban_giao_ca     enable row level security;
 alter table ban_giao_ca_viec enable row level security;
 -- Toàn bộ khối này CHỈ NHÂN SỰ đọc. Cư dân không có việc gì với lịch trực, và
 -- công khai ai trực đêm nào là công khai lúc nào tòa nhà mỏng người nhất.
+drop policy if exists ca_truc_staff on ca_truc;
 create policy ca_truc_staff on ca_truc for all
   using (is_staff(project_id)) with check (is_staff(project_id));
+drop policy if exists phien_truc_staff on phien_truc;
 create policy phien_truc_staff on phien_truc for select using (is_staff(project_id));
+drop policy if exists ban_giao_staff on ban_giao_ca;
 create policy ban_giao_staff on ban_giao_ca for select using (is_staff(project_id));
+drop policy if exists ban_giao_viec_staff on ban_giao_ca_viec;
 create policy ban_giao_viec_staff on ban_giao_ca_viec for select
   using (exists (select 1 from ban_giao_ca b
                   where b.id = ban_giao_ca_viec.ban_giao_id and is_staff(b.project_id)));
 
-create trigger trg_audit_ban_giao_ca after insert or update or delete on ban_giao_ca
+create or replace trigger trg_audit_ban_giao_ca after insert or update or delete on ban_giao_ca
   for each row execute function ghi_nhat_ky('project_id');
-create trigger trg_audit_phien_truc after insert or update or delete on phien_truc
+create or replace trigger trg_audit_phien_truc after insert or update or delete on phien_truc
   for each row execute function ghi_nhat_ky('project_id');
 
 -- ═════════════════ 24. KHO VẬT TƯ, XUẤT KHO THEO YÊU CẦU ════════════════════
@@ -5444,14 +5549,17 @@ alter table phieu_kho      enable row level security;
 alter table phieu_kho_dong enable row level security;
 -- Kho là chuyện nội bộ vận hành. Cư dân biết vật tư nào còn bao nhiêu không
 -- giúp gì cho họ, mà lại là bản đồ cho người muốn biết tòa nhà đang thiếu gì.
+drop policy if exists vat_tu_staff on vat_tu;
 create policy vat_tu_staff on vat_tu for all
   using (is_staff(project_id)) with check (is_staff(project_id));
+drop policy if exists phieu_kho_staff on phieu_kho;
 create policy phieu_kho_staff on phieu_kho for select using (is_staff(project_id));
+drop policy if exists phieu_kho_dong_staff on phieu_kho_dong;
 create policy phieu_kho_dong_staff on phieu_kho_dong for select
   using (exists (select 1 from phieu_kho p
                   where p.id = phieu_kho_dong.phieu_id and is_staff(p.project_id)));
 
-create trigger trg_audit_phieu_kho after insert or update or delete on phieu_kho
+create or replace trigger trg_audit_phieu_kho after insert or update or delete on phieu_kho
   for each row execute function ghi_nhat_ky('project_id');
 
 -- ═════════════ 25. ĐĂNG KÝ CHUYỂN NHÀ VÀ THI CÔNG NỘI THẤT ══════════════════
@@ -5828,10 +5936,11 @@ $fn$;
 alter table dang_ky_thi_cong enable row level security;
 -- Cư dân thấy đăng ký của CĂN MÌNH; nhân sự thấy cả dự án. Hàng xóm không cần
 -- biết nhà bên đang sửa gì, nhưng họ vẫn khiếu nại được qua yêu cầu như cũ.
+drop policy if exists dktc_read on dang_ky_thi_cong;
 create policy dktc_read on dang_ky_thi_cong for select
   using (is_staff(project_id) or unit_id in (select current_unit_ids()));
 
-create trigger trg_audit_dktc after insert or update or delete on dang_ky_thi_cong
+create or replace trigger trg_audit_dktc after insert or update or delete on dang_ky_thi_cong
   for each row execute function ghi_nhat_ky('unit_id');
 
 -- ═══════════════ 26. BÁO CÁO BAN QUẢN TRỊ HÀNG QUÝ ══════════════════════════
@@ -6097,10 +6206,11 @@ $fn$;
 alter table bao_cao_quy enable row level security;
 -- CẢ KHU ĐỌC ĐƯỢC. Báo cáo quý là thứ BQT mang ra họp với cư dân; giấu nó đi
 -- thì mỗi lần họp lại quay về cãi nhau về con số thay vì bàn về việc.
+drop policy if exists bcq_read on bao_cao_quy;
 create policy bcq_read on bao_cao_quy for select
   using (is_staff(project_id) or o_trong_du_an(project_id));
 
-create trigger trg_audit_bao_cao_quy after insert or update or delete on bao_cao_quy
+create or replace trigger trg_audit_bao_cao_quy after insert or update or delete on bao_cao_quy
   for each row execute function ghi_nhat_ky('project_id');
 
 -- ═══════════════ 27. NHIỀU TÒA, NHIỀU KHU TRONG MỘT TÀI KHOẢN ═══════════════
@@ -6117,6 +6227,7 @@ create trigger trg_audit_bao_cao_quy after insert or update or delete on bao_cao
 -- hàng trên cùng một cài đặt thì nó thành một chỗ liệt kê tên mọi khu cho bất
 -- kỳ ai đăng nhập — và tên khu là thông tin thương mại.
 
+drop policy if exists project_read on projects;
 drop policy if exists project_read on projects;
 create policy project_read on projects for select
   using (is_staff(id) or o_trong_du_an(id));
@@ -6330,7 +6441,9 @@ create index if not exists push_theo_nguoi on push_dang_ky (user_id);
 alter table push_dang_ky enable row level security;
 -- Mỗi người chỉ thấy và gỡ được máy CỦA MÌNH. Đọc được endpoint của người khác
 -- là đọc được họ dùng máy gì và đăng ký lúc nào.
+drop policy if exists push_cua_toi on push_dang_ky;
 create policy push_cua_toi on push_dang_ky for select using (user_id = auth.uid());
+drop policy if exists push_tu_go on push_dang_ky;
 create policy push_tu_go   on push_dang_ky for delete using (user_id = auth.uid());
 -- Ghi đi qua RPC dưới đây, không cấp insert thẳng: khoá endpoint là thứ nhà
 -- cung cấp push tin, nên không để ai gắn endpoint của mình vào user_id người khác.
@@ -6465,6 +6578,7 @@ alter table job_chay enable row level security;
 -- Nhân sự BQL đọc được. Không có gì riêng tư trong đây — tên job, giờ chạy, số
 -- dòng — nhưng cũng không có lý do gì để cư dân thấy tình trạng hạ tầng. Ghi
 -- thì không cấp cho ai: dòng duy nhất được phép ghi là chính lần chạy job.
+drop policy if exists job_chay_bql on job_chay;
 create policy job_chay_bql on job_chay for select using (la_nhan_su());
 
 /**

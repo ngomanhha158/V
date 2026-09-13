@@ -9,6 +9,7 @@ import {
   Bang, Card, CardHead, Hop, PageHead, Pill, Stat, Td, Th, Tr, Trong,
 } from '@/components/ui'
 import { ODienTich, FormHangLoat } from './form'
+import { quyen } from '@/lib/chot-quyen'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,8 +25,8 @@ export default async function CanHo({
   if (!project) return <Trong title="Chưa có dự án nào trong hệ thống" />
 
   // Guard hiển thị. Chốt chặn thật là RLS (policy unit_staff_write).
-  const { data: isStaff } = await db.rpc('is_staff', { p_project: project.id })
-  if (!isStaff) redirect('/')
+  const kqStaff = await db.rpc('is_staff', { p_project: project.id })
+  if (!quyen(kqStaff, 'is_staff')) redirect('/')
 
   const { data: toaNha } = await db
     .from('buildings').select('id, code, name').eq('project_id', project.id).order('code')
