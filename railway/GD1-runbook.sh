@@ -22,17 +22,33 @@ export PGHOST=localhost
 echo "── A1/4  Lấy file từ repo"
 command -v curl >/dev/null || { apt-get -qq update >/dev/null && apt-get -qq install -y curl >/dev/null; }
 BASE=https://raw.githubusercontent.com/ngomanhha158/v/main
-for f in railway/00_compat.sql railway/02_smoke_prod.sql railway/03_auth.sql railway/04_smoke_auth.sql; do
+for f in railway/00_compat.sql schema.sql auth_hooks.sql \
+         railway/02_smoke_prod.sql railway/03_auth.sql railway/04_smoke_auth.sql; do
   curl -sSL -o "$(basename "$f")" "$BASE/$f"
 done
 
-echo "── A2/4  Áp lại lớp tương thích + lớp đăng nhập"
-# 00_compat.sql chạy LẠI được: toàn bộ là create-if-not-exists và create-or-replace.
-# Lần này nó thêm hai thứ mà GĐ0 chưa có — role `authenticator` cho PostgREST,
-# và auth.uid() đọc được danh tính từ JWT.
+echo "── A2/4  Áp schema + lớp tương thích + lớp đăng nhập"
+# THỨ TỰ CÓ Ý NGHĨA, không xếp bừa:
+#   00_compat   dựng auth.uid() và ba role mà mọi policy bên dưới đứng lên;
+#   schema      dựng bảng, hàm, policy — phần lớn hệ thống nằm ở đây;
+#   auth_hooks  thu hồi quyền nền rồi cấp lại, nên phải chạy SAU schema, không
+#               thì nó thu hồi trên những bảng chưa tồn tại;
+#   03_auth     lớp đăng nhập.
+#
+# CẢ BỐN FILE ÁP LẠI ĐƯỢC lên một database đã có sẵn — và đó là một bài test,
+# không phải một lời hứa: `npm run verify` cùng `npm run verify:railway` áp lại
+# lần hai lên chính database vừa dựng, và đỏ nếu có ai thêm một câu `create`
+# trần vào.
+#
+# Trước ngày 13/09 thì KHÔNG phải vậy: schema.sql mở đầu bằng tám câu
+# `create type` trần, nên áp lên database đã chạy là đỏ ngay dòng thứ chín —
+# và bước này thậm chí còn chưa có trong runbook, nên database production thiếu
+# hẳn những hàm mà app gọi tới (job_ghi_nhan là cái lộ ra trong log).
 psql -v ON_ERROR_STOP=1 -q -f 00_compat.sql
+psql -v ON_ERROR_STOP=1 -q -f schema.sql
+psql -v ON_ERROR_STOP=1 -q -f auth_hooks.sql
 psql -v ON_ERROR_STOP=1 -q -f 03_auth.sql
-echo "   OK: compat + auth"
+echo "   OK: compat + schema + auth_hooks + auth"
 
 echo "── A3/4  Mật khẩu cho role authenticator"
 # Em KHÔNG đặt hộ mật khẩu. Anh gõ dòng dưới, thay <mk> bằng chuỗi anh tự sinh:
